@@ -40,7 +40,7 @@ jobs:
         run: |
           source venv/bin/activate
           pytest tests/ --doctest-modules -q --disable-warnings
-        working-directory: ./backend  
+        working-directory: ./backend/src/tests  
 
       - name: Deploy to Production
         if: ${{ success() }}
