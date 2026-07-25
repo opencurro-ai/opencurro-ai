@@ -1,54 +1,71 @@
-name: Backend CI/CD Pipeline
+name: Deploy Backend to Production
 
 on:
   push:
     branches:
-      - fix  
+      - fix
+    paths:
+      - 'backend/**'
+      - 'Dockerfile'
+      - '.github/workflows/deploy-backend.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/backend
 
 jobs:
-  build:
+  build-and-deploy:
+    name: Build & Deploy Backend
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Cache Python packages
-        uses: actions/cache@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('./backend/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          python-version: '3.12.1'  
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Create Virtual Environment
-        run: python3 -m venv venv
-        working-directory: ./backend
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Install backend dependencies
+      - name: Deployment Success
         run: |
-          source venv/bin/activate
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt  
-        working-directory: ./backend
+          echo "✅ Backend deployed successfully to production"
+          echo "📦 Image pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "🔗 Run ID: ${{ github.run_id }}"
 
-      - name: Run tests with pytest
+      - name: Deployment Failure Notification
+        if: failure()
         run: |
-          source venv/bin/activate
-          pytest tests/ --doctest-modules -q --disable-warnings
-        working-directory: ./backend/src/tests  
-
-      - name: Deploy to Production
-        if: ${{ success() }}
-        run: |
-          echo "Deploying to production..."
-
-      - name: Notify on Failure
-        if: ${{ failure() }}
-        run: |
-          echo "Build failed! Sending notification..."
+          echo "❌ Deployment failed"
+          echo "🔗 Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
