@@ -9,12 +9,8 @@ on:
       - 'Dockerfile'
       - '.github/workflows/deploy-backend.yml'
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/backend
-
 jobs:
-  build-and-deploy:
+  deploy:
     name: Build & Deploy Backend
     runs-on: ubuntu-latest
     permissions:
@@ -29,10 +25,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -40,11 +36,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ github.repository }}/backend
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
-            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
@@ -58,14 +53,70 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deployment Success
+      - name: Generate Live Backend URL
+        id: backend-url
         run: |
-          echo "✅ Backend deployed successfully to production"
-          echo "📦 Image pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          echo "🔗 Run ID: ${{ github.run_id }}"
+          IMAGE_TAG="ghcr.io/${{ github.repository }}/backend:fix-${{ github.sha }}"
+          LIVE_URL="https://ghcr.io/${{ github.repository }}/backend"
+          
+          echo "image-url=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "live-url=$LIVE_URL" >> $GITHUB_OUTPUT
+          
+          echo "📦 Docker Image: $IMAGE_TAG"
+          echo "🌐 Live URL: $LIVE_URL"
 
-      - name: Deployment Failure Notification
-        if: failure()
+      - name: Create Deployment Summary
         run: |
-          echo "❌ Deployment failed"
-          echo "🔗 Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "# ✅ Backend Deployed Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Deployment Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Actor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 Docker Image" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "ghcr.io/${{ github.repository }}/backend:fix-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull Command:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}/backend:fix-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Run Backend Locally" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker run -d -p 8000:8000 --name opencurro-backend ghcr.io/${{ github.repository }}/backend:fix-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "curl http://localhost:8000/health" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Access Your Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image URL:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "ghcr.io/${{ github.repository }}/backend:fix-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Container Registry:** https://github.com/${{ github.repository }}/pkgs/container/backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔗 Related Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Container Registry](https://github.com/${{ github.repository }}/pkgs/container/backend)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+
+      - name: Success Message
+        run: |
+          echo "✅ Backend deployed successfully!"
+          echo ""
+          echo "📦 Docker Image: ghcr.io/${{ github.repository }}/backend:fix-${{ github.sha }}"
+          echo "🌐 Live URL: https://github.com/${{ github.repository }}/pkgs/container/backend"
+          echo ""
+          echo "🚀 Pull and run:"
+          echo "   docker pull ghcr.io/${{ github.repository }}/backend:fix-${{ github.sha }}"
+          echo "   docker run -p 8000:8000 ghcr.io/${{ github.repository }}/backend:fix-${{ github.sha }}"
