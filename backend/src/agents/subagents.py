@@ -37,6 +37,7 @@ class SubAgentRunner:
         base_url: Optional[str] = None,
         tavily_api_key: Optional[str] = None,
         exa_api_key: Optional[str] = None,
+        serpapi_api_key: Optional[str] = None,
         search_provider: Optional[str] = None,
         firecrawl_api_key: Optional[str] = None,
     ) -> str:
@@ -150,6 +151,7 @@ class SubAgentRunner:
                             session_store=self.session_store,
                             tavily_api_key=tavily_api_key,
                             exa_api_key=exa_api_key,
+                            serpapi_api_key=serpapi_api_key,
                             search_provider=search_provider,
                             firecrawl_api_key=firecrawl_api_key,
                         )

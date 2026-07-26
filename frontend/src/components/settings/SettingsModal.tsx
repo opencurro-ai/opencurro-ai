@@ -20,6 +20,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     novitaTemplateId,
     tavilyApiKey,
     exaApiKey,
+    serpapiApiKey,
     searchProvider,
     firecrawlApiKey,
     providerBaseUrls,
@@ -30,6 +31,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     setNovitaTemplateId,
     setTavilyApiKey,
     setExaApiKey,
+    setSerpapiApiKey,
     setSearchProvider,
     setFirecrawlApiKey,
     setProviderBaseUrl,
@@ -145,6 +147,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               >
                 <option value="tavily">Tavily</option>
                 <option value="exa">Exa</option>
+                <option value="serpapi">SerpAPI</option>
               </select>
             </div>
             {searchProvider === 'tavily' ? (
@@ -154,11 +157,18 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 placeholder="Tavily API key (web search)"
                 className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
               />
-            ) : (
+            ) : searchProvider === 'exa' ? (
               <input
                 value={exaApiKey}
                 onChange={(event) => setExaApiKey(event.target.value)}
                 placeholder="Exa API key (web search)"
+                className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
+              />
+            ) : (
+              <input
+                value={serpapiApiKey}
+                onChange={(event) => setSerpapiApiKey(event.target.value)}
+                placeholder="SerpAPI API key (web search)"
                 className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
               />
             )}

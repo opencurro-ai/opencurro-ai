@@ -158,6 +158,7 @@ export function useAgentChat() {
       max_iterations: 1000,
       tavily_api_key: settings.tavilyApiKey || undefined,
       exa_api_key: settings.exaApiKey || undefined,
+      serpapi_api_key: settings.serpapiApiKey || undefined,
       search_provider: settings.searchProvider,
       firecrawl_api_key: settings.firecrawlApiKey || undefined,
       sub_agents: settings.subAgents.length > 0 ? settings.subAgents.map((sa) => ({

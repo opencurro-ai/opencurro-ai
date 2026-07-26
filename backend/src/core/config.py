@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     default_sandbox_timeout_seconds: int = 60 * 60
     tavily_api_key: str = ""
     exa_api_key: str = ""
+    serpapi_api_key: str = ""
     firecrawl_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

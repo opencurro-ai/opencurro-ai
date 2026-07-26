@@ -44,6 +44,7 @@ class ChatStreamRequest(BaseModel):
     max_iterations: int = Field(default=1000, ge=1, le=1000)
     tavily_api_key: str | None = None
     exa_api_key: str | None = None
+    serpapi_api_key: str | None = None
     search_provider: str | None = None
     firecrawl_api_key: str | None = None
     sub_agents: list[dict[str, Any]] = Field(default_factory=list)

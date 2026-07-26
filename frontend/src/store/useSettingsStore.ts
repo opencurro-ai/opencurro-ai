@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware'
 import type { ProviderId, SubAgentConfig } from '@/types/chat'
 import type { ProviderMetadata, ProviderModel } from '@/types/provider'
 
-export type SearchProvider = 'tavily' | 'exa'
+export type SearchProvider = 'tavily' | 'exa' | 'serpapi'
 
 interface SettingsState {
   providerKeys: Record<ProviderId, string>
@@ -15,6 +15,7 @@ interface SettingsState {
   novitaTemplateId: string
   tavilyApiKey: string
   exaApiKey: string
+  serpapiApiKey: string
   searchProvider: SearchProvider
   firecrawlApiKey: string
   providerCatalog: ProviderMetadata[]
@@ -28,6 +29,7 @@ interface SettingsState {
   setNovitaTemplateId: (value: string) => void
   setTavilyApiKey: (value: string) => void
   setExaApiKey: (value: string) => void
+  setSerpapiApiKey: (value: string) => void
   setSearchProvider: (value: SearchProvider) => void
   setFirecrawlApiKey: (value: string) => void
   setProviderCatalog: (providers: ProviderMetadata[]) => void
@@ -58,6 +60,7 @@ export const useSettingsStore = create<SettingsState>()(
       novitaTemplateId: '',
       tavilyApiKey: '',
       exaApiKey: '',
+      serpapiApiKey: '',
       searchProvider: 'tavily',
       firecrawlApiKey: '',
       providerCatalog: [],
@@ -71,6 +74,7 @@ export const useSettingsStore = create<SettingsState>()(
       setNovitaTemplateId: (value) => set({ novitaTemplateId: value }),
       setTavilyApiKey: (value) => set({ tavilyApiKey: value }),
       setExaApiKey: (value) => set({ exaApiKey: value }),
+      setSerpapiApiKey: (value) => set({ serpapiApiKey: value }),
       setSearchProvider: (value) => set({ searchProvider: value }),
       setFirecrawlApiKey: (value) => set({ firecrawlApiKey: value }),
       setProviderCatalog: (providerCatalog) => set({ providerCatalog }),
@@ -99,6 +103,7 @@ export const useSettingsStore = create<SettingsState>()(
         novitaTemplateId: state.novitaTemplateId,
         tavilyApiKey: state.tavilyApiKey,
         exaApiKey: state.exaApiKey,
+        serpapiApiKey: state.serpapiApiKey,
         searchProvider: state.searchProvider,
         firecrawlApiKey: state.firecrawlApiKey,
         modelsByProvider: state.modelsByProvider,

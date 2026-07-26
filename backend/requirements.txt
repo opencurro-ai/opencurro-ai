@@ -9,4 +9,5 @@ httpx
 novita-sandbox
 tavily-python
 exa-py
+google-search-results
 firecrawl-py

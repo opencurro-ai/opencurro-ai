@@ -20,6 +20,7 @@ export interface StreamChatPayload {
   max_iterations?: number
   tavily_api_key?: string
   exa_api_key?: string
+  serpapi_api_key?: string
   search_provider?: string
   firecrawl_api_key?: string
   sub_agents?: Array<{

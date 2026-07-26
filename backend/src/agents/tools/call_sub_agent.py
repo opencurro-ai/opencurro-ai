@@ -103,6 +103,7 @@ async def execute_call_sub_agent(*, arguments: dict[str, Any], sandbox_adapter, 
             base_url=base_url,
             tavily_api_key=kwargs.get("tavily_api_key"),
             exa_api_key=kwargs.get("exa_api_key"),
+            serpapi_api_key=kwargs.get("serpapi_api_key"),
             search_provider=kwargs.get("search_provider"),
             firecrawl_api_key=kwargs.get("firecrawl_api_key"),
         )
