@@ -42,10 +42,9 @@ graph TB
     end
 
     subgraph REG["Registries"]
-        TREG["ToolRegistry<br/>9 Tools"]
+        TREG["ToolRegistry<br/>8 Tools"]
         PREG["ProviderRegistry<br/>OpenRouter · Groq · NVIDIA"]
         SREG["SandboxRegistry<br/>Novita"]
-        SUBREG["SubAgent Registry<br/>DeepExplorer · DeepResearcher"]
     end
 
     subgraph TOOLS["Tool Implementations"]
@@ -57,12 +56,6 @@ graph TB
         SV["shell_view"]
         WS["web_search"]
         FU["fatch_web_urls"]
-        CSA["call_sub_agent"]
-    end
-
-    subgraph SUB["Sub-Agents"]
-        DE["DeepExplorer<br/>Read-only code analysis"]
-        DR["DeepResearcher<br/>Web research + file output"]
     end
 
     CHAT --> AGENT
@@ -74,22 +67,17 @@ graph TB
     AGENT --> PREG
     AGENT --> SREG
     AGENT --> SESSION
-    AGENT --> SUBREG
 
     TREG --> TOOLS
-    SUBREG --> SUB
-    CSA -.->|"delegates to"| SUB
 
     classDef api fill:#f0f9ff,stroke:#3b82f6,stroke-width:2px
     classDef core fill:#f0fdf4,stroke:#22c55e,stroke-width:2px
     classDef reg fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
     classDef tools fill:#faf5ff,stroke:#a855f7,stroke-width:2px
-    classDef sub fill:#fdf2f8,stroke:#ec4899,stroke-width:2px
     class CHAT,PROV,SANDBOX api
     class AGENT,SESSION,CONFIG core
-    class TREG,PREG,SREG,SUBREG reg
-    class FR,FW,SR,LF,SH,SV,WS,FU,CSA tools
-    class DE,DR sub
+    class TREG,PREG,SREG reg
+    class FR,FW,SR,LF,SH,SV,WS,FU tools
 ```
 
 ---
@@ -131,12 +119,7 @@ backend/
 │   │   │   ├── shall_tool.py          # Shell command execution
 │   │   │   ├── shell_view.py          # Background command output viewer
 │   │   │   ├── web_search_tool.py     # Web search via Tavily
-│   │   │   ├── fatch_web_urls.py      # Web page fetch via Firecrawl
-│   │   │   └── call_sub_agent.py      # Delegate to sub-agent
-│   │   ├── subagents/
-│   │   │   ├── __init__.py            # Sub-agent registry
-│   │   │   ├── deepexplorer/          # Read-only code exploration agent
-│   │   │   └── deepresearcher/        # Web research + file output agent
+│   │   │   └── fatch_web_urls.py      # Web page fetch via Firecrawl
 │   │   └── systemprompts/
 │   │       └── systemprompt.py        # Main agent system prompt
 │   └── tests/
@@ -160,7 +143,7 @@ flowchart TD
     LOOP -->|Yes| THINK["Stream LLM completion<br/>tokens + reasoning"]
     THINK --> TOOL{"Has tool_calls<br/>or finish_reason<br/>= tool_calls?"}
 
-    TOOL -->|Yes| EXEC["Execute tool<br/>(sandbox / web / sub-agent)"]
+    TOOL -->|Yes| EXEC["Execute tool<br/>(sandbox / web)"]
     EXEC --> RESULT["Append tool result<br/>to session history"]
     RESULT --> LOOP
 
@@ -234,12 +217,6 @@ data: <json_payload>
 | `reasoning` | `{ value }` | LLM reasoning token |
 | `tool_call` | `{ name, file_path?, command?, ... }` | Tool being invoked |
 | `tool_result` | `{ name, file_path?, ok, result }` | Tool execution result |
-| `subagent_start` | `{ session, agent }` | Sub-agent started |
-| `subagent_token` | `{ session, value }` | Sub-agent token |
-| `subagent_tool_call` | `{ session, name, ... }` | Sub-agent tool call |
-| `subagent_tool_result` | `{ session, name, ok, result }` | Sub-agent tool result |
-| `subagent_complete` | `{ session }` | Sub-agent finished |
-| `subagent_error` | `{ session, message }` | Sub-agent error |
 | `message_complete` | `{ content, iteration_count, reasoning? }` | Final response |
 | `error` | `{ message, code }` | Error occurred |
 | `done` | `{ ok }` | Turn complete |
@@ -260,21 +237,6 @@ All tools follow the same pattern — they export a `TOOL_SCHEMA` (JSON schema f
 | `tools/shell_view.py` | `shell_view` | `SHELL_VIEW_TOOL_SCHEMA` | `execute_shell_view` |
 | `tools/web_search_tool.py` | `web_search` | `WEB_SEARCH_TOOL_SCHEMA` | `execute_web_search` |
 | `tools/fatch_web_urls.py` | `fatch_web_urls` | `FETCH_WEB_URLS_TOOL_SCHEMA` | `execute_fatch_web_urls` |
-| `tools/call_sub_agent.py` | `call_sub_agent` | `CALL_SUB_AGENT_TOOL_SCHEMA` | `execute_call_sub_agent` |
-
----
-
-## Sub-Agents
-
-### DeepExplorer (`subagents/deepexplorer/`)
-- **Purpose**: Read-only code exploration and analysis
-- **Allowed tools**: `list_files`, `file_read`
-- **Use case**: Understanding code structure, reading files, answering questions about code
-
-### DeepResearcher (`subagents/deepresearcher/`)
-- **Purpose**: Web research with file output capabilities
-- **Allowed tools**: `web_search`, `fatch_web_urls`, `file_write`, `list_files`, `shall_tool`
-- **Use case**: Researching topics and writing results to files
 
 ---
 
@@ -381,9 +343,6 @@ class ProviderRegistry:
 class ToolRegistry:
     _schemas: list[dict]
     _handlers: dict[str, callable]
-
-# subagents/__init__.py
-SUBAGENT_REGISTRY: dict[str, dict]
 ```
 
 ### Protocol-based Abstraction

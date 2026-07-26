@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-import type { ProviderId } from '@/types/chat'
+import type { ProviderId, SubAgentConfig } from '@/types/chat'
 import type { ProviderMetadata, ProviderModel } from '@/types/provider'
 
 export type SearchProvider = 'tavily' | 'exa'
@@ -19,6 +19,7 @@ interface SettingsState {
   firecrawlApiKey: string
   providerCatalog: ProviderMetadata[]
   modelsByProvider: Record<ProviderId, ProviderModel[]>
+  subAgents: SubAgentConfig[]
   setProviderKey: (provider: ProviderId, value: string) => void
   setProviderBaseUrl: (provider: ProviderId, value: string) => void
   setSelectedProvider: (provider: ProviderId) => void
@@ -31,6 +32,15 @@ interface SettingsState {
   setFirecrawlApiKey: (value: string) => void
   setProviderCatalog: (providers: ProviderMetadata[]) => void
   setModelsForProvider: (provider: ProviderId, models: ProviderModel[]) => void
+  addSubAgent: (config: SubAgentConfig) => void
+  updateSubAgent: (id: string, config: Partial<SubAgentConfig>) => void
+  deleteSubAgent: (id: string) => void
+  toggleSubAgent: (id: string) => void
+}
+
+function generateId(): string {
+  const random = Math.random().toString(36).slice(2, 10)
+  return `sub-${Date.now()}-${random}`
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -52,6 +62,7 @@ export const useSettingsStore = create<SettingsState>()(
       firecrawlApiKey: '',
       providerCatalog: [],
       modelsByProvider: { openrouter: [], groq: [], nvidia: [] },
+      subAgents: [],
       setProviderKey: (provider, value) => set((state) => ({ providerKeys: { ...state.providerKeys, [provider]: value } })),
       setProviderBaseUrl: (provider, value) => set((state) => ({ providerBaseUrls: { ...state.providerBaseUrls, [provider]: value } })),
       setSelectedProvider: (provider) => set({ selectedProvider: provider, selectedModel: '' }),
@@ -64,6 +75,18 @@ export const useSettingsStore = create<SettingsState>()(
       setFirecrawlApiKey: (value) => set({ firecrawlApiKey: value }),
       setProviderCatalog: (providerCatalog) => set({ providerCatalog }),
       setModelsForProvider: (provider, models) => set((state) => ({ modelsByProvider: { ...state.modelsByProvider, [provider]: models } })),
+      addSubAgent: (config) => set((state) => ({
+        subAgents: [...state.subAgents, { ...config, id: generateId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }],
+      })),
+      updateSubAgent: (id, updates) => set((state) => ({
+        subAgents: state.subAgents.map((sa) => sa.id === id ? { ...sa, ...updates, updatedAt: new Date().toISOString() } : sa),
+      })),
+      deleteSubAgent: (id) => set((state) => ({
+        subAgents: state.subAgents.filter((sa) => sa.id !== id),
+      })),
+      toggleSubAgent: (id) => set((state) => ({
+        subAgents: state.subAgents.map((sa) => sa.id === id ? { ...sa, enabled: !sa.enabled, updatedAt: new Date().toISOString() } : sa),
+      })),
     }),
     {
       name: 'novita-agent-settings',
@@ -79,6 +102,7 @@ export const useSettingsStore = create<SettingsState>()(
         searchProvider: state.searchProvider,
         firecrawlApiKey: state.firecrawlApiKey,
         modelsByProvider: state.modelsByProvider,
+        subAgents: state.subAgents,
       }),
     },
   ),

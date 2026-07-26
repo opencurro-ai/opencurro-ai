@@ -46,6 +46,7 @@ class ChatStreamRequest(BaseModel):
     exa_api_key: str | None = None
     search_provider: str | None = None
     firecrawl_api_key: str | None = None
+    sub_agents: list[dict[str, Any]] = Field(default_factory=list)
     since_event_id: int = Field(default=-1)
 
 

@@ -35,13 +35,15 @@ export function useAgentChat() {
         if (event === 'tool_call') {
           const dataSessionNames = data.session_names
           const sessionNames = Array.isArray(dataSessionNames) ? dataSessionNames.filter((s: unknown): s is string => typeof s === 'string') : undefined
+          const toolName = typeof data.name === 'string' ? data.name : 'tool'
+          const chipSession = typeof data.session === 'string' ? data.session : (typeof data.session_name === 'string' ? data.session_name : undefined)
           store.addToolChip(chatId, {
             id: createId('tool'),
-            name: typeof data.name === 'string' ? data.name : 'tool',
+            name: toolName,
             label: typeof data.label === 'string' ? data.label : 'Tool activity',
             filePath: typeof data.file_path === 'string' ? data.file_path : undefined,
             command: typeof data.command === 'string' ? data.command : undefined,
-            sessionName: typeof data.session_name === 'string' && data.session_name ? data.session_name : 'default',
+            sessionName: chipSession || 'default',
             sessionNames,
             path: typeof data.path === 'string' ? data.path : undefined,
             query: typeof data.query === 'string' ? data.query : undefined,
@@ -50,65 +52,22 @@ export function useAgentChat() {
             newString: typeof data.new_string === 'string' ? data.new_string : undefined,
             input: typeof data.input === 'string' ? data.input : undefined,
           })
+          if (toolName === 'call_sub_agent' && chipSession) {
+            store.setSubAgentStream(chipSession, {
+              session: chipSession,
+              agent: typeof data.agent === 'string' ? data.agent : '',
+              content: '',
+              reasoning: '',
+              toolChips: [],
+              status: 'running',
+            })
+          }
         }
         if (event === 'tool_result') {
           store.updateLastToolChip(chatId, {
             ok: typeof data.ok === 'boolean' ? data.ok : undefined,
             resultData: typeof data.result === 'object' && data.result !== null ? data.result as Record<string, unknown> : undefined,
           })
-        }
-        if (event === 'subagent_start') {
-          const session = typeof data.session === 'string' ? data.session : 'default'
-          const agent = typeof data.agent === 'string' ? data.agent : 'agent'
-          store.addSubAgentChip(chatId, {
-            id: createId('subagent'),
-            session,
-            agent,
-            output: '',
-            toolChips: [],
-            status: 'running',
-          })
-        }
-        if (event === 'subagent_token') {
-          const session = typeof data.session === 'string' ? data.session : 'default'
-          const token = typeof data.value === 'string' ? data.value : ''
-          store.appendSubAgentToken(chatId, session, token)
-        }
-        if (event === 'subagent_tool_call') {
-          const session = typeof data.session === 'string' ? data.session : 'default'
-          const dataSessionNames = data.session_names
-          const sessionNames = Array.isArray(dataSessionNames) ? dataSessionNames.filter((s: unknown): s is string => typeof s === 'string') : undefined
-          store.addSubAgentToolChip(chatId, session, {
-            id: createId('tool'),
-            name: typeof data.name === 'string' ? data.name : 'tool',
-            label: typeof data.label === 'string' ? data.label : 'Tool activity',
-            filePath: typeof data.file_path === 'string' ? data.file_path : undefined,
-            command: typeof data.command === 'string' ? data.command : undefined,
-            sessionName: typeof data.session_name === 'string' && data.session_name ? data.session_name : 'default',
-            sessionNames,
-            path: typeof data.path === 'string' ? data.path : undefined,
-            query: typeof data.query === 'string' ? data.query : undefined,
-            url: typeof data.url === 'string' ? data.url : undefined,
-            oldString: typeof data.old_string === 'string' ? data.old_string : undefined,
-            newString: typeof data.new_string === 'string' ? data.new_string : undefined,
-            input: typeof data.input === 'string' ? data.input : undefined,
-          })
-        }
-        if (event === 'subagent_tool_result') {
-          const session = typeof data.session === 'string' ? data.session : 'default'
-          store.updateLastSubAgentToolChip(chatId, session, {
-            ok: typeof data.ok === 'boolean' ? data.ok : undefined,
-            resultData: typeof data.result === 'object' && data.result !== null ? data.result as Record<string, unknown> : undefined,
-          })
-        }
-        if (event === 'subagent_complete') {
-          const session = typeof data.session === 'string' ? data.session : 'default'
-          store.updateSubAgentStatus(chatId, session, 'completed')
-        }
-        if (event === 'subagent_error') {
-          const session = typeof data.session === 'string' ? data.session : 'default'
-          const message = typeof data.message === 'string' ? data.message : 'Sub-agent error'
-          store.updateSubAgentStatus(chatId, session, 'error', message)
         }
         if (event === 'reasoning') {
           const token = typeof data.value === 'string' ? data.value : ''
@@ -132,6 +91,49 @@ export function useAgentChat() {
         if (event === 'done') {
           store.setStreaming(false)
           store.setStatusLabel('Ready')
+        }
+        if (event.startsWith('sub_agent_')) {
+          const session = typeof data.session === 'string' ? data.session : 'default'
+          if (event === 'sub_agent_token') {
+            const value = typeof data.value === 'string' ? data.value : ''
+            store.appendSubAgentToken(session, value)
+          }
+          if (event === 'sub_agent_reasoning') {
+            const value = typeof data.value === 'string' ? data.value : ''
+            store.appendSubAgentReasoning(session, value)
+          }
+          if (event === 'sub_agent_tool_call') {
+            const toolName = typeof data.name === 'string' ? data.name : 'tool'
+            const dataSessionNames = data.session_names
+            const sessionNames = Array.isArray(dataSessionNames) ? dataSessionNames.filter((s: unknown): s is string => typeof s === 'string') : undefined
+            store.addSubAgentToolChip(session, {
+              id: createId('tool'),
+              name: toolName,
+              label: typeof data.label === 'string' ? data.label : 'Tool activity',
+              filePath: typeof data.file_path === 'string' ? data.file_path : undefined,
+              command: typeof data.command === 'string' ? data.command : undefined,
+              sessionName: typeof data.session_name === 'string' ? data.session_name : 'default',
+              sessionNames,
+              path: typeof data.path === 'string' ? data.path : undefined,
+              query: typeof data.query === 'string' ? data.query : undefined,
+              url: typeof data.url === 'string' ? data.url : undefined,
+              oldString: typeof data.old_string === 'string' ? data.old_string : undefined,
+              newString: typeof data.new_string === 'string' ? data.new_string : undefined,
+              input: typeof data.input === 'string' ? data.input : undefined,
+            })
+          }
+          if (event === 'sub_agent_tool_result') {
+            store.updateLastSubAgentToolChip(session, {
+              ok: typeof data.ok === 'boolean' ? data.ok : undefined,
+              resultData: typeof data.result === 'object' && data.result !== null ? data.result as Record<string, unknown> : undefined,
+            })
+          }
+          if (event === 'sub_agent_done') {
+            store.setSubAgentStatus(session, 'done')
+          }
+          if (event === 'sub_agent_error') {
+            store.setSubAgentStatus(session, 'error')
+          }
         }
       }
     },
@@ -158,6 +160,13 @@ export function useAgentChat() {
       exa_api_key: settings.exaApiKey || undefined,
       search_provider: settings.searchProvider,
       firecrawl_api_key: settings.firecrawlApiKey || undefined,
+      sub_agents: settings.subAgents.length > 0 ? settings.subAgents.map((sa) => ({
+        name: sa.name,
+        description: sa.description,
+        system_prompt: sa.systemPrompt,
+        tools: sa.tools,
+        enabled: sa.enabled,
+      })) : undefined,
       since_event_id: sinceEventId,
     }),
     [settings],

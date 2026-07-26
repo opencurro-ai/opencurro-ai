@@ -20,16 +20,6 @@ export interface ToolChip {
   resultData?: Record<string, unknown>
 }
 
-export interface SubAgentChip {
-  id: string
-  session: string
-  agent: string
-  output: string
-  toolChips: ToolChip[]
-  status: 'running' | 'completed' | 'error'
-  errorMessage?: string
-}
-
 export interface UiMessage {
   id: string
   role: ChatRole
@@ -38,7 +28,6 @@ export interface UiMessage {
   createdAt: string
   status?: 'idle' | 'streaming' | 'error'
   toolChips?: ToolChip[]
-  subAgentChips?: SubAgentChip[]
 }
 
 export interface BackendMessage {
@@ -55,6 +44,26 @@ export interface SandboxInfo {
   sandboxId: string
   provider: string
   rootPath: string
+}
+
+export interface SubAgentConfig {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  tools: string[]
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SubAgentStream {
+  session: string
+  agent: string
+  content: string
+  reasoning: string
+  toolChips: ToolChip[]
+  status: 'running' | 'done' | 'error'
 }
 
 export interface ChatRecord {

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
-from typing import Any, Optional
+from typing import Any
 
-from src.agents.subagents import get_subagent
 from src.schemas.sandbox import ToolExecutionResult
+
 
 CALL_SUB_AGENT_TOOL_SCHEMA = {
     "type": "function",
@@ -16,110 +15,111 @@ CALL_SUB_AGENT_TOOL_SCHEMA = {
             "properties": {
                 "session": {
                     "type": "string",
-                    "description": "The unique session identifier where the sub-agent should execute. Use this to target an existing agent session.",
+                    "description": "The unique session identifier where the sub-agent should execute. Use this to target an existing agent session."
                 },
                 "agent": {
                     "type": "string",
-                    "description": "The name of the specialized sub-agent to execute the task. Currently available sub-agents: deepexplorer (read-only code exploration), deepresearcher (web research with file output).",
+                    "description": "The name of the specialized sub-agent to execute the task."
                 },
                 "task": {
                     "type": "string",
-                    "description": "A clear and detailed description of the task that the selected sub-agent should complete.",
-                },
+                    "description": "A clear and detailed description of the task that the selected sub-agent should complete."
+                }
             },
-            "required": ["session", "agent", "task"],
-        },
-    },
+            "required": ["session", "agent", "task"]
+        }
+    }
 }
 
 
-async def execute_call_sub_agent(
-    *,
-    sandbox_adapter,
-    sandbox_context,
-    arguments: dict[str, Any],
-    **kwargs,
-) -> ToolExecutionResult:
-    session_name = arguments.get("session", "default")
-    agent_name = arguments.get("agent", "")
-    task = arguments.get("task", "")
+async def execute_call_sub_agent(*, arguments: dict[str, Any], sandbox_adapter, sandbox_context, **kwargs) -> ToolExecutionResult:
+    session_name = arguments.get("session")
+    agent_name = arguments.get("agent")
+    task = arguments.get("task")
 
-    if not agent_name:
-        return ToolExecutionResult(
-            ok=False,
-            error={"code": "missing_agent", "message": "No sub-agent name specified."},
-        )
-
-    subagent_def = get_subagent(agent_name)
-    if subagent_def is None:
+    if not all([session_name, agent_name, task]):
         return ToolExecutionResult(
             ok=False,
             error={
-                "code": "unknown_subagent",
-                "message": f"Unknown sub-agent: {agent_name}. Available: deepexplorer, deepresearcher.",
+                "code": "missing_parameters",
+                "message": "session, agent, and task are required.",
             },
         )
 
-    provider = kwargs.get("provider")
-    model = kwargs.get("model")
-    api_key = kwargs.get("api_key")
-    base_url = kwargs.get("base_url")
-    chat_id = kwargs.get("chat_id")
-    session_store = kwargs.get("session_store")
-    agent = kwargs.get("agent")
-    subagent_event_queue = kwargs.get("subagent_event_queue")
-    tavily_api_key = kwargs.get("tavily_api_key")
-    exa_api_key = kwargs.get("exa_api_key")
-    search_provider = kwargs.get("search_provider")
-    firecrawl_api_key = kwargs.get("firecrawl_api_key")
+    sub_agents = kwargs.get("sub_agents", [])
+    agent_config = None
+    for sa in sub_agents:
+        if sa.get("name") == agent_name and sa.get("enabled", True):
+            agent_config = sa
+            break
 
-    if not all([provider, model, api_key, chat_id, agent, subagent_event_queue]):
+    if not agent_config:
         return ToolExecutionResult(
             ok=False,
-            error={"code": "missing_dependencies", "message": "Required dependencies not provided to sub-agent tool."},
+            error={
+                "code": "agent_not_found",
+                "message": f"Sub-agent '{agent_name}' not found or not enabled.",
+            },
         )
 
-    sub_session_key = f"{chat_id}:subagent:{session_name}"
-    sub_sessions = agent.subagent_sessions
+    sub_agent_runner = kwargs.get("sub_agent_runner")
+    if not sub_agent_runner:
+        return ToolExecutionResult(
+            ok=False,
+            error={
+                "code": "sub_agent_runner_not_available",
+                "message": "Sub-agent runner is not available.",
+            },
+        )
 
-    if sub_session_key not in sub_sessions:
-        sub_sessions[sub_session_key] = []
+    buffer = kwargs.get("buffer")
+    if not buffer:
+        return ToolExecutionResult(
+            ok=False,
+            error={
+                "code": "buffer_not_available",
+                "message": "Event buffer is not available.",
+            },
+        )
 
-    session_messages = sub_sessions[sub_session_key]
-
-    async def emit_event(event_type: str, data: dict) -> None:
-        event_data = {"session": session_name, **data}
-        await subagent_event_queue.put((event_type, event_data))
-
-    await emit_event("subagent_start", {"agent": agent_name})
+    chat_id = kwargs.get("chat_id", "")
+    provider = kwargs.get("provider")
+    model = kwargs.get("model", "")
+    api_key = kwargs.get("api_key", "")
+    base_url = kwargs.get("base_url", "")
 
     try:
-        run_func = subagent_def["run"]
-        output = await run_func(
+        final_output = await sub_agent_runner.run(
+            chat_id=chat_id,
+            session_name=session_name,
+            agent_config=agent_config,
+            task=task,
+            sandbox_adapter=sandbox_adapter,
+            sandbox_context=sandbox_context,
+            buffer=buffer,
             provider=provider,
             model=model,
             api_key=api_key,
             base_url=base_url,
-            sandbox_adapter=sandbox_adapter,
-            sandbox_context=sandbox_context,
-            task=task,
-            session_messages=session_messages,
-            emit_event=emit_event,
-            tavily_api_key=tavily_api_key,
-            exa_api_key=exa_api_key,
-            search_provider=search_provider,
-            firecrawl_api_key=firecrawl_api_key,
+            tavily_api_key=kwargs.get("tavily_api_key"),
+            exa_api_key=kwargs.get("exa_api_key"),
+            search_provider=kwargs.get("search_provider"),
+            firecrawl_api_key=kwargs.get("firecrawl_api_key"),
         )
-
-        await emit_event("subagent_complete", {"output": output})
 
         return ToolExecutionResult(
             ok=True,
-            data={"session": session_name, "agent": agent_name, "output": output},
+            data={
+                "session": session_name,
+                "agent": agent_name,
+                "output": final_output,
+            },
         )
     except Exception as exc:
-        await emit_event("subagent_error", {"message": str(exc)})
         return ToolExecutionResult(
             ok=False,
-            error={"code": "subagent_execution_failed", "message": str(exc)},
+            error={
+                "code": "sub_agent_failed",
+                "message": str(exc),
+            },
         )

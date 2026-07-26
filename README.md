@@ -47,7 +47,7 @@
 
 ## Overview
 
-**OpenCurro** (also known as **Novita Agent Studio**) is a full-stack web application that runs an autonomous AI coding agent inside an **isolated Novita sandbox**. The agent can read, write, and edit files, execute shell commands, search the web, fetch URLs, and delegate complex tasks to specialized sub-agents — all through a polished real-time chat interface.
+**OpenCurro** (also known as **Novita Agent Studio**) is a full-stack web application that runs an autonomous AI coding agent inside an **isolated Novita sandbox**. The agent can read, write, and edit files, execute shell commands, search the web, and fetch URLs — all through a polished real-time chat interface.
 
 <p align="center">
   <strong>🚀 Try it:</strong> Configure API keys → Select a model → Start building.
@@ -63,7 +63,7 @@
 
 ### 🧠 Agent Capabilities
 - **Autonomous task execution** with tool-calling loop
-- **9 built-in tools** — files, shell, web, sub-agents
+- **8 built-in tools** — files, shell, web
 - **Streaming SSE** — real-time token, reasoning, and tool output
 - **Structured error handling** — graceful recovery from failures
 - **Background command execution** — run long processes without blocking
@@ -75,7 +75,6 @@
 - **Chat interface** with real-time token streaming
 - **Collapsible tool outputs** — terminal, file ops, web search
 - **Sandbox file explorer** with inline editor/viewer
-- **Sub-agent activity modal** — see what agents do in real time
 - **Mobile-responsive** layout with tab navigation
 - **Persistent** chat history and settings via Local Storage
 
@@ -86,7 +85,7 @@
 
 ### 🔧 Backend Architecture
 - **FastAPI** with SSE streaming endpoints
-- **Registry pattern** — providers, sandbox adapters, tools, sub-agents
+- **Registry pattern** — providers, sandbox adapters, tools
 - **Protocol-based abstractions** — `LLMProvider`, `SandboxAdapter`
 - **In-memory session store** — no database required
 - **Dependency injection** via factory router functions
@@ -97,7 +96,6 @@
 ### 🔌 Extensible Design
 - **3 LLM providers**: OpenRouter, Groq, NVIDIA NIM
 - **Novita sandbox** with file/command operations
-- **2 sub-agents**: DeepExplorer (code), DeepResearcher (web)
 - **Easy to extend**: add providers, tools, sandbox adapters
 - **Custom templates** — optional sandbox template IDs
 
@@ -121,11 +119,10 @@ graph TB
     subgraph Backend["Python Backend (FastAPI)"]
         API["API Routes<br/>/api/chat · /api/providers · /api/sandbox"]
         AGENT["AgentRunner<br/>Main Agent Loop"]
-        TOOLS["ToolRegistry<br/>9 Tools"]
+        TOOLS["ToolRegistry<br/>8 Tools"]
         PROVIDERS["ProviderRegistry<br/>OpenRouter · Groq · NVIDIA"]
         SANDBOX["SandboxRegistry<br/>Novita"]
         SESSION["SessionStore<br/>(In-Memory)"]
-        SUBAGENTS["Sub-Agents<br/>DeepExplorer · DeepResearcher"]
     end
 
     subgraph External["External Services"]
@@ -141,7 +138,6 @@ graph TB
     AGENT --> PROVIDERS
     AGENT --> SANDBOX
     AGENT --> SESSION
-    AGENT --> SUBAGENTS
     PROVIDERS -->|"API Calls"| LLM
     SANDBOX -->|"SDK"| NOVITA
     TOOLS -->|"web_search"| TAVILY
@@ -152,7 +148,7 @@ graph TB
     classDef backend fill:#f0fdf4,stroke:#22c55e,stroke-width:2px
     classDef external fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
     class REACT,ZUSTAND,SSE,UI frontend
-    class API,AGENT,TOOLS,PROVIDERS,SANDBOX,SESSION,SUBAGENTS backend
+    class API,AGENT,TOOLS,PROVIDERS,SANDBOX,SESSION backend
     class LLM,NOVITA,TAVILY,FIRECRAWL external
     linkStyle default stroke-width:2px
 ```
@@ -182,11 +178,6 @@ sequenceDiagram
             loop each tool_call
                 A-->>F: SSE: tool_call
                 A->>A: Execute tool
-                alt sub_agent called
-                    A->>S: Sub-agent operations
-                    S-->>A: Sub-agent events
-                    A-->>F: SSE: subagent_*
-                end
                 A->>S: Sandbox operation
                 S-->>A: Result
                 A-->>F: SSE: tool_result
@@ -208,7 +199,7 @@ sequenceDiagram
 
 ## 🧰 Tools
 
-The agent has access to **9 tools** for autonomous work:
+The agent has access to **8 tools** for autonomous work:
 
 | Tool | Purpose |
 |---|---|
@@ -220,18 +211,8 @@ The agent has access to **9 tools** for autonomous work:
 | `shell_view` | View output of background commands |
 | `web_search` | Web search via Tavily API |
 | `fatch_web_urls` | Fetch web page content via Firecrawl |
-| `call_sub_agent` | Delegate task to a specialized sub-agent |
 
----
 
-## 🤖 Sub-Agents
-
-| Agent | Purpose | Allowed Tools |
-|---|---|---|
-| **DeepExplorer** | Read-only code exploration | `list_files`, `file_read` |
-| **DeepResearcher** | Web research with file output | `web_search`, `fatch_web_urls`, `file_write`, `list_files`, `shall_tool` |
-
-Sub-agents run in their own mini agent loops with restricted tool sets, communicating results back via `asyncio.Queue`.
 
 ---
 
@@ -287,8 +268,7 @@ opencurro/
 │   │   │   ├── agent.py              # AgentRunner loop
 │   │   │   ├── providers/            # LLM providers (OpenAI-compatible)
 │   │   │   ├── sandbox/              # Sandbox adapter (Novita)
-│   │   │   ├── tools/                # 9 tool implementations
-│   │   │   ├── subagents/            # DeepExplorer + DeepResearcher
+│   │   │   ├── tools/                # 8 tool implementations
 │   │   │   └── systemprompts/        # System prompt
 │   │   └── tests/                    # pytest
 │   └── requirements.txt
@@ -335,7 +315,6 @@ opencurro/
 | `reasoning` | Backend → Frontend | LLM reasoning token |
 | `tool_call` | Backend → Frontend | Tool being invoked |
 | `tool_result` | Backend → Frontend | Tool execution result |
-| `subagent_*` | Backend → Frontend | Sub-agent lifecycle events |
 | `message_complete` | Backend → Frontend | Final assembled response |
 | `error` | Backend → Frontend | Error occurred |
 | `done` | Backend → Frontend | Turn complete |
@@ -371,7 +350,7 @@ Configuration is handled via environment variables (see `backend/src/core/config
 ## 🧱 Key Design Decisions
 
 - **No database** — All persistence is browser Local Storage via Zustand `persist` middleware; backend sessions are in-memory
-- **Registry pattern** — Providers, sandbox adapters, tools, and sub-agents all self-register
+- **Registry pattern** — Providers, sandbox adapters, and tools all self-register
 - **Protocol-based abstraction** — `LLMProvider` and `SandboxAdapter` are Python Protocols for strong typing without coupling
 - **SSE streaming** — Agent loop yields structured events via async generator; frontend parses with `ReadableStream`
 - **DI via factory functions** — API routers receive dependencies explicitly, wired in `main.py`

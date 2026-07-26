@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-import type { BackendMessage, ChatRecord, SandboxInfo, SubAgentChip, ToolChip, UiMessage } from '@/types/chat'
+import type { BackendMessage, ChatRecord, SandboxInfo, SubAgentStream, ToolChip, UiMessage } from '@/types/chat'
 import { createId } from '@/utils/id'
 
 function createEmptyChat(): ChatRecord {
@@ -27,6 +27,7 @@ interface ChatState {
   iterationCurrent: number
   iterationLimit: number
   lastEventId: Record<string, number>
+  subAgentStreams: Record<string, SubAgentStream>
   setStatusLabel: (value: string) => void
   setStreaming: (value: boolean) => void
   setIteration: (current: number, limit: number) => void
@@ -42,14 +43,16 @@ interface ChatState {
   markAssistantError: (chatId: string, message: string) => void
   addToolChip: (chatId: string, tool: ToolChip) => void
   updateLastToolChip: (chatId: string, updates: Partial<ToolChip>) => void
-  addSubAgentChip: (chatId: string, subAgent: SubAgentChip) => void
-  appendSubAgentToken: (chatId: string, session: string, token: string) => void
-  addSubAgentToolChip: (chatId: string, session: string, tool: ToolChip) => void
-  updateLastSubAgentToolChip: (chatId: string, session: string, updates: Partial<ToolChip>) => void
-  updateSubAgentStatus: (chatId: string, session: string, status: SubAgentChip['status'], errorMessage?: string) => void
   setSandboxInfo: (chatId: string, sandbox: SandboxInfo) => void
   replaceModelHistory: (chatId: string, history: BackendMessage[]) => void
   addEvent: (chatId: string, event: Record<string, unknown>) => void
+  setSubAgentStream: (session: string, stream: SubAgentStream) => void
+  appendSubAgentToken: (session: string, token: string) => void
+  appendSubAgentReasoning: (session: string, token: string) => void
+  addSubAgentToolChip: (session: string, chip: ToolChip) => void
+  updateLastSubAgentToolChip: (session: string, updates: Partial<ToolChip>) => void
+  setSubAgentStatus: (session: string, status: SubAgentStream['status']) => void
+  removeSubAgentStream: (session: string) => void
 }
 
 export const useChatStore = create<ChatState>()(
@@ -62,6 +65,7 @@ export const useChatStore = create<ChatState>()(
       iterationCurrent: 0,
       iterationLimit: 1000,
       lastEventId: {},
+      subAgentStreams: {},
       setStatusLabel: (value) => set({ statusLabel: value }),
       setStreaming: (value) => set({ isStreaming: value }),
       setIteration: (current, limit) => set({ iterationCurrent: current, iterationLimit: limit }),
@@ -103,7 +107,7 @@ export const useChatStore = create<ChatState>()(
                 ...chat,
                 messages: [
                   ...chat.messages,
-                  { id: messageId, role: 'assistant', content: '', reasoning: '', createdAt: new Date().toISOString(), status: 'streaming', toolChips: [], subAgentChips: [] },
+                  { id: messageId, role: 'assistant', content: '', reasoning: '', createdAt: new Date().toISOString(), status: 'streaming', toolChips: [] },
                 ],
               }
             : chat),
@@ -129,97 +133,6 @@ export const useChatStore = create<ChatState>()(
                 ? { ...message, reasoning: `${message.reasoning ?? ''}${token}` }
                 : message),
               updatedAt: new Date().toISOString(),
-            }
-          : chat),
-      })),
-      addSubAgentChip: (chatId, subAgent) => set((state) => ({
-        chats: state.chats.map((chat) => chat.id === chatId
-          ? {
-              ...chat,
-              messages: chat.messages.map((message, index) => index === chat.messages.length - 1 && message.role === 'assistant'
-                ? { ...message, subAgentChips: [...(message.subAgentChips ?? []), subAgent] }
-                : message),
-            }
-          : chat),
-      })),
-      appendSubAgentToken: (chatId, session, token) => set((state) => ({
-        chats: state.chats.map((chat) => chat.id === chatId
-          ? {
-              ...chat,
-              messages: chat.messages.map((message) =>
-                message.role === 'assistant'
-                  ? {
-                      ...message,
-                      subAgentChips: (message.subAgentChips ?? []).map((chip) =>
-                        chip.session === session
-                          ? { ...chip, output: chip.output + token }
-                          : chip
-                      ),
-                    }
-                  : message
-              ),
-            }
-          : chat),
-      })),
-      addSubAgentToolChip: (chatId, session, tool) => set((state) => ({
-        chats: state.chats.map((chat) => chat.id === chatId
-          ? {
-              ...chat,
-              messages: chat.messages.map((message) =>
-                message.role === 'assistant'
-                  ? {
-                      ...message,
-                      subAgentChips: (message.subAgentChips ?? []).map((chip) =>
-                        chip.session === session
-                          ? { ...chip, toolChips: [...chip.toolChips, tool] }
-                          : chip
-                      ),
-                    }
-                  : message
-              ),
-            }
-          : chat),
-      })),
-      updateLastSubAgentToolChip: (chatId, session, updates) => set((state) => ({
-        chats: state.chats.map((chat) => chat.id === chatId
-          ? {
-              ...chat,
-              messages: chat.messages.map((message) =>
-                message.role === 'assistant'
-                  ? {
-                      ...message,
-                      subAgentChips: (message.subAgentChips ?? []).map((chip) =>
-                        chip.session === session
-                          ? {
-                              ...chip,
-                              toolChips: chip.toolChips.map((tc, i) =>
-                                i === chip.toolChips.length - 1 ? { ...tc, ...updates } : tc
-                              ),
-                            }
-                          : chip
-                      ),
-                    }
-                  : message
-              ),
-            }
-          : chat),
-      })),
-      updateSubAgentStatus: (chatId, session, status, errorMessage) => set((state) => ({
-        chats: state.chats.map((chat) => chat.id === chatId
-          ? {
-              ...chat,
-              messages: chat.messages.map((message) =>
-                message.role === 'assistant'
-                  ? {
-                      ...message,
-                      subAgentChips: (message.subAgentChips ?? []).map((chip) =>
-                        chip.session === session
-                          ? { ...chip, status, ...(errorMessage ? { errorMessage } : {}) }
-                          : chip
-                      ),
-                    }
-                  : message
-              ),
             }
           : chat),
       })),
@@ -284,6 +197,68 @@ export const useChatStore = create<ChatState>()(
       addEvent: (chatId, event) => set((state) => ({
         chats: state.chats.map((chat) => chat.id === chatId ? { ...chat, eventHistory: [...chat.eventHistory, event] } : chat),
       })),
+      setSubAgentStream: (session, stream) => set((state) => ({
+        subAgentStreams: {
+          ...state.subAgentStreams,
+          [session]: stream,
+        },
+      })),
+      appendSubAgentToken: (session, token) => set((state) => {
+        const existing = state.subAgentStreams[session]
+        if (!existing) return state
+        return {
+          subAgentStreams: {
+            ...state.subAgentStreams,
+            [session]: { ...existing, content: existing.content + token },
+          },
+        }
+      }),
+      appendSubAgentReasoning: (session, token) => set((state) => {
+        const existing = state.subAgentStreams[session]
+        if (!existing) return state
+        return {
+          subAgentStreams: {
+            ...state.subAgentStreams,
+            [session]: { ...existing, reasoning: existing.reasoning + token },
+          },
+        }
+      }),
+      addSubAgentToolChip: (session, chip) => set((state) => {
+        const existing = state.subAgentStreams[session]
+        if (!existing) return state
+        return {
+          subAgentStreams: {
+            ...state.subAgentStreams,
+            [session]: { ...existing, toolChips: [...existing.toolChips, chip] },
+          },
+        }
+      }),
+      updateLastSubAgentToolChip: (session, updates) => set((state) => {
+        const existing = state.subAgentStreams[session]
+        if (!existing || existing.toolChips.length === 0) return state
+        const chips = existing.toolChips
+        const updatedChips = chips.map((c, i) => i === chips.length - 1 ? { ...c, ...updates } : c)
+        return {
+          subAgentStreams: {
+            ...state.subAgentStreams,
+            [session]: { ...existing, toolChips: updatedChips },
+          },
+        }
+      }),
+      setSubAgentStatus: (session, status) => set((state) => {
+        const existing = state.subAgentStreams[session]
+        if (!existing) return state
+        return {
+          subAgentStreams: {
+            ...state.subAgentStreams,
+            [session]: { ...existing, status },
+          },
+        }
+      }),
+      removeSubAgentStream: (session) => set((state) => {
+        const { [session]: _, ...rest } = state.subAgentStreams
+        return { subAgentStreams: rest }
+      }),
     }),
     {
       name: 'novita-agent-chats',

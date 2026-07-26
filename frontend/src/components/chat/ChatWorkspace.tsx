@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { BrainCircuit, Eye, FolderOpen, Menu, Settings, Terminal } from 'lucide-react'
+import { Bot, BrainCircuit, Eye, FolderOpen, Menu, Settings, Terminal, X } from 'lucide-react'
 
 import { Composer } from '@/components/chat/Composer'
-import { SubAgentOutput } from '@/components/chat/SubAgentOutput'
-import type { ChatRecord, ToolChip } from '@/types/chat'
+import { useChatStore } from '@/store/useChatStore'
+import type { ChatRecord, SubAgentStream, ToolChip } from '@/types/chat'
 
 interface ChatWorkspaceProps {
   chat: ChatRecord
@@ -524,6 +524,138 @@ function StrReplaceOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: 
   )
 }
 
+function SubAgentOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: boolean; onToggle: () => void }) {
+  const subAgentStreams = useChatStore((state) => state.subAgentStreams)
+  const session = chip.sessionName || 'default'
+  const stream: SubAgentStream | undefined = subAgentStreams[session]
+  const isRunning = chip.ok === undefined
+
+  const statusLabel = isRunning ? 'running...' : chip.ok ? 'done' : 'error'
+
+  function renderToolChip(subChip: ToolChip) {
+    if (subChip.name === 'shall_tool') {
+      return <TerminalOutput chip={subChip} isOpen={false} onToggle={() => {}} />
+    }
+    if (subChip.name === 'shell_view') {
+      return <ShellViewOutput chip={subChip} isOpen={false} onToggle={() => {}} />
+    }
+    if (subChip.name === 'list_files') {
+      return <ListFilesOutput chip={subChip} isOpen={false} onToggle={() => {}} />
+    }
+    if (subChip.name === 'web_search') {
+      return <WebSearchOutput chip={subChip} isOpen={false} onToggle={() => {}} />
+    }
+    if (subChip.name === 'fatch_web_urls') {
+      return <FetchWebOutput chip={subChip} isOpen={false} onToggle={() => {}} />
+    }
+    if (subChip.name === 'str_replace') {
+      return <StrReplaceOutput chip={subChip} isOpen={false} onToggle={() => {}} />
+    }
+    if (subChip.name === 'apply_patch') {
+      return <ApplyPatchOutput chip={subChip} isOpen={false} onToggle={() => {}} />
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white border border-border text-xs text-[#858481] shadow-sm">
+        <svg viewBox="0 0 24 24" className="size-3" strokeWidth={1.8}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        {subChip.label}
+      </span>
+    )
+  }
+
+  return (
+    <>
+      <div className="overflow-hidden rounded-[18px] border border-border bg-white shadow-sm">
+        <button
+          onClick={onToggle}
+          className={`flex w-full items-center gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-[rgba(55,53,47,0.04)] ${chip.ok === false ? 'text-[#ef4444]' : 'text-[#34322d]'}`}
+        >
+          <Bot className="size-[14px] shrink-0 text-[#a855f7]" />
+          <span className="flex-1 truncate text-[13px]">
+            {stream ? stream.agent : 'Sub-Agent'}
+            <span className="ml-2 text-[11px] text-[#858481]">[{session}]</span>
+          </span>
+          <span className={`shrink-0 text-[11px] ${isRunning ? 'animate-pulse text-[#858481]' : chip.ok ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+            {statusLabel}
+          </span>
+        </button>
+      </div>
+
+      {isOpen && stream && (
+        <div className="fixed inset-0 z-50" onClick={onToggle}>
+          <div className="absolute inset-0 bg-[rgba(17,17,17,0.55)] backdrop-blur-[8px]" />
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(680px,calc(100dvw-24px))] max-h-[calc(100dvh-40px)] overflow-auto bg-white border border-border rounded-[22px] shadow-[0_32px_80px_rgba(17,17,17,0.25)] z-[1] animate-[fadeUp_0.2s_ease]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-4 border-b border-border rounded-t-[22px]">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-[10px] bg-[rgba(168,85,247,0.12)] grid place-items-center">
+                  <Bot className="size-[16px] text-[#a855f7]" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[#34322d]">{stream.agent}</div>
+                  <div className="text-[10px] text-[#858481] font-mono">session: {stream.session}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] px-2 py-1 rounded-full ${stream.status === 'running' ? 'bg-[#fef3c7] text-[#b45309] animate-pulse' : stream.status === 'done' ? 'bg-[#ecfdf5] text-[#059669]' : 'bg-[#fef2f2] text-[#ef4444]'}`}>
+                  {stream.status}
+                </span>
+                <button type="button" onClick={onToggle} className="p-1.5 rounded-[8px] hover:bg-[rgba(55,53,47,0.04)] text-[#858481]">
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {stream.reasoning && (
+                <div className="rounded-[14px] bg-[#faf5ff] border border-[#e8d5f5] p-4">
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#7c3aed] font-semibold mb-2">
+                    <BrainCircuit className="size-3" />
+                    <span>Reasoning</span>
+                  </div>
+                  <div className="text-[13px] leading-relaxed text-[#6b21a8] italic whitespace-pre-wrap">{stream.reasoning}</div>
+                </div>
+              )}
+
+              <div className="rounded-[14px] bg-[#f5f5f5] border border-border p-4">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#858481] font-semibold mb-2">
+                  <Bot className="size-3" />
+                  <span>Output</span>
+                </div>
+                <div className="text-[13px] leading-relaxed text-[#34322d] whitespace-pre-wrap font-[15px]">
+                  {stream.content || (stream.status === 'running' ? (
+                    <span className="text-[#858481] italic">Waiting for sub-agent response...</span>
+                  ) : (
+                    <span className="text-[#858481] italic">No output</span>
+                  ))}
+                  {stream.status === 'running' && stream.content ? <span className="inline-block size-1.5 bg-[#a855f7] rounded-full ml-1 animate-pulse" /> : null}
+                </div>
+              </div>
+
+              {stream.toolChips.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#858481] font-semibold mb-2">
+                    <svg viewBox="0 0 24 24" className="size-3" strokeWidth={1.8}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>Tool Calls</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {stream.toolChips.map((subChip) => (
+                      <div key={subChip.id}>
+                        {renderToolChip(subChip)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 function ReasoningBlock({ reasoning }: { reasoning: string }) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -641,17 +773,19 @@ export function ChatWorkspace({
                   {message.reasoning ? (
                     <ReasoningBlock reasoning={message.reasoning} />
                   ) : null}
-                  {message.subAgentChips && message.subAgentChips.length > 0 ? (
-                    <div className="flex flex-wrap gap-[10px] mt-3">
-                      {message.subAgentChips.map((subAgent) => (
-                        <SubAgentOutput key={subAgent.id} chip={subAgent} />
-                      ))}
-                    </div>
-                  ) : null}
                       {message.toolChips && message.toolChips.length > 0 ? (
                     <div className="flex flex-wrap gap-[10px] mt-3">
                       {message.toolChips.map((tool) =>
-                        tool.name === 'shall_tool' ? (
+                        tool.name === 'call_sub_agent' ? (
+                          <div key={tool.id} className="w-full max-w-xl">
+                            <SubAgentOutput chip={tool} isOpen={openTerminals.has(tool.id)} onToggle={() => toggleTerminal(tool.id)} />
+                          </div>
+                        ) : tool.name === 'list_sub_agents' ? (
+                          <span key={tool.id} className={`inline-flex items-center gap-2 px-3 py-[6px] rounded-full bg-white border border-border text-xs text-[#34322d] shadow-sm ${tool.ok === false ? 'border-red-300 bg-red-50 text-red-600' : ''}`}>
+                            <Bot className="size-[14px] text-[#a855f7]" />
+                            <span>{tool.label}</span>
+                          </span>
+                        ) : tool.name === 'shall_tool' ? (
                           <div key={tool.id} className="w-full max-w-xl">
                             <TerminalOutput chip={tool} isOpen={openTerminals.has(tool.id)} onToggle={() => toggleTerminal(tool.id)} />
                           </div>

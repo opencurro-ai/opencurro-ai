@@ -22,6 +22,13 @@ export interface StreamChatPayload {
   exa_api_key?: string
   search_provider?: string
   firecrawl_api_key?: string
+  sub_agents?: Array<{
+    name: string
+    description: string
+    system_prompt: string
+    tools: string[]
+    enabled: boolean
+  }>
   since_event_id?: number
 }
 

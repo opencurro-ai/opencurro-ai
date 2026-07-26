@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.agents.agent import AgentRunner
 from src.agents.providers.registry import ProviderRegistry
 from src.agents.sandbox.registry import SandboxRegistry
+from src.agents.subagents import SubAgentRunner
 from src.agents.tools.registry import ToolRegistry
 from src.api.chat import build_chat_router
 from src.api.providers import build_provider_router
@@ -16,11 +17,17 @@ provider_registry = ProviderRegistry()
 sandbox_registry = SandboxRegistry()
 tool_registry = ToolRegistry()
 session_store = SessionStore()
+sub_agent_runner = SubAgentRunner(
+    provider_registry=provider_registry,
+    tool_registry=tool_registry,
+    session_store=session_store,
+)
 agent_runner = AgentRunner(
     provider_registry=provider_registry,
     sandbox_registry=sandbox_registry,
     tool_registry=tool_registry,
     session_store=session_store,
+    sub_agent_runner=sub_agent_runner,
 )
 
 app = FastAPI(title=settings.app_name)

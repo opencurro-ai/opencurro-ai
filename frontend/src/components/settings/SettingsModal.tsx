@@ -1,6 +1,7 @@
 import { Loader2, Search, Settings, TriangleAlert } from 'lucide-react'
 
 import { useProviders } from '@/hooks/useProviders'
+import { SubAgentManager } from '@/components/settings/SubAgentManager'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import type { ProviderId } from '@/types/chat'
 import type { SearchProvider } from '@/store/useSettingsStore'
@@ -199,6 +200,10 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="field-group mb-[18px]">
+          <SubAgentManager />
         </div>
 
         <div className="warn-inline flex items-start gap-[10px] px-[14px] py-3 rounded-[14px] bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.22)] text-[#b45309] text-xs">

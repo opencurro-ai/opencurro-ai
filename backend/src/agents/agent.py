@@ -7,14 +7,12 @@ from typing import Any, AsyncGenerator, Optional
 
 from src.agents.providers.registry import ProviderRegistry
 from src.agents.sandbox.registry import SandboxRegistry
+from src.agents.subagents import SubAgentRunner
 from src.agents.systemprompts.systemprompt import SYSTEM_PROMPT
 from src.agents.tools.registry import ToolRegistry
 from src.schemas.chat import ChatMessage, ChatStreamRequest
 from src.services.event_buffer import SessionEventBuffer
 from src.services.session_store import SessionStore
-
-import src.agents.subagents.deepexplorer.agent  # noqa: F401 – triggers sub-agent registration
-import src.agents.subagents.deepresearcher.agent  # noqa: F401 – triggers sub-agent registration
 
 
 class AgentRunner:
@@ -25,12 +23,13 @@ class AgentRunner:
         sandbox_registry: SandboxRegistry,
         tool_registry: ToolRegistry,
         session_store: SessionStore,
+        sub_agent_runner: SubAgentRunner,
     ) -> None:
         self.provider_registry = provider_registry
         self.sandbox_registry = sandbox_registry
         self.tool_registry = tool_registry
         self.session_store = session_store
-        self.subagent_sessions: dict[str, list[dict[str, Any]]] = {}
+        self.sub_agent_runner = sub_agent_runner
 
     async def run_agent(self, request: ChatStreamRequest, buffer: SessionEventBuffer) -> None:
         async def send(event: str, data: dict) -> None:
@@ -151,14 +150,16 @@ class AgentRunner:
                             url = tool_payload.get("url")
                             old_string = tool_payload.get("old_string")
                             new_string = tool_payload.get("new_string")
-                            agent_name = tool_payload.get("agent")
                             raw_input = tool_payload.get("input")
+                            sub_agent = tool_payload.get("agent") if tool_name == "call_sub_agent" else None
                             await send(
                                 "tool_call",
                                 {
                                     "name": tool_name,
                                     "file_path": file_path,
                                     "command": command,
+                                    "session": tool_payload.get("session") if tool_name == "call_sub_agent" else None,
+                                    "agent": sub_agent,
                                     "session_name": session_name,
                                     "session_names": session_names,
                                     "path": list_path,
@@ -167,11 +168,9 @@ class AgentRunner:
                                     "old_string": old_string,
                                     "new_string": new_string,
                                     "input": raw_input,
-                                    "label": self._tool_label(tool_name, file_path, command, list_path, session_names, url=url, agent_name=agent_name),
+                                    "label": self._tool_label(tool_name, file_path, command, list_path, session_names, url=url, agent=sub_agent),
                                 },
                             )
-
-                            subagent_event_queue: asyncio.Queue = asyncio.Queue()
 
                             tool_task = asyncio.create_task(
                                 self.tool_registry.execute(
@@ -185,8 +184,9 @@ class AgentRunner:
                                     base_url=request.base_url,
                                     chat_id=request.chat_id,
                                     session_store=self.session_store,
-                                    agent=self,
-                                    subagent_event_queue=subagent_event_queue,
+                                    buffer=buffer,
+                                    sub_agent_runner=self.sub_agent_runner,
+                                    sub_agents=request.sub_agents,
                                     tavily_api_key=request.tavily_api_key,
                                     exa_api_key=request.exa_api_key,
                                     search_provider=request.search_provider,
@@ -194,26 +194,8 @@ class AgentRunner:
                                 )
                             )
 
-                            while True:
-                                get_event_task = asyncio.create_task(subagent_event_queue.get())
-                                done, _ = await asyncio.wait(
-                                    [tool_task, get_event_task],
-                                    return_when=asyncio.FIRST_COMPLETED,
-                                )
-
-                                if tool_task in done:
-                                    if get_event_task in done:
-                                        event_type, event_data = get_event_task.result()
-                                        await send(event_type, event_data)
-                                    else:
-                                        get_event_task.cancel()
-                                    break
-
-                                event_type, event_data = get_event_task.result()
-                                await send(event_type, event_data)
-
                             try:
-                                result = tool_task.result()
+                                result = await tool_task
                             except Exception as exc:
                                 result = {"ok": False, "error": {"code": "tool_execution_failed", "message": str(exc)}}
 
@@ -338,7 +320,11 @@ class AgentRunner:
             except json.JSONDecodeError:
                 return {}
 
-    def _tool_label(self, tool_name: str, file_path: Optional[str], command: Optional[str] = None, list_path: Optional[str] = None, session_names: Optional[list[str]] = None, url: Optional[str] = None, agent_name: Optional[str] = None) -> str:
+    def _tool_label(self, tool_name: str, file_path: Optional[str], command: Optional[str] = None, list_path: Optional[str] = None, session_names: Optional[list[str]] = None, url: Optional[str] = None, **kwargs) -> str:
+        if tool_name == "call_sub_agent":
+            return f"Sub-Agent: {kwargs.get('agent', 'unknown')}"
+        if tool_name == "list_sub_agents":
+            return "List Sub-Agents"
         if tool_name == "shall_tool":
             return f"Terminal: {command or 'unknown'}"
         if tool_name == "shell_view":
@@ -346,8 +332,6 @@ class AgentRunner:
             return f"Shell View: {sessions}"
         if tool_name == "list_files":
             return f"List: {list_path or 'unknown'}"
-        if tool_name == "call_sub_agent":
-            return f"Sub-agent: {agent_name or 'deepexplorer'}"
         if tool_name == "web_search":
             return f"Web Search"
         if tool_name == "fatch_web_urls":

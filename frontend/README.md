@@ -40,7 +40,6 @@ graph TB
     subgraph CHAT["Chat Components"]
         CW["ChatWorkspace"]
         COMP["Composer"]
-        SUB["SubAgentOutput"]
         HS["HistorySidebar"]
     end
 
@@ -73,7 +72,6 @@ graph TB
     APP --> SETTINGS
 
     CW --> COMP
-    CW --> SUB
     CW --> HS
 
     CHAT --> UAC
@@ -98,7 +96,7 @@ graph TB
     classDef hooks fill:#fff7ed,stroke:#f97316,stroke-width:2px
     classDef api fill:#f8fafc,stroke:#64748b,stroke-width:2px
     class APP layout
-    class CW,COMP,SUB,HS chat
+    class CW,COMP,HS chat
     class FE,FV files
     class SM settings
     class CS,SS state
@@ -120,7 +118,7 @@ frontend/
 │   ├── app/
 │   │   └── routes/route.ts        # Route constants
 │   ├── types/
-│   │   ├── chat.ts                 # ChatRecord, UiMessage, ToolChip, SubAgentChip
+│   │   ├── chat.ts                 # ChatRecord, UiMessage, ToolChip
 │   │   ├── provider.ts             # ProviderMetadata, ProviderModel, ProviderSettings
 │   │   └── sandbox.ts              # FileTreeNode, SandboxFilesResponse
 │   ├── lib/
@@ -140,7 +138,6 @@ frontend/
 │       │   ├── ChatWorkspace.tsx    # Message list + tool output renderers
 │       │   ├── Composer.tsx         # Input area with iteration display
 │       │   ├── HistorySidebar.tsx   # Chat history list (create/delete)
-│       │   └── SubAgentOutput.tsx   # Modal for sub-agent activity
 │       ├── files/
 │       │   ├── FileExplorer.tsx     # Tree-based sandbox file browser
 │       │   └── FileViewer.tsx       # Inline code viewer/editor with save
@@ -173,7 +170,6 @@ graph TB
     APP --> SETMODAL["SettingsModal<br/>Configuration modal"]
 
     CHATWS --> COMPOSER["Composer<br/>Text input + iteration display"]
-    CHATWS --> SUBOUTPUT["SubAgentOutput<br/>Sub-agent modal"]
     CHATWS --> TOOLOUT["Tool Output Renderers"]
 
     TOOLOUT --> TO["TerminalOutput<br/>shall_tool"]
@@ -203,7 +199,7 @@ graph TB
     classDef output fill:#fdf2f8,stroke:#ec4899,stroke-width:2px
     classDef state fill:#fff7ed,stroke:#f97316,stroke-width:2px
     class APP main
-    class HSIDEBAR,CHATWS,COMPOSER,SUBOUTPUT chat
+    class HSIDEBAR,CHATWS,COMPOSER chat
     class FILEEX,TN,FILEV files
     class SETMODAL,PROV,NOV,WEB,SELECT settings
     class TO,TSVO,TLFO,TWSO,TFWO,TSRO,TRB,TGENC output
@@ -286,10 +282,6 @@ sequenceDiagram
 | `markAssistantError(id, message)` | Mark message as errored |
 | `addToolChip(id, tool)` | Add tool activity chip |
 | `updateLastToolChip(id, updates)` | Update last tool chip (e.g., with result) |
-| `addSubAgentChip(id, subAgent)` | Add sub-agent chip |
-| `appendSubAgentToken(id, session, token)` | Stream sub-agent token |
-| `addSubAgentToolChip(id, session, tool)` | Add sub-agent tool chip |
-| `updateSubAgentStatus(id, session, status)` | Update sub-agent status |
 | `setSandboxInfo(id, info)` | Set sandbox metadata |
 | `replaceModelHistory(id, history)` | Replace model history |
 
@@ -336,7 +328,6 @@ interface UiMessage {
   createdAt: string
   status?: 'idle' | 'streaming' | 'error'
   toolChips?: ToolChip[]
-  subAgentChips?: SubAgentChip[]
 }
 ```
 
@@ -357,19 +348,6 @@ interface ToolChip {
   newString?: string
   ok?: boolean
   resultData?: Record<string, unknown>
-}
-```
-
-### `SubAgentChip`
-```typescript
-interface SubAgentChip {
-  id: string
-  session: string
-  agent: string
-  output: string
-  toolChips: ToolChip[]
-  status: 'running' | 'completed' | 'error'
-  errorMessage?: string
 }
 ```
 
@@ -429,12 +407,6 @@ The `useAgentChat` hook dispatches each event type to the appropriate store acti
 | `reasoning` | `appendAssistantReasoning()` |
 | `tool_call` | `addToolChip()` |
 | `tool_result` | `updateLastToolChip()` |
-| `subagent_start` | `addSubAgentChip()` |
-| `subagent_token` | `appendSubAgentToken()` |
-| `subagent_tool_call` | `addSubAgentToolChip()` |
-| `subagent_tool_result` | `updateLastSubAgentToolChip()` |
-| `subagent_complete` | `updateSubAgentStatus('completed')` |
-| `subagent_error` | `updateSubAgentStatus('error')` |
 | `message_complete` | `finalizeAssistantMessage()` |
 | `error` | `markAssistantError()` |
 | `done` | `setStreaming(false)` |
