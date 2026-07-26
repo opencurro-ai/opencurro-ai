@@ -69,6 +69,12 @@ export async function ensureChatSession(chatId: string, history: BackendMessage[
   })
 }
 
+export async function abortChat(chatId: string): Promise<void> {
+  await fetch(`${env.backendUrl}/api/chat/abort/${encodeURIComponent(chatId)}`, {
+    method: 'POST',
+  })
+}
+
 export async function fetchSandboxFiles(chatId: string): Promise<SandboxFilesResponse> {
   const params = new URLSearchParams({ chat_id: chatId, path: '/home/user', depth: '6' })
   const response = await fetch(`${env.backendUrl}/api/sandbox/files?${params}`)

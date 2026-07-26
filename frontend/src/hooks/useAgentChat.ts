@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-import { ensureChatSession, streamChat } from '@/lib/api'
+import { abortChat, ensureChatSession, streamChat } from '@/lib/api'
 import type { StreamConnection } from '@/lib/api'
 import { useChatStore } from '@/store/useChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
@@ -260,5 +260,22 @@ export function useAgentChat() {
     getStreamPayload,
   ])
 
-  return { sendMessage }
+  const stopStreaming = useCallback(async () => {
+    const chatId = store.activeChatId
+    if (connectionRef.current) {
+      connectionRef.current.abort()
+      connectionRef.current = null
+    }
+    store.setStreaming(false)
+    store.setStatusLabel('Stopped')
+    store.setIteration(0, 1000)
+    if (chatId) {
+      try {
+        await abortChat(chatId)
+      } catch {
+      }
+    }
+  }, [store])
+
+  return { sendMessage, stopStreaming }
 }

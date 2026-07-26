@@ -10,10 +10,11 @@ interface ComposerProps {
   readyToChat: boolean
   placeholder: string
   onSubmit: (value: string) => Promise<void>
+  onStop: () => void
   onOpenSettings: () => void
 }
 
-export function Composer({ disabled, isStreaming, iterationCurrent, iterationLimit, readyToChat, placeholder, onSubmit, onOpenSettings }: ComposerProps) {
+export function Composer({ disabled, isStreaming, iterationCurrent, iterationLimit, readyToChat, placeholder, onSubmit, onStop, onOpenSettings }: ComposerProps) {
   const [value, setValue] = useState('')
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -32,7 +33,7 @@ export function Composer({ disabled, isStreaming, iterationCurrent, iterationLim
           Iteration {iterationCurrent}/{iterationLimit}
         </div>
         {isStreaming ? (
-          <button className="stop-btn px-3 py-2 rounded-[12px] text-[#ef4444] text-[13px] hover:bg-[rgba(239,68,68,0.08)]" type="button" onClick={() => {}}>
+          <button className="stop-btn px-3 py-2 rounded-[12px] text-[#ef4444] text-[13px] hover:bg-[rgba(239,68,68,0.08)]" type="button" onClick={onStop}>
             Stop
           </button>
         ) : null}

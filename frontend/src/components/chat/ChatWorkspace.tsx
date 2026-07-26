@@ -12,6 +12,7 @@ interface ChatWorkspaceProps {
   iterationCurrent: number
   iterationLimit: number
   onSendMessage: (value: string) => Promise<void>
+  onStop: () => void
   onOpenSettings: () => void
   onToggleSidebar: () => void
   error?: string
@@ -691,6 +692,7 @@ export function ChatWorkspace({
   iterationCurrent,
   iterationLimit,
   onSendMessage,
+  onStop,
   onOpenSettings,
   onToggleSidebar,
   error,
@@ -848,6 +850,7 @@ export function ChatWorkspace({
           readyToChat={readyToChat}
           placeholder={disabled ? 'Configure API keys in Settings to start chatting.' : 'Ask Curro to help you build something...'}
           onSubmit={onSendMessage}
+          onStop={onStop}
           onOpenSettings={onOpenSettings}
         />
       </footer>

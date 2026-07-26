@@ -4,10 +4,11 @@ import { useChatStore } from '@/store/useChatStore'
 
 interface HistorySidebarProps {
   onClose: () => void
+  onStop?: () => void
 }
 
-export function HistorySidebar({ onClose }: HistorySidebarProps) {
-  const { activeChatId, chats, createChat, deleteChat, setActiveChat } = useChatStore()
+export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
+  const { activeChatId, chats, createChat, deleteChat, setActiveChat, isStreaming } = useChatStore()
   const currentChatId = activeChatId || chats[0]?.id
 
   return (
@@ -21,7 +22,10 @@ export function HistorySidebar({ onClose }: HistorySidebarProps) {
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => createChat()}
+            onClick={() => {
+              if (isStreaming) onStop?.()
+              createChat()
+            }}
             className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors"
             aria-label="New chat"
           >

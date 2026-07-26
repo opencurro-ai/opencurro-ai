@@ -24,6 +24,17 @@ def build_chat_router(agent_runner: AgentRunner, session_store: SessionStore) ->
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Session error: {exc}") from exc
 
+    @router.post("/abort/{chat_id}")
+    async def abort_chat(chat_id: str) -> dict[str, bool]:
+        session = session_store.get(chat_id)
+        if not session:
+            return {"ok": False}
+        if session.agent_task is not None and not session.agent_task.done():
+            session.agent_task.cancel()
+        if session.event_buffer is not None:
+            session.event_buffer.set_done()
+        return {"ok": True}
+
     @router.post("/stream")
     async def stream_chat(request: ChatStreamRequest) -> StreamingResponse:
         session = session_store.get_or_create(request.chat_id)

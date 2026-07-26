@@ -72,7 +72,15 @@ export const useChatStore = create<ChatState>()(
       setLastEventId: (chatId, eventId) => set((state) => ({ lastEventId: { ...state.lastEventId, [chatId]: eventId } })),
       createChat: () => {
         const chat = createEmptyChat()
-        set((state) => ({ chats: [chat, ...state.chats], activeChatId: chat.id }))
+        set((state) => ({
+          chats: [chat, ...state.chats],
+          activeChatId: chat.id,
+          isStreaming: false,
+          statusLabel: 'Ready',
+          iterationCurrent: 0,
+          iterationLimit: 1000,
+          subAgentStreams: {},
+        }))
         return chat.id
       },
       deleteChat: (chatId) => {

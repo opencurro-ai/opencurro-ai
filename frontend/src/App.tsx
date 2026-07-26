@@ -9,7 +9,7 @@ import { useChatStore } from '@/store/useChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 
 function App() {
-  const { sendMessage } = useAgentChat()
+  const { sendMessage, stopStreaming } = useAgentChat()
   const { activeChatId, chats, createChat, isStreaming, iterationCurrent, iterationLimit, setActiveChat } = useChatStore()
   const { novitaApiKey, providerKeys, selectedModel, selectedProvider } = useSettingsStore()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -53,6 +53,7 @@ function App() {
             iterationCurrent={iterationCurrent}
             iterationLimit={iterationLimit}
             onSendMessage={handleSendMessage}
+            onStop={stopStreaming}
             onOpenSettings={() => setSettingsOpen(true)}
             onToggleSidebar={() => setSidebarOpen((v) => !v)}
             error={error}
@@ -73,6 +74,7 @@ function App() {
               iterationCurrent={iterationCurrent}
               iterationLimit={iterationLimit}
               onSendMessage={handleSendMessage}
+              onStop={stopStreaming}
               onOpenSettings={() => setSettingsOpen(true)}
               onToggleSidebar={() => setSidebarOpen((v) => !v)}
               error={error}
@@ -110,7 +112,7 @@ function App() {
           className="absolute left-0 top-0 bottom-0 w-[320px] bg-white border-r border-border shadow-xl transition-transform duration-150 ease-out"
           style={{ transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)' }}
         >
-          <HistorySidebar onClose={() => setSidebarOpen(false)} />
+          <HistorySidebar onClose={() => setSidebarOpen(false)} onStop={stopStreaming} />
         </div>
       </div>
 
