@@ -76,4 +76,21 @@ def build_sandbox_router(session_store: SessionStore, sandbox_registry: SandboxR
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Failed to write file: {exc}") from exc
 
+    @router.post("/kill/{chat_id}")
+    async def kill_sandbox(chat_id: str) -> dict[str, bool]:
+        session = _get_session(chat_id)
+        try:
+            adapter = _get_adapter(session.sandbox_context.provider)
+            await adapter.dispose(session.sandbox_context)
+            session.sandbox_context = None
+            if session.agent_task is not None and not session.agent_task.done():
+                session.agent_task.cancel()
+            if session.event_buffer is not None:
+                session.event_buffer.set_done()
+            return {"ok": True}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to kill sandbox: {exc}") from exc
+
     return router

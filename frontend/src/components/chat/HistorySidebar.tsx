@@ -1,5 +1,7 @@
-import { MessageSquarePlus, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { MessageSquarePlus, Trash2, X, Terminal, Server } from 'lucide-react'
 
+import { killSandbox } from '@/lib/api'
 import { useChatStore } from '@/store/useChatStore'
 
 interface HistorySidebarProps {
@@ -7,9 +9,63 @@ interface HistorySidebarProps {
   onStop?: () => void
 }
 
+interface ContextMenuState {
+  chatId: string
+  x: number
+  y: number
+}
+
 export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
   const { activeChatId, chats, createChat, deleteChat, setActiveChat, isStreaming } = useChatStore()
   const currentChatId = activeChatId || chats[0]?.id
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [killingId, setKillingId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null)
+    }
+    if (contextMenu) {
+      document.addEventListener('click', handleClick)
+      document.addEventListener('keydown', handleKeyDown)
+    }
+    return () => {
+      document.removeEventListener('click', handleClick)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [contextMenu])
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, chatId: string) => {
+    e.preventDefault()
+    setContextMenu({ chatId, x: e.clientX, y: e.clientY })
+  }, [])
+
+  const handleTouchStart = useCallback((chatId: string) => {
+    longPressTimer.current = setTimeout(() => {
+      setContextMenu({ chatId, x: 0, y: 0 })
+    }, 500)
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+    }
+  }, [])
+
+  const handleKillSandbox = useCallback(async (chatId: string) => {
+    setKillingId(chatId)
+    setContextMenu(null)
+    try {
+      await killSandbox(chatId)
+    } catch {
+      // sandbox may already be gone
+    } finally {
+      setKillingId(null)
+    }
+  }, [])
 
   return (
     <aside className="flex h-full flex-col">
@@ -44,6 +100,7 @@ export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {chats.map((chat) => {
           const isActive = chat.id === currentChatId
+          const hasSandbox = !!chat.sandbox
           return (
             <div
               key={chat.id}
@@ -53,12 +110,22 @@ export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
                   : 'border-[#eee] bg-white text-[#858481] hover:border-[#ddd] hover:bg-[rgba(55,53,47,0.02)]'
               }`}
               onClick={() => { setActiveChat(chat.id); onClose() }}
+              onContextMenu={(e) => handleContextMenu(e, chat.id)}
+              onTouchStart={() => handleTouchStart(chat.id)}
+              onTouchEnd={handleTouchEnd}
+              onTouchMove={handleTouchEnd}
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium text-[13px]">{chat.title || 'New chat'}</div>
                 <div className="mt-1 truncate text-xs text-[#858481]">
                   {chat.messages[chat.messages.length - 1]?.content || 'No messages yet'}
                 </div>
+                {hasSandbox && (
+                  <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[#858481]/60 font-mono truncate">
+                    <Server className="size-[10px] shrink-0" />
+                    <span className="truncate">{chat.sandbox!.sandboxId}</span>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -72,6 +139,44 @@ export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
           )
         })}
       </div>
+
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[180px] bg-white border border-[#eee] rounded-[12px] shadow-lg py-1"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+        >
+          <div className="px-3 py-2 text-[11px] text-[#858481] font-medium border-b border-[#eee]">
+            Chat Actions
+          </div>
+          <button
+            className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[#34322d] hover:bg-[rgba(55,53,47,0.04)] transition disabled:opacity-40"
+            disabled={killingId === contextMenu.chatId}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleKillSandbox(contextMenu.chatId)
+            }}
+          >
+            <Terminal className="size-[14px] text-[#858481]" />
+            <span>{killingId === contextMenu.chatId ? 'Killing...' : 'Kill Sandbox'}</span>
+          </button>
+          <button
+            className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[#ef4444] hover:bg-[rgba(239,68,68,0.04)] transition"
+            onClick={(e) => {
+              e.stopPropagation()
+              const id = contextMenu.chatId
+              setContextMenu(null)
+              deleteChat(id)
+            }}
+          >
+            <Trash2 className="size-[14px]" />
+            <span>Delete Chat</span>
+          </button>
+        </div>
+      )}
     </aside>
   )
 }
