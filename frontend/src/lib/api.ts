@@ -123,6 +123,8 @@ export function streamChat(
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+  class StreamConnectionError extends Error {}
+
   const connect = async (): Promise<void> => {
     let retryDelay = 500
 
@@ -137,7 +139,7 @@ export function streamChat(
         })
 
         if (!response.ok) {
-          throw new Error(`Server error: ${response.status}`)
+          throw new StreamConnectionError(`Server error: ${response.status}`)
         }
 
         if (!response.body) {
@@ -190,7 +192,11 @@ export function streamChat(
       } catch (err) {
         if (aborted || abortController.signal.aborted) return
 
-        if (err instanceof TypeError || (err instanceof Error && (err.message.includes('network') || err.message.includes('fetch') || err.message.includes('Server error')))) {
+        if (err instanceof StreamConnectionError) {
+          throw err
+        }
+
+        if (err instanceof TypeError || (err instanceof Error && (err.message.includes('network') || err.message.includes('fetch')))) {
           await sleep(retryDelay)
           retryDelay = Math.min(retryDelay * 2, 15000)
           continue

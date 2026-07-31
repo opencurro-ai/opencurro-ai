@@ -87,10 +87,16 @@ export function useAgentChat() {
           const message = typeof data.message === 'string' ? data.message : 'Unknown error'
           store.markAssistantError(chatId, message)
           store.setStatusLabel('Issue detected')
+          if (store.streamingChatId === chatId) {
+            store.setStreamingChatId(null)
+          }
         }
         if (event === 'done') {
           store.setStreaming(false)
           store.setStatusLabel('Ready')
+          if (store.streamingChatId === chatId) {
+            store.setStreamingChatId(null)
+          }
         }
         if (event.startsWith('sub_agent_')) {
           const session = typeof data.session === 'string' ? data.session : 'default'
@@ -174,24 +180,31 @@ export function useAgentChat() {
   )
 
   useEffect(() => {
-    if (store.isStreaming && store.activeChatId) {
-      const chatId = store.activeChatId
-      const handler = makeHandler(chatId)
-      const sinceId = store.lastEventId[chatId] ?? -1
-      const payload = getStreamPayload(chatId, undefined, undefined, sinceId)
+    if (!store.streamingChatId) return
+    const chatId = store.streamingChatId
+    const handler = makeHandler(chatId)
+    const sinceId = store.lastEventId[chatId] ?? -1
+    const payload = getStreamPayload(chatId, undefined, undefined, sinceId)
 
-      const conn = streamChat(
-        payload,
-        handler,
-        (eventId) => store.setLastEventId(chatId, eventId),
-      )
-      connectionRef.current = conn
-    }
+    const conn = streamChat(
+      payload,
+      handler,
+      (eventId) => store.setLastEventId(chatId, eventId),
+    )
+    connectionRef.current = conn
+
+    conn.promise.catch((error) => {
+      if (store.streamingChatId !== chatId) return
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      store.markAssistantError(chatId, message)
+      store.setStreamingChatId(null)
+      store.setStreaming(false)
+    })
 
     return () => {
-      if (connectionRef.current) {
-        connectionRef.current.abort()
+      if (connectionRef.current === conn) {
         connectionRef.current = null
+        conn.abort()
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,12 +236,24 @@ export function useAgentChat() {
       connectionRef.current = null
     }
 
+    const previousStream = store.streamingChatId
+    if (previousStream && previousStream !== chatId) {
+      try {
+        await abortChat(previousStream)
+      } catch {
+        // The server session may already be gone
+      }
+      store.setLastMessageIdle(previousStream)
+      store.setStreamingChatId(null)
+    }
+
     store.addUserMessage(chatId, content)
     store.addEvent(chatId, { type: 'user_message', content })
     const assistantId = store.startAssistantMessage(chatId)
     void assistantId
     store.setStatusLabel('Thinking...')
     store.setStreaming(true)
+    store.setStreamingChatId(chatId)
     store.setIteration(0, 1000)
     store.setLastEventId(chatId, -1)
 
@@ -250,6 +275,7 @@ export function useAgentChat() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       store.markAssistantError(chatId, message)
+      store.setStreamingChatId(null)
       store.setStreaming(false)
       store.setStatusLabel('Issue detected')
       throw error
@@ -262,18 +288,21 @@ export function useAgentChat() {
   ])
 
   const stopStreaming = useCallback(async () => {
-    const chatId = store.activeChatId
+    const chatId = store.streamingChatId ?? store.activeChatId
     if (connectionRef.current) {
       connectionRef.current.abort()
       connectionRef.current = null
     }
+    store.setStreamingChatId(null)
     store.setStreaming(false)
     store.setStatusLabel('Stopped')
     store.setIteration(0, 1000)
     if (chatId) {
+      store.setLastMessageIdle(chatId)
       try {
         await abortChat(chatId)
       } catch {
+        // The server session may already be gone
       }
     }
   }, [store])

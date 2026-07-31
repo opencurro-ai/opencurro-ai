@@ -23,6 +23,7 @@ interface ChatState {
   chats: ChatRecord[]
   activeChatId: string
   isStreaming: boolean
+  streamingChatId: string | null
   statusLabel: string
   iterationCurrent: number
   iterationLimit: number
@@ -30,11 +31,14 @@ interface ChatState {
   subAgentStreams: Record<string, SubAgentStream>
   setStatusLabel: (value: string) => void
   setStreaming: (value: boolean) => void
+  setStreamingChatId: (chatId: string | null) => void
   setIteration: (current: number, limit: number) => void
   setLastEventId: (chatId: string, eventId: number) => void
   createChat: () => string
+  createChatWithId: (chatId: string) => void
   deleteChat: (chatId: string) => void
   setActiveChat: (chatId: string) => void
+  setLastMessageIdle: (chatId: string) => void
   addUserMessage: (chatId: string, content: string) => void
   startAssistantMessage: (chatId: string) => string
   appendAssistantToken: (chatId: string, token: string) => void
@@ -61,6 +65,7 @@ export const useChatStore = create<ChatState>()(
       chats: [initialChat],
       activeChatId: initialChat.id,
       isStreaming: false,
+      streamingChatId: null,
       statusLabel: 'Ready',
       iterationCurrent: 0,
       iterationLimit: 1000,
@@ -68,6 +73,7 @@ export const useChatStore = create<ChatState>()(
       subAgentStreams: {},
       setStatusLabel: (value) => set({ statusLabel: value }),
       setStreaming: (value) => set({ isStreaming: value }),
+      setStreamingChatId: (chatId) => set({ streamingChatId: chatId }),
       setIteration: (current, limit) => set({ iterationCurrent: current, iterationLimit: limit }),
       setLastEventId: (chatId, eventId) => set((state) => ({ lastEventId: { ...state.lastEventId, [chatId]: eventId } })),
       createChat: () => {
@@ -83,12 +89,49 @@ export const useChatStore = create<ChatState>()(
         }))
         return chat.id
       },
+      createChatWithId: (chatId) => {
+        set((state) => {
+          if (state.chats.some((chat) => chat.id === chatId)) {
+            return { activeChatId: chatId }
+          }
+          const now = new Date().toISOString()
+          const chat: ChatRecord = {
+            id: chatId,
+            title: 'New chat',
+            createdAt: now,
+            updatedAt: now,
+            messages: [],
+            modelHistory: [],
+            eventHistory: [],
+          }
+          return {
+            chats: [chat, ...state.chats],
+            activeChatId: chatId,
+          }
+        })
+      },
       deleteChat: (chatId) => {
         const chats = get().chats.filter((chat) => chat.id !== chatId)
         const nextChats = chats.length ? chats : [createEmptyChat()]
-        set({ chats: nextChats, activeChatId: nextChats[0].id })
+        set((state) => ({
+          chats: nextChats,
+          activeChatId: nextChats[0].id,
+          streamingChatId: state.streamingChatId === chatId ? null : state.streamingChatId,
+          isStreaming: state.streamingChatId === chatId ? false : state.isStreaming,
+        }))
       },
       setActiveChat: (chatId) => set({ activeChatId: chatId }),
+      setLastMessageIdle: (chatId) => set((state) => ({
+        chats: state.chats.map((chat) => {
+          if (chat.id !== chatId) return chat
+          const messages = chat.messages.map((message, index) =>
+            index === chat.messages.length - 1 && message.role === 'assistant' && message.status === 'streaming'
+              ? { ...message, status: 'idle' as const }
+              : message,
+          )
+          return { ...chat, messages }
+        }),
+      })),
       addUserMessage: (chatId, content) => set((state) => ({
         chats: state.chats.map((chat) => {
           if (chat.id !== chatId) return chat
@@ -264,7 +307,9 @@ export const useChatStore = create<ChatState>()(
         }
       }),
       removeSubAgentStream: (session) => set((state) => {
-        const { [session]: _, ...rest } = state.subAgentStreams
+        if (!(session in state.subAgentStreams)) return state
+        const rest = { ...state.subAgentStreams }
+        delete rest[session]
         return { subAgentStreams: rest }
       }),
     }),
@@ -274,6 +319,7 @@ export const useChatStore = create<ChatState>()(
         chats: state.chats,
         activeChatId: state.activeChatId,
         isStreaming: state.isStreaming,
+        streamingChatId: state.streamingChatId,
         lastEventId: state.lastEventId,
       }),
     },

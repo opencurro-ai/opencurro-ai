@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageSquarePlus, Trash2, X, Terminal, Server } from 'lucide-react'
 
 import { killSandbox } from '@/lib/api'
+import { navigate, sessionPath } from '@/lib/router'
 import { useChatStore } from '@/store/useChatStore'
 
 interface HistorySidebarProps {
   onClose: () => void
   onStop?: () => void
+  hideClose?: boolean
 }
 
 interface ContextMenuState {
@@ -15,8 +17,8 @@ interface ContextMenuState {
   y: number
 }
 
-export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
-  const { activeChatId, chats, createChat, deleteChat, setActiveChat, isStreaming } = useChatStore()
+export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySidebarProps) {
+  const { activeChatId, chats, deleteChat, setActiveChat, isStreaming, streamingChatId } = useChatStore()
   const currentChatId = activeChatId || chats[0]?.id
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [killingId, setKillingId] = useState<string | null>(null)
@@ -67,6 +69,29 @@ export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
     }
   }, [])
 
+  const handleDeleteChat = useCallback((chatId: string) => {
+    const remaining = chats.filter((chat) => chat.id !== chatId)
+    if (streamingChatId === chatId) {
+      onStop?.()
+    }
+    deleteChat(chatId)
+    if (chatId === currentChatId) {
+      if (remaining.length > 0) {
+        navigate(sessionPath(remaining[0].id))
+      } else {
+        navigate('/')
+      }
+    }
+  }, [chats, currentChatId, deleteChat, onStop, streamingChatId])
+
+  const handleNewChat = useCallback(() => {
+    if (isStreaming) {
+      onStop?.()
+    }
+    navigate('/')
+    onClose()
+  }, [isStreaming, onClose, onStop])
+
   return (
     <aside className="flex h-full flex-col">
       <div className="flex items-center justify-between px-4 py-4 border-b border-border">
@@ -78,22 +103,21 @@ export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => {
-              if (isStreaming) onStop?.()
-              createChat()
-            }}
+            onClick={handleNewChat}
             className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors"
             aria-label="New chat"
           >
             <MessageSquarePlus className="size-[18px]" />
           </button>
-          <button
-            onClick={onClose}
-            className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors"
-            aria-label="Close sidebar"
-          >
-            <X className="size-[18px]" />
-          </button>
+          {!hideClose ? (
+            <button
+              onClick={onClose}
+              className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors"
+              aria-label="Close sidebar"
+            >
+              <X className="size-[18px]" />
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -109,7 +133,7 @@ export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
                   ? 'border-[rgba(255,199,0,0.4)] bg-[rgba(255,199,0,0.1)] text-[#34322d]'
                   : 'border-[#eee] bg-white text-[#858481] hover:border-[#ddd] hover:bg-[rgba(55,53,47,0.02)]'
               }`}
-              onClick={() => { setActiveChat(chat.id); onClose() }}
+              onClick={() => { setActiveChat(chat.id); navigate(sessionPath(chat.id)); onClose() }}
               onContextMenu={(e) => handleContextMenu(e, chat.id)}
               onTouchStart={() => handleTouchStart(chat.id)}
               onTouchEnd={handleTouchEnd}
@@ -130,7 +154,7 @@ export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
               <button
                 type="button"
                 className="rounded-full p-1.5 text-[#858481] opacity-0 group-hover:opacity-100 hover:bg-[rgba(55,53,47,0.06)] hover:text-[#ef4444] transition"
-                onClick={(e) => { e.stopPropagation(); deleteChat(chat.id) }}
+                onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id) }}
                 aria-label={`Delete ${chat.title}`}
               >
                 <Trash2 className="size-[14px]" />
@@ -169,7 +193,7 @@ export function HistorySidebar({ onClose, onStop }: HistorySidebarProps) {
               e.stopPropagation()
               const id = contextMenu.chatId
               setContextMenu(null)
-              deleteChat(id)
+              handleDeleteChat(id)
             }}
           >
             <Trash2 className="size-[14px]" />
