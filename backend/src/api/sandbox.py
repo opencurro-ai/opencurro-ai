@@ -83,6 +83,8 @@ def build_sandbox_router(session_store: SessionStore, sandbox_registry: SandboxR
             adapter = _get_adapter(session.sandbox_context.provider)
             await adapter.dispose(session.sandbox_context)
             session.sandbox_context = None
+            if session.code_server_task is not None and not session.code_server_task.done():
+                session.code_server_task.cancel()
             if session.agent_task is not None and not session.agent_task.done():
                 session.agent_task.cancel()
             if session.event_buffer is not None:

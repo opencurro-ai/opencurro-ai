@@ -29,7 +29,8 @@ export function useAgentChat() {
           const sandboxId = typeof data.sandbox_id === 'string' ? data.sandbox_id : ''
           const provider = typeof data.provider === 'string' ? data.provider : 'novita'
           const rootPath = typeof data.root_path === 'string' ? data.root_path : '/home/user'
-          store.setSandboxInfo(chatId, { sandboxId, provider, rootPath })
+          const codeServerUrl = typeof data.code_server_url === 'string' ? data.code_server_url : undefined
+          store.setSandboxInfo(chatId, { sandboxId, provider, rootPath, codeServerUrl })
           store.setStatusLabel('Thinking...')
         }
         if (event === 'tool_call') {

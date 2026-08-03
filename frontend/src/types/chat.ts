@@ -44,6 +44,7 @@ export interface SandboxInfo {
   sandboxId: string
   provider: string
   rootPath: string
+  codeServerUrl?: string
 }
 
 export interface SubAgentConfig {

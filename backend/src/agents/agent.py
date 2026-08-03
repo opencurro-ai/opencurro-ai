@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import re
 from typing import Any, AsyncGenerator, Optional
@@ -13,6 +14,10 @@ from src.agents.tools.registry import ToolRegistry
 from src.schemas.chat import ChatMessage, ChatStreamRequest
 from src.services.event_buffer import SessionEventBuffer
 from src.services.session_store import SessionStore
+
+# The module filename contains a hyphen (vs-code.py), so it cannot be imported
+# with a regular ``import`` statement; importlib handles it by name.
+vs_code = importlib.import_module("src.agents.sandbox.vs-code")
 
 
 class AgentRunner:
@@ -61,12 +66,25 @@ class AgentRunner:
                     await send("error", {"message": f"Sandbox creation failed: {exc}", "code": "sandbox_create_failed"})
                     await send("done", {"ok": False})
                     return
+
+                # Launch browser VS Code (code-server) in parallel with the
+                # agent loop. The agent must never wait for code-server to
+                # boot, so this runs as an independent fire-and-forget task;
+                # once started, code-server keeps running inside the sandbox
+                # regardless of the agent/stream/backend lifecycle.
+                session.code_server_task = asyncio.create_task(
+                    vs_code.start_code_server(sandbox_adapter, session.sandbox_context)
+                )
+
                 await send(
                     "sandbox",
                     {
                         "sandbox_id": session.sandbox_context.sandbox_id,
                         "provider": session.sandbox_context.provider,
                         "root_path": session.sandbox_context.root_path,
+                        "code_server_url": vs_code.build_code_server_url(
+                            session.sandbox_context.sandbox_id
+                        ),
                     },
                 )
 

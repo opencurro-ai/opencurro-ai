@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, BrainCircuit, Eye, FolderOpen, Menu, Settings, Terminal, X } from 'lucide-react'
+import { Bot, BrainCircuit, CodeXml, Eye, FolderOpen, Menu, Settings, Terminal, X } from 'lucide-react'
 
 import { Composer } from '@/components/chat/Composer'
 import { useChatStore } from '@/store/useChatStore'
@@ -710,6 +710,17 @@ export function ChatWorkspace({
 
   const readyToChat = !disabled
 
+  const sandboxInfo = chat.sandbox
+  const codeServerUrl = sandboxInfo?.codeServerUrl
+    ?? (sandboxInfo?.sandboxId
+      ? `https://8080-${sandboxInfo.sandboxId}.us-phx-1.sandbox.novita.ai/?folder=${sandboxInfo.rootPath ?? '/home/user'}/`
+      : undefined)
+
+  const openCodeServer = () => {
+    if (!codeServerUrl) return
+    window.open(codeServerUrl, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <div className="flex flex-col h-full min-h-0 w-full">
       <header className="flex items-center justify-between py-4 border-b border-border gap-4 shrink-0">
@@ -726,7 +737,17 @@ export function ChatWorkspace({
           </div>
           <div className="text-[15px] font-bold truncate">{chat.title || 'New chat'}</div>
         </div>
-        <div className="flex gap-[2px] shrink-0">
+        <div className="flex items-center gap-[6px] shrink-0">
+          <button
+            className="flex items-center gap-1.5 h-[34px] px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-[#34322d] shadow-sm transition-colors hover:bg-[rgba(55,53,47,0.04)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+            onClick={openCodeServer}
+            disabled={!codeServerUrl}
+            title={codeServerUrl ? 'Open VS Code in your browser' : 'VS Code becomes available once the sandbox is ready'}
+            aria-label="Open VS Code"
+          >
+            <CodeXml className="size-[16px] text-[#0078d4]" />
+            <span className="hidden sm:inline">VS Code</span>
+          </button>
           <button
             className={`w-[34px] h-[34px] rounded-[10px] grid place-items-center transition-colors shrink-0 ${!readyToChat ? 'text-[#f97316] animate-[pulse_1.6s_infinite_ease-in-out]' : 'text-[#858481]'} hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d]`}
             onClick={onOpenSettings}

@@ -17,6 +17,7 @@ class ChatSessionState:
     updated_at: datetime = field(default_factory=datetime.utcnow)
     event_buffer: Optional[Any] = None
     agent_task: Optional[asyncio.Task] = None
+    code_server_task: Optional[asyncio.Task] = None
 
     def hydrate(self, history: list[ChatMessage]) -> None:
         if history:
