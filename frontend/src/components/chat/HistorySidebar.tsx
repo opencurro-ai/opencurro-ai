@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { MessageSquarePlus, Trash2, X, Terminal, Server } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MessagesSquare, Search, Server, SquarePen, Terminal, Trash2, X } from 'lucide-react'
 
 import { killSandbox } from '@/lib/api'
 import { navigate, sessionPath } from '@/lib/router'
+import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store/useChatStore'
+import type { ChatRecord } from '@/types/chat'
 
 interface HistorySidebarProps {
   onClose: () => void
@@ -17,13 +19,61 @@ interface ContextMenuState {
   y: number
 }
 
+const GROUP_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older'] as const
+type ChatGroup = (typeof GROUP_ORDER)[number]
+
+const DAY_MS = 86_400_000
+
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
+function getChatGroup(isoDate: string): ChatGroup {
+  const date = new Date(isoDate)
+  if (Number.isNaN(date.getTime())) return 'Older'
+  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(date)) / DAY_MS)
+  if (diffDays <= 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return 'Previous 7 days'
+  return 'Older'
+}
+
+function getPreview(chat: ChatRecord): string {
+  const lastMessage = chat.messages[chat.messages.length - 1]
+  return lastMessage?.content.trim() || 'No messages yet'
+}
+
+const CONTEXT_MENU = { width: 190, height: 120 } as const
+
 export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySidebarProps) {
   const { activeChatId, chats, deleteChat, setActiveChat, isStreaming, streamingChatId } = useChatStore()
   const currentChatId = activeChatId || chats[0]?.id
+  const [query, setQuery] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [killingId, setKillingId] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const groupedChats = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    const visible = (normalizedQuery
+      ? chats.filter((chat) =>
+          chat.title.toLowerCase().includes(normalizedQuery)
+          || getPreview(chat).toLowerCase().includes(normalizedQuery),
+        )
+      : [...chats]
+    ).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+
+    const groups = new Map<ChatGroup, ChatRecord[]>()
+    for (const chat of visible) {
+      const group = getChatGroup(chat.updatedAt)
+      const bucket = groups.get(group)
+      if (bucket) bucket.push(chat)
+      else groups.set(group, [chat])
+    }
+    return GROUP_ORDER
+      .filter((group) => groups.has(group))
+      .map((group) => ({ group, items: groups.get(group) ?? [] }))
+  }, [chats, query])
 
   useEffect(() => {
     const handleClick = () => setContextMenu(null)
@@ -40,16 +90,26 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
     }
   }, [contextMenu])
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, chatId: string) => {
-    e.preventDefault()
-    setContextMenu({ chatId, x: e.clientX, y: e.clientY })
+  const openContextMenu = useCallback((chatId: string, x: number, y: number) => {
+    setContextMenu({
+      chatId,
+      x: Math.max(8, Math.min(x, window.innerWidth - CONTEXT_MENU.width - 8)),
+      y: Math.max(8, Math.min(y, window.innerHeight - CONTEXT_MENU.height - 8)),
+    })
   }, [])
 
-  const handleTouchStart = useCallback((chatId: string) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, chatId: string) => {
+    e.preventDefault()
+    openContextMenu(chatId, e.clientX, e.clientY)
+  }, [openContextMenu])
+
+  const handleTouchStart = useCallback((e: React.TouchEvent, chatId: string) => {
+    const touch = e.touches[0]
+    if (!touch) return
     longPressTimer.current = setTimeout(() => {
-      setContextMenu({ chatId, x: 0, y: 0 })
+      openContextMenu(chatId, touch.clientX, touch.clientY)
     }, 500)
-  }, [])
+  }, [openContextMenu])
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimer.current) {
@@ -94,12 +154,10 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
 
   return (
     <aside className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-4 py-4 border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-[10px] bg-[#ffc700] grid place-items-center text-[#34322d] font-extrabold text-sm shadow-[0_10px_20px_rgba(255,199,0,0.26)]">
-            A
-          </div>
-          <h2 className="font-bold text-[15px] text-[#34322d]">Chat History</h2>
+      <div className="flex items-center justify-between px-4 pb-2 pt-4">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-[15px] font-bold text-[#34322d]">Chats</h2>
+          <span className="text-[11px] font-medium text-[#858481]">{chats.length}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -107,7 +165,7 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
             className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors"
             aria-label="New chat"
           >
-            <MessageSquarePlus className="size-[18px]" />
+            <SquarePen className="size-[17px]" />
           </button>
           {!hideClose ? (
             <button
@@ -121,52 +179,133 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {chats.map((chat) => {
-          const isActive = chat.id === currentChatId
-          const hasSandbox = !!chat.sandbox
-          return (
-            <div
-              key={chat.id}
-              className={`group flex items-start gap-2 rounded-[14px] border px-3 py-3 transition cursor-pointer ${
-                isActive
-                  ? 'border-[rgba(255,199,0,0.4)] bg-[rgba(255,199,0,0.1)] text-[#34322d]'
-                  : 'border-[#eee] bg-white text-[#858481] hover:border-[#ddd] hover:bg-[rgba(55,53,47,0.02)]'
-              }`}
-              onClick={() => { setActiveChat(chat.id); navigate(sessionPath(chat.id)); onClose() }}
-              onContextMenu={(e) => handleContextMenu(e, chat.id)}
-              onTouchStart={() => handleTouchStart(chat.id)}
-              onTouchEnd={handleTouchEnd}
-              onTouchMove={handleTouchEnd}
+      <div className="px-4 pb-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-[14px] -translate-y-1/2 text-[#858481]" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search chats"
+            aria-label="Search chats"
+            className="w-full rounded-[12px] border border-border bg-[#f8f8f7] py-2 pl-9 pr-8 text-[13px] text-[#34322d] outline-none transition-colors placeholder:text-[#858481]/70 focus:border-[rgba(255,199,0,0.55)] focus:bg-white"
+          />
+          {query ? (
+            <button
+              onClick={() => setQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-[#858481] transition-colors hover:bg-[rgba(55,53,47,0.06)] hover:text-[#34322d]"
+              aria-label="Clear search"
             >
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-medium text-[13px]">{chat.title || 'New chat'}</div>
-                <div className="mt-1 truncate text-xs text-[#858481]">
-                  {chat.messages[chat.messages.length - 1]?.content || 'No messages yet'}
-                </div>
-                {hasSandbox && (
-                  <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[#858481]/60 font-mono truncate">
-                    <Server className="size-[10px] shrink-0" />
-                    <span className="truncate">{chat.sandbox!.sandboxId}</span>
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="rounded-full p-1.5 text-[#858481] opacity-0 group-hover:opacity-100 hover:bg-[rgba(55,53,47,0.06)] hover:text-[#ef4444] transition"
-                onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id) }}
-                aria-label={`Delete ${chat.title}`}
-              >
-                <Trash2 className="size-[14px]" />
-              </button>
+              <X className="size-[13px]" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-2 pb-3">
+        {groupedChats.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+            <div className="grid size-10 place-items-center rounded-[14px] bg-[rgba(255,199,0,0.1)]">
+              <MessagesSquare className="size-[18px] text-[#b78200]" />
             </div>
-          )
-        })}
+            <p className="text-[13px] font-medium text-[#34322d]">
+              {query.trim() ? 'No chats match your search' : 'No chats yet'}
+            </p>
+            <p className="text-[11px] text-[#858481]">
+              {query.trim() ? 'Try a different keyword.' : 'Start a new chat to see it here.'}
+            </p>
+            {!query.trim() ? (
+              <button
+                onClick={handleNewChat}
+                className="mt-1 inline-flex items-center gap-1.5 rounded-[10px] bg-[#ffc700] px-3 py-2 text-[12px] font-semibold text-[#34322d] shadow-[0_10px_16px_rgba(255,199,0,0.22)] transition-all hover:brightness-[1.03] active:scale-[0.97]"
+              >
+                <SquarePen className="size-[14px]" />
+                New chat
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          groupedChats.map(({ group, items }, groupIndex) => (
+            <section key={group}>
+              <h3
+                className={cn(
+                  'px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#858481]/70',
+                  groupIndex === 0 ? 'pt-1' : 'pt-4',
+                )}
+              >
+                {group}
+              </h3>
+              <div className="space-y-[2px]">
+                {items.map((chat) => {
+                  const isActive = chat.id === currentChatId
+                  const isChatStreaming = isStreaming && streamingChatId === chat.id
+                  const sandboxId = chat.sandbox?.sandboxId
+                  return (
+                    <div
+                      key={chat.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-current={isActive || undefined}
+                      className={cn(
+                        'group relative flex cursor-pointer items-center gap-2.5 rounded-[12px] border px-3 py-2.5 transition-colors',
+                        isActive
+                          ? 'border-[rgba(255,199,0,0.35)] bg-[rgba(255,199,0,0.1)]'
+                          : 'border-transparent hover:bg-[rgba(55,53,47,0.04)]',
+                      )}
+                      onClick={() => { setActiveChat(chat.id); navigate(sessionPath(chat.id)); onClose() }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setActiveChat(chat.id)
+                          navigate(sessionPath(chat.id))
+                          onClose()
+                        }
+                      }}
+                      onContextMenu={(e) => handleContextMenu(e, chat.id)}
+                      onTouchStart={(e) => handleTouchStart(e, chat.id)}
+                      onTouchEnd={handleTouchEnd}
+                      onTouchMove={handleTouchEnd}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          {isChatStreaming ? (
+                            <span className="size-1.5 shrink-0 rounded-full bg-[#ffc700] animate-[pulse_1.4s_infinite_ease-in-out]" />
+                          ) : null}
+                          <span className="truncate text-[13px] font-medium text-[#34322d]">
+                            {chat.title || 'New chat'}
+                          </span>
+                        </div>
+                        <div className="mt-[3px] truncate text-[11px] leading-[1.45] text-[#858481]">
+                          {getPreview(chat)}
+                        </div>
+                      </div>
+                      {sandboxId ? (
+                        <span
+                          className="shrink-0 text-[#858481]/50"
+                          title={`Sandbox: ${sandboxId}`}
+                          aria-label={`Sandbox ${sandboxId}`}
+                        >
+                          <Server className="size-[12px]" />
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-[8px] p-1.5 text-[#858481] opacity-0 transition-all hover:bg-[rgba(239,68,68,0.08)] hover:text-[#ef4444] group-hover:opacity-100"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id) }}
+                        aria-label={`Delete ${chat.title || 'chat'}`}
+                      >
+                        <Trash2 className="size-[14px]" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          ))
+        )}
       </div>
 
       {contextMenu && (
         <div
-          ref={menuRef}
           className="fixed z-50 min-w-[180px] bg-white border border-[#eee] rounded-[12px] shadow-lg py-1"
           style={{
             left: contextMenu.x,
