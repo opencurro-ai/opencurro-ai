@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, BrainCircuit, CodeXml, Eye, FolderOpen, Settings, Terminal, X } from 'lucide-react'
+import { Bot, BrainCircuit, Eye, FolderOpen, Settings, Terminal, X } from 'lucide-react'
 
 import { Composer } from '@/components/chat/Composer'
 import { useChatStore } from '@/store/useChatStore'
@@ -727,14 +727,13 @@ export function ChatWorkspace({
         </div>
         <div className="flex items-center gap-[6px] shrink-0">
           <button
-            className="flex items-center gap-1.5 h-[34px] px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-[#34322d] shadow-sm transition-colors hover:bg-[rgba(55,53,47,0.04)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+            className="w-[34px] h-[34px] rounded-[10px] grid place-items-center transition-colors shrink-0 hover:bg-[rgba(55,53,47,0.04)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             onClick={openCodeServer}
             disabled={!codeServerUrl}
             title={codeServerUrl ? 'Open VS Code in your browser' : 'VS Code becomes available once the sandbox is ready'}
             aria-label="Open VS Code"
           >
-            <CodeXml className="size-[16px] text-[#0078d4]" />
-            <span className="hidden sm:inline">VS Code</span>
+            <img src="/vscode-icon.svg" alt="" className="size-[18px]" />
           </button>
           <button
             className={`w-[34px] h-[34px] rounded-[10px] grid place-items-center transition-colors shrink-0 ${!readyToChat ? 'text-[#f97316] animate-[pulse_1.6s_infinite_ease-in-out]' : 'text-[#858481]'} hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d]`}

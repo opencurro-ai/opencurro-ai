@@ -246,7 +246,7 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
                       tabIndex={0}
                       aria-current={isActive || undefined}
                       className={cn(
-                        'group relative flex cursor-pointer items-center gap-2.5 rounded-[12px] border border-transparent px-3 py-2.5 transition-colors',
+                        'relative flex cursor-pointer items-center gap-2.5 rounded-[12px] border border-transparent px-3 py-2.5 transition-colors',
                         isActive
                           ? 'bg-[rgba(255,199,0,0.1)]'
                           : 'hover:bg-[rgba(55,53,47,0.04)]',
@@ -287,14 +287,6 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
                           <Server className="size-[12px]" />
                         </span>
                       ) : null}
-                      <button
-                        type="button"
-                        className="shrink-0 rounded-[8px] p-1.5 text-[#858481] opacity-0 transition-all hover:bg-[rgba(239,68,68,0.08)] hover:text-[#ef4444] group-hover:opacity-100"
-                        onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id) }}
-                        aria-label={`Delete ${chat.title || 'chat'}`}
-                      >
-                        <Trash2 className="size-[14px]" />
-                      </button>
                     </div>
                   )
                 })}
