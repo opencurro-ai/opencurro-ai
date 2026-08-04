@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
-import { ArrowUp, Menu, Settings, Sparkles, TriangleAlert } from 'lucide-react'
+import { ArrowUp, Sparkles, TriangleAlert } from 'lucide-react'
 
-import { HistorySidebar } from '@/components/chat/HistorySidebar'
 import { SettingsModal } from '@/components/settings/SettingsModal'
+import { NavigationRail } from '@/components/sidebar/NavigationRail'
 import { setPendingPrompt } from '@/lib/pendingPrompt'
 import { navigate, sessionPath } from '@/lib/router'
 import { useChatStore } from '@/store/useChatStore'
@@ -13,7 +13,6 @@ export function HomePage() {
   const { novitaApiKey, providerKeys, selectedModel, selectedProvider } = useSettingsStore()
   const [prompt, setPrompt] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -47,44 +46,12 @@ export function HomePage() {
   }
 
   return (
-    <div className="app h-dvh w-dvw flex flex-col overflow-hidden" style={{ background: '#f8f8f7' }}>
-      <div className="flex flex-1 min-h-0">
+    <div className="app h-dvh w-dvw flex overflow-hidden" style={{ background: '#f8f8f7' }}>
+      <NavigationRail onOpenSettings={() => setSettingsOpen(true)} />
+      <div className="flex flex-1 min-w-0 min-h-0">
         <section className="flex flex-col flex-1 min-w-0 h-full min-h-0">
-          <header className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-border gap-4 shrink-0">
-            <div className="flex items-center gap-[14px] min-w-0">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="w-[44px] h-[44px] rounded-[10px] grid place-items-center text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors shrink-0"
-                aria-label="Toggle sidebar"
-              >
-                <Menu className="size-[20px]" />
-              </button>
-              <button
-                onClick={() => navigate('/')}
-                className="flex items-center gap-[10px] min-w-0 text-left"
-                aria-label="Curro AI home"
-              >
-                <div className="w-8 h-8 rounded-[10px] bg-[#ffc700] grid place-items-center text-[#34322d] font-extrabold shadow-[0_10px_20px_rgba(255,199,0,0.26)] shrink-0 text-sm">
-                  A
-                </div>
-                <div className="text-[15px] font-bold text-[#34322d] truncate">
-                  Curro AI
-                </div>
-              </button>
-            </div>
-            <div className="flex gap-[2px] shrink-0">
-              <button
-                className={`w-[34px] h-[34px] rounded-[10px] grid place-items-center transition-colors shrink-0 ${!readyToChat ? 'text-[#f97316] animate-[pulse_1.6s_infinite_ease-in-out]' : 'text-[#858481]'} hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d]`}
-                onClick={() => setSettingsOpen(true)}
-                aria-label="Open settings"
-              >
-                <Settings className="size-[18px]" />
-              </button>
-            </div>
-          </header>
-
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="min-h-full flex flex-col items-center justify-start px-4 pt-12 md:pt-20 pb-8">
+            <div className="min-h-full flex flex-col items-center justify-start px-4 pt-20 md:pt-28 pb-8">
               <div className="w-full max-w-[680px]">
                 <div className="flex flex-col items-center text-center mb-8 animate-[fadeUp_0.25s_ease]">
                   <h1 className="font-display text-[44px] md:text-[58px] leading-[1.2] tracking-tight text-[#34322d]">
@@ -150,18 +117,6 @@ export function HomePage() {
             </div>
           </div>
         </section>
-      </div>
-
-      <div
-        className={`fixed inset-0 z-30 transition-[visibility,opacity] duration-150 ${sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}
-      >
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-150" onClick={() => setSidebarOpen(false)} />
-        <div
-          className="absolute left-0 top-0 bottom-0 w-[320px] bg-white border-r border-border shadow-xl transition-transform duration-150 ease-out"
-          style={{ transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)' }}
-        >
-          <HistorySidebar onClose={() => setSidebarOpen(false)} />
-        </div>
       </div>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />

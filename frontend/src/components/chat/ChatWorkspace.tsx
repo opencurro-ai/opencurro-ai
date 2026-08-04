@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, BrainCircuit, CodeXml, Eye, FolderOpen, Menu, Settings, Terminal, X } from 'lucide-react'
+import { Bot, BrainCircuit, CodeXml, Eye, FolderOpen, Settings, Terminal, X } from 'lucide-react'
 
 import { Composer } from '@/components/chat/Composer'
 import { useChatStore } from '@/store/useChatStore'
@@ -14,7 +14,6 @@ interface ChatWorkspaceProps {
   onSendMessage: (value: string) => Promise<void>
   onStop: () => void
   onOpenSettings: () => void
-  onToggleSidebar: () => void
   error?: string
 }
 
@@ -694,7 +693,6 @@ export function ChatWorkspace({
   onSendMessage,
   onStop,
   onOpenSettings,
-  onToggleSidebar,
   error,
 }: ChatWorkspaceProps) {
   const [openTerminals, setOpenTerminals] = useState<Set<string>>(new Set())
@@ -725,16 +723,6 @@ export function ChatWorkspace({
     <div className="flex flex-col h-full min-h-0 w-full">
       <header className="flex items-center justify-between py-4 border-b border-border gap-4 shrink-0">
         <div className="flex items-center gap-[14px] min-w-0">
-          <button
-            onClick={onToggleSidebar}
-            className="w-[44px] h-[44px] rounded-[10px] grid place-items-center text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors shrink-0"
-            aria-label="Toggle sidebar"
-          >
-            <Menu className="size-[20px]" />
-          </button>
-          <div className="w-8 h-8 rounded-[10px] bg-[#ffc700] grid place-items-center text-[#34322d] font-extrabold shadow-[0_10px_20px_rgba(255,199,0,0.26)] shrink-0 text-sm">
-            A
-          </div>
           <div className="text-[15px] font-bold truncate">{chat.title || 'New chat'}</div>
         </div>
         <div className="flex items-center gap-[6px] shrink-0">
