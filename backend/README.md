@@ -32,7 +32,7 @@ graph TB
     subgraph API["API Layer"]
         CHAT["/api/chat<br/>session · stream"]
         PROV["/api/providers<br/>list · models"]
-        SANDBOX["/api/sandbox<br/>files · file-content"]
+        SANDBOX["/api/sandbox<br/>kill"]
     end
 
     subgraph CORE["Core Services"]
@@ -97,7 +97,7 @@ backend/
 │   ├── api/
 │   │   ├── chat.py                    # POST /session, POST /stream (SSE)
 │   │   ├── providers.py               # GET /, POST /models
-│   │   └── sandbox.py                 # GET /files, GET|POST /file-content
+│   │   └── sandbox.py                 # POST /kill/{chat_id}
 │   ├── services/
 │   │   └── session_store.py           # In-memory ChatSessionState storage
 │   ├── agents/
@@ -402,15 +402,6 @@ List supported LLM providers (OpenRouter, Groq, NVIDIA NIM).
 
 ### `POST /api/providers/models`
 Fetch available models for a given provider.
-
-### `GET /api/sandbox/files`
-Get the sandbox file tree (JSON structure).
-
-### `GET /api/sandbox/file-content`
-Read a file from the sandbox.
-
-### `POST /api/sandbox/file-content`
-Write a file in the sandbox.
 
 ```mermaid
 sequenceDiagram

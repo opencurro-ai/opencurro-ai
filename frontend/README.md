@@ -31,8 +31,7 @@
 ```mermaid
 graph TB
     subgraph APP["App.tsx — Root Layout"]
-        DIR["Desktop Grid<br/>Chat + File Explorer"]
-        MOB["Mobile Tab Bar<br/>Chat | Files"]
+        DIR["Desktop Layout<br/>Full-width Chat"]
         SIDEBAR["History Sidebar"]
         MODAL["Settings Modal"]
     end
@@ -41,11 +40,6 @@ graph TB
         CW["ChatWorkspace"]
         COMP["Composer"]
         HS["HistorySidebar"]
-    end
-
-    subgraph FILES["File Components"]
-        FE["FileExplorer"]
-        FV["FileViewer"]
     end
 
     subgraph SETTINGS["Settings"]
@@ -63,12 +57,11 @@ graph TB
     end
 
     subgraph API["API Layer"]
-        APICLIENT["lib/api.ts<br/>fetchProviders · streamChat<br/>fetchSandboxFiles · etc."]
+        APICLIENT["lib/api.ts<br/>fetchProviders · fetchModels<br/>streamChat · killSandbox"]
         ENV["lib/env.ts<br/>VITE_BACKEND_URL"]
     end
 
     APP --> CHAT
-    APP --> FILES
     APP --> SETTINGS
 
     CW --> COMP
@@ -90,7 +83,6 @@ graph TB
 
     classDef layout fill:#f0f9ff,stroke:#3b82f6,stroke-width:2px
     classDef chat fill:#f0fdf4,stroke:#22c55e,stroke-width:2px
-    classDef files fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
     classDef settings fill:#faf5ff,stroke:#a855f7,stroke-width:2px
     classDef state fill:#fdf2f8,stroke:#ec4899,stroke-width:2px
     classDef hooks fill:#fff7ed,stroke:#f97316,stroke-width:2px
@@ -119,8 +111,7 @@ frontend/
 │   │   └── routes/route.ts        # Route constants
 │   ├── types/
 │   │   ├── chat.ts                 # ChatRecord, UiMessage, ToolChip
-│   │   ├── provider.ts             # ProviderMetadata, ProviderModel, ProviderSettings
-│   │   └── sandbox.ts              # FileTreeNode, SandboxFilesResponse
+│   │   └── provider.ts             # ProviderMetadata, ProviderModel, ProviderSettings
 │   ├── lib/
 │   │   ├── api.ts                  # Backend API client + SSE stream parsing
 │   │   ├── env.ts                  # VITE_BACKEND_URL configuration
@@ -138,9 +129,6 @@ frontend/
 │       │   ├── ChatWorkspace.tsx    # Message list + tool output renderers
 │       │   ├── Composer.tsx         # Input area with iteration display
 │       │   ├── HistorySidebar.tsx   # Chat history list (create/delete)
-│       ├── files/
-│       │   ├── FileExplorer.tsx     # Tree-based sandbox file browser
-│       │   └── FileViewer.tsx       # Inline code viewer/editor with save
 │       ├── settings/
 │       │   └── SettingsModal.tsx    # Full settings: API keys, models, sandbox
 │       └── ui/
@@ -166,7 +154,6 @@ graph TB
 
     APP --> HSIDEBAR["HistorySidebar<br/>Chat history management"]
     APP --> CHATWS["ChatWorkspace<br/>Main chat panel"]
-    APP --> FILEEX["FileExplorer<br/>Sandbox file browser"]
     APP --> SETMODAL["SettingsModal<br/>Configuration modal"]
 
     CHATWS --> COMPOSER["Composer<br/>Text input + iteration display"]
@@ -180,9 +167,6 @@ graph TB
     TOOLOUT --> SRO["StrReplaceOutput<br/>str_replace"]
     TOOLOUT --> RB["ReasoningBlock<br/>reasoning"]
     TOOLOUT --> GENC["GenericChip<br/>file_read/write"]
-
-    FILEEX --> TN["TreeNode<br/>Recursive file tree"]
-    FILEEX --> FILEV["FileViewer<br/>Code viewer/editor"]
 
     SETMODAL --> PROV["Provider Config<br/>OpenRouter / Groq / NVIDIA"]
     SETMODAL --> NOV["Novita Sandbox<br/>API key + template"]
@@ -444,14 +428,11 @@ The `useAgentChat` hook dispatches each event type to the appropriate store acti
 ```mermaid
 graph TD
     subgraph Desktop["Desktop (md+)"]
-        GRID["CSS Grid<br/>grid-cols-[minmax(360px,40%)_1fr]"]
-        LEFT["Left Panel<br/>ChatWorkspace"]
-        RIGHT["Right Panel<br/>FileExplorer"]
+        PANEL["Single Panel<br/>ChatWorkspace full-width"]
     end
 
     subgraph Mobile["Mobile (<md)"]
-        TABS["Tab Bar<br/>Chat | Files"]
-        PANEL["Single Panel<br/>Switches between Chat & Files"]
+        MPANEL["Single Panel<br/>ChatWorkspace full-width"]
     end
 
     subgraph Overlays
@@ -459,11 +440,8 @@ graph TD
         MODAL["SettingsModal<br/>Centered overlay"]
     end
 
-    Desktop --> GRID
-    GRID --> LEFT
-    GRID --> RIGHT
-    Mobile --> TABS
-    TABS --> PANEL
+    Desktop --> PANEL
+    Mobile --> MPANEL
 
     style Desktop fill:#f0f9ff,stroke:#3b82f6,stroke-width:2px
     style Mobile fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
@@ -480,9 +458,7 @@ graph TD
 | `fetchModels()` | POST | `/api/providers/models` | Fetch models for provider |
 | `ensureChatSession()` | POST | `/api/chat/session` | Create/hydrate session |
 | `streamChat()` | POST | `/api/chat/stream` | SSE streaming chat |
-| `fetchSandboxFiles()` | GET | `/api/sandbox/files` | List sandbox file tree |
-| `fetchSandboxFileContent()` | GET | `/api/sandbox/file-content` | Read file content |
-| `saveSandboxFileContent()` | POST | `/api/sandbox/file-content` | Write file content |
+| `killSandbox()` | POST | `/api/sandbox/kill/{chat_id}` | Kill sandbox for a chat |
 
 ---
 
@@ -558,7 +534,7 @@ import { useChatStore } from '@/store/useChatStore'
 - Components: PascalCase (`ChatWorkspace.tsx`)
 - Hooks: camelCase with `use` prefix (`useAgentChat.ts`)
 - Stores: camelCase with `use` prefix + `Store` suffix (`useChatStore.ts`)
-- Types: camelCase (`chat.ts`, `provider.ts`, `sandbox.ts`)
+- Types: camelCase (`chat.ts`, `provider.ts`)
 - Utilities: camelCase (`api.ts`, `env.ts`, `utils.ts`)
 
 ### State Pattern

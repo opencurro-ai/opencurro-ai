@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -31,27 +30,6 @@ class FileTreeNode(BaseModel):
     size: Optional[int] = None
     modified_time: Optional[str] = None
     children: list["FileTreeNode"] = Field(default_factory=list)
-
-
-class SandboxSummary(BaseModel):
-    sandbox_id: str
-    provider: str
-    root_path: str
-    created_at: datetime
-    timeout_seconds: int
-    template_id: Optional[str] = None
-
-
-class SandboxFilesResponse(BaseModel):
-    sandbox: Optional[SandboxSummary] = None
-    path: str
-    tree: list[FileTreeNode]
-
-
-class WriteFileRequest(BaseModel):
-    chat_id: str
-    path: str
-    content: str
 
 
 class ToolExecutionResult(BaseModel):
