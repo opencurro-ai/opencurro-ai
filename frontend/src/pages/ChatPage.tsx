@@ -62,7 +62,7 @@ export function ChatPage({ sessionId }: ChatPageProps) {
   if (!activeChat) return null
 
   return (
-    <div className="app h-dvh w-dvw flex flex-col overflow-hidden" style={{ background: 'radial-gradient(circle at top left, rgba(255, 199, 0, 0.16), transparent 22%), linear-gradient(180deg, #fbfbfa 0%, #f8f8f7 100%)' }}>
+    <div className="app h-dvh w-dvw flex flex-col overflow-hidden" style={{ background: '#f8f8f7' }}>
       <section className="flex-1 min-h-0 flex flex-col px-5">
         <ChatWorkspace
           chat={activeChat}
