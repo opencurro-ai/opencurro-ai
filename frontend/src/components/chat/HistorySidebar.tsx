@@ -216,7 +216,7 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
             {!query.trim() ? (
               <button
                 onClick={handleNewChat}
-                className="mt-1 inline-flex items-center gap-1.5 rounded-[10px] bg-[#ffc700] px-3 py-2 text-[12px] font-semibold text-[#34322d] shadow-[0_10px_16px_rgba(255,199,0,0.22)] transition-all hover:brightness-[1.03] active:scale-[0.97]"
+                className="mt-1 inline-flex items-center gap-1.5 rounded-[10px] bg-[#ffc700] px-3 py-2 text-[12px] font-semibold text-[#34322d] transition-all hover:brightness-[1.03] active:scale-[0.97]"
               >
                 <SquarePen className="size-[14px]" />
                 New chat
@@ -246,10 +246,10 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
                       tabIndex={0}
                       aria-current={isActive || undefined}
                       className={cn(
-                        'group relative flex cursor-pointer items-center gap-2.5 rounded-[12px] border px-3 py-2.5 transition-colors',
+                        'group relative flex cursor-pointer items-center gap-2.5 rounded-[12px] border border-transparent px-3 py-2.5 transition-colors',
                         isActive
-                          ? 'border-[rgba(255,199,0,0.35)] bg-[rgba(255,199,0,0.1)]'
-                          : 'border-transparent hover:bg-[rgba(55,53,47,0.04)]',
+                          ? 'bg-[rgba(255,199,0,0.1)]'
+                          : 'hover:bg-[rgba(55,53,47,0.04)]',
                       )}
                       onClick={() => { setActiveChat(chat.id); navigate(sessionPath(chat.id)); onClose() }}
                       onKeyDown={(e) => {

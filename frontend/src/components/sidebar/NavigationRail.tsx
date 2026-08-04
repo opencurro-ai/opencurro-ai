@@ -20,7 +20,7 @@ interface RailItemProps {
   icon: ReactNode
   label: string
   shortcut?: string
-  /** VS Code style active state: accent indicator + tinted background. */
+  /** VS Code style active state: accent indicator + quiet tint. */
   active?: boolean
   /** Live activity dot shown while an agent run is in progress. */
   badge?: boolean
@@ -45,7 +45,7 @@ function RailItem({ icon, label, shortcut, active = false, badge = false, attent
         aria-label={label}
         aria-pressed={active || undefined}
         className={cn(
-          'relative grid h-11 w-11 place-items-center rounded-[12px] transition-[background-color,color,transform] duration-150 active:scale-[0.94]',
+          'relative grid h-11 w-11 place-items-center rounded-[12px] transition-[background-color,color,scale] duration-150 active:scale-[0.92]',
           active
             ? 'bg-[rgba(255,199,0,0.14)] text-[#34322d]'
             : 'text-[#858481] hover:bg-[rgba(55,53,47,0.05)] hover:text-[#34322d]',
@@ -67,7 +67,7 @@ function RailItem({ icon, label, shortcut, active = false, badge = false, attent
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-x-1 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-[10px] border border-border bg-white px-2.5 py-1.5 text-[12px] font-medium text-[#34322d] shadow-lg opacity-0 transition-all duration-150 md:flex md:group-hover:translate-x-0 md:group-hover:opacity-100"
+        className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-x-1 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-[10px] border border-border bg-white px-2.5 py-1.5 text-[12px] font-medium text-[#34322d] opacity-0 shadow-[0_8px_24px_rgba(52,50,45,0.08)] transition-all duration-150 md:flex md:group-hover:translate-x-0 md:group-hover:opacity-100"
       >
         {label}
         {shortcut ? (
@@ -152,13 +152,13 @@ export function NavigationRail({ onOpenSettings, onStop }: NavigationRailProps) 
             type="button"
             onClick={handleGoHome}
             aria-label="Curro AI — Home"
-            className="grid h-10 w-10 place-items-center rounded-[12px] bg-[#ffc700] text-sm font-extrabold text-[#34322d] shadow-[0_10px_20px_rgba(255,199,0,0.26)] transition-all duration-150 hover:brightness-[1.03] active:scale-[0.94]"
+            className="grid h-10 w-10 place-items-center rounded-[12px] bg-[#ffc700] text-sm font-extrabold text-[#34322d] transition-[filter,scale] duration-150 hover:brightness-[0.97] active:scale-[0.94]"
           >
             A
           </button>
           <span
             role="tooltip"
-            className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-x-1 -translate-y-1/2 items-center whitespace-nowrap rounded-[10px] border border-border bg-white px-2.5 py-1.5 text-[12px] font-medium text-[#34322d] shadow-lg opacity-0 transition-all duration-150 md:flex md:group-hover:translate-x-0 md:group-hover:opacity-100"
+            className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-x-1 -translate-y-1/2 items-center whitespace-nowrap rounded-[10px] border border-border bg-white px-2.5 py-1.5 text-[12px] font-medium text-[#34322d] opacity-0 shadow-[0_8px_24px_rgba(52,50,45,0.08)] transition-all duration-150 md:flex md:group-hover:translate-x-0 md:group-hover:opacity-100"
           >
             Curro AI — Home
           </span>
@@ -194,22 +194,22 @@ export function NavigationRail({ onOpenSettings, onStop }: NavigationRailProps) 
       {/* Chat history flyout (anchored right of the rail) */}
       <div
         className={cn(
-          'pointer-events-none fixed inset-0 z-30 transition-[visibility] duration-200',
+          'pointer-events-none fixed inset-0 z-30 transition-[visibility] duration-300',
           chatsOpen ? 'visible' : 'invisible',
         )}
       >
         <div
           aria-hidden
           className={cn(
-            'pointer-events-auto absolute inset-y-0 left-16 right-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200',
+            'pointer-events-auto absolute inset-y-0 left-16 right-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300',
             chatsOpen ? 'opacity-100' : 'opacity-0',
           )}
           onClick={closeChats}
         />
         <div
           className={cn(
-            'pointer-events-auto absolute bottom-0 left-16 top-0 w-[min(320px,calc(100dvw-4rem))] border-r border-border bg-white shadow-xl transition-transform duration-200 ease-out',
-            chatsOpen ? 'translate-x-0' : '-translate-x-[110%]',
+            'pointer-events-auto absolute bottom-0 left-16 top-0 w-[min(320px,calc(100dvw-4rem))] border-r border-border bg-white transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
+            chatsOpen ? 'translate-x-0' : '-translate-x-[102%]',
           )}
         >
           <HistorySidebar onClose={closeChats} onStop={onStop} />
