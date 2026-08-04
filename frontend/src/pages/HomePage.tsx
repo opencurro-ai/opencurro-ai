@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { ArrowUp, Sparkles, TriangleAlert } from 'lucide-react'
+import { ArrowUp, TriangleAlert } from 'lucide-react'
 
 import { SettingsModal } from '@/components/settings/SettingsModal'
 import { NavigationRail } from '@/components/sidebar/NavigationRail'
@@ -108,14 +108,15 @@ export function HomePage() {
                     </div>
                   </div>
 
-                  <p className="text-center text-[11px] text-[#858481]/80 mt-5 flex items-center justify-center gap-1.5">
-                    <Sparkles className="size-3" />
-                    Curro AI can make mistakes — verify important work.
-                  </p>
                 </div>
               </div>
             </div>
           </div>
+          <footer className="shrink-0 px-4 pb-3 pt-2">
+            <p className="text-center text-[11px] text-[#858481]/80">
+              Curro AI can make mistakes — verify important work.
+            </p>
+          </footer>
         </section>
       </div>
 
