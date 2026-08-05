@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { MessagesSquare, Settings, SquarePen } from 'lucide-react'
+import { Bot, MessagesSquare, Settings, SquarePen } from 'lucide-react'
 
 import { HistorySidebar } from '@/components/chat/HistorySidebar'
-import { navigate } from '@/lib/router'
+import { navigate, useRoute } from '@/lib/router'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store/useChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
@@ -98,6 +98,7 @@ interface NavigationRailProps {
  */
 export function NavigationRail({ onOpenSettings, onStop }: NavigationRailProps) {
   const [chatsOpen, setChatsOpen] = useState(false)
+  const route = useRoute()
   const isStreaming = useChatStore((state) => state.isStreaming)
   const readyToChat = useSettingsStore((state) =>
     Boolean(state.providerKeys[state.selectedProvider] && state.selectedModel && state.novitaApiKey),
@@ -117,6 +118,11 @@ export function NavigationRail({ onOpenSettings, onStop }: NavigationRailProps) 
   const handleGoHome = useCallback(() => {
     setChatsOpen(false)
     navigate('/')
+  }, [])
+
+  const handleGoToSubAgents = useCallback(() => {
+    setChatsOpen(false)
+    navigate('/sub-agents')
   }, [])
 
   useEffect(() => {
@@ -178,6 +184,12 @@ export function NavigationRail({ onOpenSettings, onStop }: NavigationRailProps) 
             active={chatsOpen}
             badge={isStreaming}
             onClick={toggleChats}
+          />
+          <RailItem
+            icon={<Bot className="size-[20px]" />}
+            label="Sub-Agents"
+            active={route.name === 'sub-agents'}
+            onClick={handleGoToSubAgents}
           />
         </div>
 

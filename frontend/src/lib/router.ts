@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 export type AppRoute =
   | { name: 'home' }
   | { name: 'chat'; sessionId: string }
+  | { name: 'sub-agents' }
 
 const listeners = new Set<() => void>()
 
@@ -23,6 +24,9 @@ function getPathname(): string {
 export function parseRoute(pathname: string): AppRoute {
   if (pathname === '/' || pathname === '') {
     return { name: 'home' }
+  }
+  if (pathname === '/sub-agents') {
+    return { name: 'sub-agents' }
   }
   const match = pathname.match(/^\/chat\/session=([^/]+)\/?$/)
   if (match) {
