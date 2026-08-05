@@ -1,237 +1,229 @@
-import { Loader2, Search, Settings, TriangleAlert } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+import { Bot, Box, Cpu, Globe, PanelLeftClose, PanelLeftOpen, Settings, X } from 'lucide-react'
 
-import { useProviders } from '@/hooks/useProviders'
+import { ModelsTab } from '@/components/settings/ModelsTab'
+import { SandboxTab } from '@/components/settings/SandboxTab'
+import { WebSearchTab } from '@/components/settings/WebSearchTab'
 import { SubAgentManager } from '@/components/settings/SubAgentManager'
-import { useSettingsStore } from '@/store/useSettingsStore'
-import type { ProviderId } from '@/types/chat'
-import type { SearchProvider } from '@/store/useSettingsStore'
-
-const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia']
+import { cn } from '@/lib/utils'
 
 interface SettingsModalProps {
   open: boolean
   onClose: () => void
 }
 
+type TabId = 'models' | 'sandboxes' | 'web-search' | 'sub-agents'
+
+interface TabDef {
+  id: TabId
+  label: string
+  icon: ReactNode
+}
+
+const TABS: TabDef[] = [
+  { id: 'models', label: 'Models', icon: <Cpu className="size-[18px] shrink-0" /> },
+  { id: 'sandboxes', label: 'Sandboxes', icon: <Box className="size-[18px] shrink-0" /> },
+  { id: 'web-search', label: 'Web Search', icon: <Globe className="size-[18px] shrink-0" /> },
+  { id: 'sub-agents', label: 'Sub Agents', icon: <Bot className="size-[18px] shrink-0" /> },
+]
+
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const {
-    modelsByProvider,
-    novitaApiKey,
-    novitaTemplateId,
-    tavilyApiKey,
-    exaApiKey,
-    serpapiApiKey,
-    searchProvider,
-    firecrawlApiKey,
-    providerBaseUrls,
-    providerKeys,
-    selectedModel,
-    selectedProvider,
-    setNovitaApiKey,
-    setNovitaTemplateId,
-    setTavilyApiKey,
-    setExaApiKey,
-    setSerpapiApiKey,
-    setSearchProvider,
-    setFirecrawlApiKey,
-    setProviderBaseUrl,
-    setProviderKey,
-    setSelectedModel,
-    setSelectedProvider,
-  } = useSettingsStore()
-  const { error, loadingModels, loadModels } = useProviders()
+  const [activeTab, setActiveTab] = useState<TabId>('models')
+  const [railOpen, setRailOpen] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
+  )
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const tabRefs = useRef<Partial<Record<TabId, HTMLButtonElement | null>>>({})
+
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopImmediatePropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    panelRef.current?.focus()
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open, onClose])
 
   if (!open) return null
 
-  return (
-    <div className="fixed inset-0 z-50" onClick={onClose}>
-      <div
-        className="absolute inset-0 bg-[rgba(17,17,17,0.55)] backdrop-blur-[8px]"
-        onClick={onClose}
-      />
-      <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(560px,calc(100dvw-24px))] max-h-[calc(100dvh-32px)] overflow-auto bg-white border border-border rounded-[22px] shadow-[0_32px_80px_rgba(17,17,17,0.25)] p-[22px] z-[1] animate-[fadeUp_0.25s_ease]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-head flex items-center gap-[14px] mb-[22px]">
-          <div className="modal-icon w-[42px] h-[42px] rounded-[14px] bg-[rgba(255,199,0,0.15)] grid place-items-center text-[#a16a00] shrink-0">
-            <Settings className="size-5" />
-          </div>
-          <div>
-            <div className="modal-title text-xl font-bold text-[#34322d]">Settings</div>
-            <div className="modal-subtitle text-xs text-[#858481] mt-[2px]">Configure credentials and models</div>
-          </div>
-        </div>
+  function handleTablistKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const index = TABS.findIndex((tab) => tab.id === activeTab)
+    let nextIndex = -1
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      nextIndex = (index + 1) % TABS.length
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      nextIndex = (index - 1 + TABS.length) % TABS.length
+    } else if (event.key === 'Home') {
+      nextIndex = 0
+    } else if (event.key === 'End') {
+      nextIndex = TABS.length - 1
+    } else {
+      return
+    }
+    event.preventDefault()
+    const next = TABS[nextIndex]
+    setActiveTab(next.id)
+    tabRefs.current[next.id]?.focus()
+  }
 
-        <div className="field-group mb-[18px]">
-          <label className="field-label flex items-center gap-2 text-sm font-semibold text-[#34322d] mb-[10px]">
-            <svg viewBox="0 0 24 24" className="size-[18px]" strokeWidth={1.8}><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            API Configuration
-          </label>
-          <div className="space-y-4">
-            {providers.map((provider) => (
-              <div key={provider} className="provider-card rounded-[18px] bg-[#f5f5f5] border border-border p-4">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="ico w-[34px] h-[34px] rounded-[12px] bg-[rgba(59,130,246,0.12)] grid place-items-center text-[#3b82f6] shrink-0">
-                      <svg viewBox="0 0 24 24" className="size-[18px]" strokeWidth={1.8}><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                    </div>
-                    <div>
-                      <div className="provider-name text-sm font-semibold text-[#34322d] capitalize">{provider}</div>
-                      <div className="provider-desc text-[11px] text-[#858481]">
-                        {provider === 'openrouter' ? 'Access any foundation model' : provider === 'groq' ? 'Fast inference API' : 'NVIDIA AI models'}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void loadModels(provider)}
-                    className="px-3 py-2 rounded-[12px] text-xs font-semibold text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors border border-border"
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-[rgba(17,17,17,0.55)] backdrop-blur-[8px]" onClick={onClose} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
+        tabIndex={-1}
+        className="absolute left-1/2 top-1/2 z-[1] flex h-[min(680px,calc(100dvh-48px))] w-[min(960px,calc(100dvw-24px))] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[22px] border border-border bg-white shadow-[0_32px_80px_rgba(17,17,17,0.25)] outline-none animate-[fadeUp_0.25s_ease]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {/* Navigation rail */}
+        <aside
+          aria-label="Settings sections"
+          className={cn(
+            'flex shrink-0 flex-col overflow-hidden border-r border-border bg-white transition-[width] duration-200 ease-out',
+            railOpen ? 'w-56' : 'w-16',
+          )}
+        >
+          <div className="flex h-[60px] shrink-0 items-center border-b border-border px-3">
+            <div className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[#ffc700] text-sm font-extrabold text-[#34322d]">
+              A
+            </div>
+            <span
+              className={cn(
+                'ml-2.5 min-w-0 truncate whitespace-nowrap text-sm font-bold text-[#34322d] transition-opacity duration-150',
+                railOpen ? 'opacity-100' : 'opacity-0',
+              )}
+            >
+              Curro AI
+            </span>
+          </div>
+
+          <div
+            role="tablist"
+            aria-label="Settings sections"
+            onKeyDown={handleTablistKeyDown}
+            className="flex flex-1 flex-col gap-[2px] px-2 py-3"
+          >
+            {TABS.map((tab) => (
+              <div key={tab.id} className="relative flex w-full items-center">
+                <span
+                  aria-hidden
+                  className={cn(
+                    'absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-[#ffc700] transition-all duration-150',
+                    activeTab === tab.id ? 'scale-y-100 opacity-100' : 'scale-y-0 opacity-0',
+                  )}
+                />
+                <button
+                  type="button"
+                  role="tab"
+                  id={`settings-tab-${tab.id}`}
+                  aria-selected={activeTab === tab.id}
+                  aria-controls={`settings-panel-${tab.id}`}
+                  tabIndex={activeTab === tab.id ? 0 : -1}
+                  ref={(element) => { tabRefs.current[tab.id] = element }}
+                  onClick={() => setActiveTab(tab.id)}
+                  title={tab.label}
+                  className={cn(
+                    'flex h-10 w-full items-center gap-3 rounded-[12px] px-3 text-sm font-medium transition-[background-color,color] duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring/60',
+                    activeTab === tab.id
+                      ? 'bg-[rgba(255,199,0,0.14)] text-[#34322d]'
+                      : 'text-[#858481] hover:bg-[rgba(55,53,47,0.05)] hover:text-[#34322d]',
+                  )}
+                >
+                  {tab.icon}
+                  <span
+                    className={cn(
+                      'min-w-0 truncate whitespace-nowrap transition-opacity duration-150',
+                      railOpen ? 'opacity-100' : 'opacity-0',
+                    )}
                   >
-                    {loadingModels && provider === selectedProvider ? <Loader2 className="size-3 animate-spin inline mr-1" /> : null}
-                    Fetch models
-                  </button>
-                </div>
-                <input
-                  value={providerKeys[provider]}
-                  onChange={(event) => setProviderKey(provider, event.target.value)}
-                  placeholder={`${provider.toUpperCase()} API key`}
-                  className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
-                />
-                <input
-                  value={providerBaseUrls[provider]}
-                  onChange={(event) => setProviderBaseUrl(provider, event.target.value)}
-                  placeholder="Base URL"
-                  className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700] mt-2"
-                />
+                    {tab.label}
+                  </span>
+                </button>
               </div>
             ))}
           </div>
-        </div>
 
-        <div className="field-group mb-[18px]">
-          <label className="field-label flex items-center gap-2 text-sm font-semibold text-[#34322d] mb-[10px]">
-            Novita Sandbox
-          </label>
-          <div className="space-y-3">
-            <input
-              value={novitaApiKey}
-              onChange={(event) => setNovitaApiKey(event.target.value)}
-              placeholder="Novita API key"
-              className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
-            />
-            <input
-              value={novitaTemplateId}
-              onChange={(event) => setNovitaTemplateId(event.target.value)}
-              placeholder="Optional custom sandbox template id"
-              className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
-            />
-            <p className="text-xs leading-relaxed text-[#858481]">
-              Sandbox creation is automatic on the first message. Timeout is set to one hour with resume-friendly lifecycle handling.
-            </p>
-          </div>
-        </div>
-
-        <div className="field-group mb-[18px]">
-          <label className="field-label flex items-center gap-2 text-sm font-semibold text-[#34322d] mb-[10px]">
-            <Search className="size-[18px]" />
-            Web Tools
-          </label>
-          <div className="space-y-3">
-            <div className="rounded-[18px] bg-[#f5f5f5] border border-border p-4">
-              <label className="block text-sm font-semibold text-[#34322d] mb-2">Search provider</label>
-              <select
-                value={searchProvider}
-                onChange={(event) => setSearchProvider(event.target.value as SearchProvider)}
-                className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none"
+          <div className="shrink-0 border-t border-border p-2">
+            <button
+              type="button"
+              onClick={() => setRailOpen((value) => !value)}
+              aria-label={railOpen ? 'Collapse navigation' : 'Expand navigation'}
+              title={railOpen ? 'Collapse navigation' : 'Expand navigation'}
+              className="flex h-10 w-full items-center justify-center gap-3 rounded-[12px] text-[#858481] transition-colors duration-150 hover:bg-[rgba(55,53,47,0.05)] hover:text-[#34322d] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring/60"
+            >
+              {railOpen ? <PanelLeftClose className="size-[18px] shrink-0" /> : <PanelLeftOpen className="size-[18px] shrink-0" />}
+              <span
+                className={cn(
+                  'min-w-0 truncate whitespace-nowrap text-xs font-medium transition-opacity duration-150',
+                  railOpen ? 'opacity-100' : 'hidden',
+                )}
               >
-                <option value="tavily">Tavily</option>
-                <option value="exa">Exa</option>
-                <option value="serpapi">SerpAPI</option>
-              </select>
+                Collapse
+              </span>
+            </button>
+          </div>
+        </aside>
+
+        {/* Tab content */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex shrink-0 items-center gap-3 border-b border-border px-6 py-4">
+            <div className="grid size-9 shrink-0 place-items-center rounded-[12px] bg-[rgba(255,199,0,0.15)] text-[#a16a00]">
+              <Settings className="size-[18px]" />
             </div>
-            {searchProvider === 'tavily' ? (
-              <input
-                value={tavilyApiKey}
-                onChange={(event) => setTavilyApiKey(event.target.value)}
-                placeholder="Tavily API key (web search)"
-                className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
-              />
-            ) : searchProvider === 'exa' ? (
-              <input
-                value={exaApiKey}
-                onChange={(event) => setExaApiKey(event.target.value)}
-                placeholder="Exa API key (web search)"
-                className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
-              />
-            ) : (
-              <input
-                value={serpapiApiKey}
-                onChange={(event) => setSerpapiApiKey(event.target.value)}
-                placeholder="SerpAPI API key (web search)"
-                className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
-              />
-            )}
-            <input
-              value={firecrawlApiKey}
-              onChange={(event) => setFirecrawlApiKey(event.target.value)}
-              placeholder="Firecrawl API key (web fetch)"
-              className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none placeholder:text-[#858481] focus:border-[#ffc700]"
-            />
-            <p className="text-xs leading-relaxed text-[#858481]">
-              These keys enable the agent to search the web and fetch page content. Optional — leave blank to skip web features.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2 mb-[18px]">
-          <div className="rounded-[18px] bg-[#f5f5f5] border border-border p-4">
-            <label className="block text-sm font-semibold text-[#34322d] mb-2">Active provider</label>
-            <select
-              value={selectedProvider}
-              onChange={(event) => setSelectedProvider(event.target.value as ProviderId)}
-              className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none"
+            <div className="min-w-0">
+              <div className="text-[17px] font-bold text-[#34322d]">Settings</div>
+              <div className="text-xs text-[#858481]">Configure the agent to match your workflow</div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close settings"
+              className="ml-auto grid size-8 shrink-0 place-items-center rounded-[10px] text-[#858481] transition-colors hover:bg-[rgba(55,53,47,0.05)] hover:text-[#34322d] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring/60"
             >
-              {providers.map((provider) => (
-                <option key={provider} value={provider}>{provider}</option>
-              ))}
-            </select>
-          </div>
-          <div className="rounded-[18px] bg-[#f5f5f5] border border-border p-4">
-            <label className="block text-sm font-semibold text-[#34322d] mb-2">Model</label>
-            <select
-              value={selectedModel}
-              onChange={(event) => setSelectedModel(event.target.value)}
-              className="w-full rounded-[14px] border border-border bg-white px-4 py-3 text-sm text-[#34322d] outline-none"
+              <X className="size-4" />
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div
+              key={activeTab}
+              role="tabpanel"
+              id={`settings-panel-${activeTab}`}
+              aria-labelledby={`settings-tab-${activeTab}`}
+              tabIndex={0}
+              className="animate-[fadeUp_0.18s_ease] px-6 py-6 outline-none"
             >
-              <option value="">Select model</option>
-              {modelsByProvider[selectedProvider].map((model) => (
-                <option key={model.id} value={model.id}>{model.label}</option>
-              ))}
-            </select>
+              {activeTab === 'models' ? <ModelsTab /> : null}
+              {activeTab === 'sandboxes' ? <SandboxTab /> : null}
+              {activeTab === 'web-search' ? <WebSearchTab /> : null}
+              {activeTab === 'sub-agents' ? <SubAgentManager /> : null}
+            </div>
           </div>
-        </div>
 
-        <div className="field-group mb-[18px]">
-          <SubAgentManager />
-        </div>
-
-        <div className="warn-inline flex items-start gap-[10px] px-[14px] py-3 rounded-[14px] bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.22)] text-[#b45309] text-xs">
-          <TriangleAlert className="size-[18px] shrink-0 mt-[-1px]" />
-          OpenRouter API key is required to use the agent.
-        </div>
-
-        {error ? (
-          <div className="rounded-[14px] border border-[rgba(239,68,68,0.2)] bg-[rgba(239,68,68,0.08)] p-3 text-sm text-[#ef4444] mt-3">{error}</div>
-        ) : null}
-
-        <div className="modal-actions flex justify-end gap-3 pt-[18px] border-t border-border mt-[22px]">
-          <button onClick={onClose} className="btn ghost px-[14px] py-[11px] rounded-[12px] font-semibold text-sm text-[#858481] hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d] transition-colors">
-            Cancel
-          </button>
-          <button onClick={onClose} className="btn primary px-[14px] py-[11px] rounded-[12px] font-semibold text-sm bg-[#ffc700] text-[#34322d] shadow-[0_12px_26px_rgba(255,199,0,0.24)] hover:brightness-[1.03] transition-colors">
-            Save Changes
-          </button>
+          <footer className="flex shrink-0 items-center justify-end gap-3 border-t border-border px-6 py-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-[12px] px-[14px] py-[11px] text-sm font-semibold text-[#858481] transition-colors hover:bg-[rgba(55,53,47,0.04)] hover:text-[#34322d]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-[12px] bg-[#ffc700] px-[14px] py-[11px] text-sm font-semibold text-[#34322d] shadow-[0_12px_26px_rgba(255,199,0,0.24)] transition-colors hover:brightness-[1.03]"
+            >
+              Save Changes
+            </button>
+          </footer>
         </div>
       </div>
     </div>

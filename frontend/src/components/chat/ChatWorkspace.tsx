@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Bot, BrainCircuit, Eye, FolderOpen, Settings, Terminal, X } from 'lucide-react'
+import { useState, useId } from 'react'
+import { Bot, BrainCircuit, ChevronRight, Eye, FolderOpen, Settings, Terminal, X } from 'lucide-react'
 
 import { Composer } from '@/components/chat/Composer'
 import { useChatStore } from '@/store/useChatStore'
@@ -656,30 +656,54 @@ function SubAgentOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: bo
   )
 }
 
-function ReasoningBlock({ reasoning }: { reasoning: string }) {
+export function ReasoningBlock({
+  reasoning,
+  isStreaming = false,
+}: {
+  reasoning: string
+  isStreaming?: boolean
+}) {
   const [isOpen, setIsOpen] = useState(false)
+  const contentId = useId()
+
+  const toggle = () => setIsOpen((prev) => !prev)
 
   return (
-    <div className="overflow-hidden rounded-[18px] border border-[#e8d5f5] bg-[#faf5ff] shadow-sm mt-3">
+    <div className="mt-[6px]">
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-[rgba(139,92,246,0.06)] text-[#7c3aed]"
+        type="button"
+        onClick={toggle}
+        aria-expanded={isOpen}
+        aria-controls={contentId}
+        className="-mx-2 flex cursor-pointer select-none items-center gap-[5px] rounded-[8px] px-2 py-[6px] text-[13px] font-medium leading-none text-[#858481] transition-colors duration-150 ease-out hover:text-[#34322d] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring/60"
       >
-        <BrainCircuit className="size-[14px] shrink-0" />
-        <span className="flex-1 truncate text-[13px] font-medium">
-          Reasoning
-        </span>
-        <span className="shrink-0 text-[11px] text-[#7c3aed]/60">
-          {isOpen ? 'Hide' : 'Show'}
-        </span>
+        <ChevronRight
+          aria-hidden="true"
+          className={`size-[14px] shrink-0 transition-transform duration-200 ease-out ${isOpen ? 'rotate-90' : ''}`}
+        />
+        <span>Reasoning</span>
+        {isStreaming ? (
+          <span
+            aria-hidden="true"
+            className="ml-1 inline-block size-[5px] shrink-0 rounded-full bg-[#a855f7] animate-pulse"
+          />
+        ) : null}
       </button>
-      {isOpen && (
-        <div className="border-t border-[#e8d5f5] p-4">
-          <div className="font-[15px] leading-relaxed text-[#6b21a8] italic whitespace-pre-wrap">
+
+      <div
+        id={contentId}
+        role="region"
+        aria-label="Reasoning details"
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+          isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden" inert={!isOpen}>
+          <div className="pb-1 pt-2 pl-[26px] text-[13px] leading-[1.7] text-[#6b6b66] whitespace-pre-wrap">
             {reasoning}
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -781,7 +805,7 @@ export function ChatWorkspace({
                     ) : '')}
                   </div>
                   {message.reasoning ? (
-                    <ReasoningBlock reasoning={message.reasoning} />
+                    <ReasoningBlock reasoning={message.reasoning} isStreaming={message.status === 'streaming'} />
                   ) : null}
                       {message.toolChips && message.toolChips.length > 0 ? (
                     <div className="flex flex-wrap gap-[10px] mt-3">

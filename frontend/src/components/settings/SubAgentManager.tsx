@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Pencil, Plus, Trash2, ToggleLeft, ToggleRight, X } from 'lucide-react'
 
 import { useSettingsStore } from '@/store/useSettingsStore'
@@ -35,6 +35,18 @@ export function SubAgentManager() {
   const filteredTools = toolSearch
     ? AVAILABLE_TOOLS.filter((t) => t.name.toLowerCase().includes(toolSearch.toLowerCase()) || t.description.toLowerCase().includes(toolSearch.toLowerCase()))
     : AVAILABLE_TOOLS
+
+  useEffect(() => {
+    if (!showForm) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopImmediatePropagation()
+        setShowForm(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [showForm])
 
   function handleCreate() {
     setForm(emptyForm)
