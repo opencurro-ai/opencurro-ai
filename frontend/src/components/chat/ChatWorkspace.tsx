@@ -1,4 +1,4 @@
-import { useState, useId } from 'react'
+import { useState, useId, type ReactNode } from 'react'
 import { Bot, BrainCircuit, ChevronRight, Eye, FolderOpen, Settings, X } from 'lucide-react'
 
 import { Composer } from '@/components/chat/Composer'
@@ -150,35 +150,119 @@ function TerminalOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: bo
   )
 }
 
+function ToolRowBadge({ children, title }: { children: ReactNode; title?: string }) {
+  return (
+    <span
+      className="inline-flex min-w-0 items-center px-[8px] py-[2px] bg-[#f9fafb] border border-[#e5e7eb] rounded-[6px] text-[#6b7280] text-[13px] font-mono truncate"
+      title={title}
+    >
+      {children}
+    </span>
+  )
+}
+
+function ToolRowChevron({ isOpen }: { isOpen: boolean }) {
+  return (
+    <ChevronRight
+      aria-hidden="true"
+      className={`size-[14px] shrink-0 ml-auto text-[#858481] transition-transform duration-200 ease-out ${isOpen ? 'rotate-90' : ''}`}
+    />
+  )
+}
+
+function ToolRowStatus({
+  isRunning,
+  ok,
+  runningLabel = 'running...',
+}: {
+  isRunning: boolean
+  ok?: boolean
+  runningLabel?: string
+}) {
+  if (isRunning) {
+    return (
+      <span className="shrink-0 text-[11px] text-[#858481] animate-pulse">
+        {runningLabel}
+      </span>
+    )
+  }
+  if (ok === false) {
+    return (
+      <span className="shrink-0 text-[11px] text-[#ef4444]">
+        failed
+      </span>
+    )
+  }
+  return (
+    <span className="shrink-0 text-[11px] text-[#16a34a]">
+      done
+    </span>
+  )
+}
+
+function ToolDetails({ isOpen, children }: { isOpen: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+        isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+      }`}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div className="pt-2 pb-3 pl-[30px] space-y-3" onClick={(e) => e.stopPropagation()}>
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ListFilesOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: boolean; onToggle: () => void }) {
   const resultData = chip.resultData
   const data = (resultData?.data as Record<string, unknown> | undefined) ?? resultData
   const items = data?.items as Array<{ name: string; type: string; path: string; size?: number | null }> | undefined
   const isRunning = chip.ok === undefined
-
-  const statusLabel = isRunning ? 'running...' : chip.ok ? 'done' : 'error'
+  const dirName = chip.path || 'directory'
+  const itemCount = items?.length ?? 0
 
   return (
-    <div className="overflow-hidden rounded-[18px] border border-border bg-white shadow-sm">
+    <div className="w-full">
+      {/* Inline row - clickable header */}
       <button
         onClick={onToggle}
-        className={`flex w-full items-center gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-[rgba(55,53,47,0.04)] ${chip.ok === false ? 'text-[#ef4444]' : 'text-[#34322d]'}`}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-[5px] py-[6px] cursor-pointer text-left transition-opacity duration-[180ms] ease-out hover:opacity-[0.92]"
       >
+        {/* Folder Icon */}
         <FolderOpen className="size-[14px] shrink-0 text-[#858481]" />
-        <span className="flex-1 truncate text-[13px]">
-          {chip.label}
+
+        {/* Action Text */}
+        <span className="text-[13px] font-medium text-[#858481] shrink-0">
+          List
         </span>
-        <span className={`shrink-0 text-[11px] ${isRunning ? 'animate-pulse text-[#858481]' : chip.ok ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-          {statusLabel}
-        </span>
+
+        {/* Directory Badge */}
+        <ToolRowBadge title={dirName}>{dirName}</ToolRowBadge>
+
+        {/* Green Result Indicator */}
+        {!isRunning && chip.ok === true && itemCount > 0 ? (
+          <span className="shrink-0 text-[13px] font-semibold text-[#16a34a]">
+            {itemCount} item{itemCount !== 1 ? 's' : ''}
+          </span>
+        ) : (
+          <ToolRowStatus isRunning={isRunning} ok={chip.ok} runningLabel="listing..." />
+        )}
+
+        <ToolRowChevron isOpen={isOpen} />
       </button>
-      {isOpen && (
-        <div className="border-t border-border p-4 font-mono text-[13px] leading-relaxed bg-[#f5f5f5]">
-          <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#858481]">
-            <FolderOpen className="size-3" />
-            <span>{chip.path || 'directory'}</span>
-          </div>
-          {items ? (
+
+      {/* Expanded content */}
+      <ToolDetails isOpen={isOpen}>
+        {items ? (
+          <div className="rounded-[12px] bg-white border border-border p-3 font-mono text-[13px] leading-relaxed">
+            <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#858481]">
+              <FolderOpen className="size-3" />
+              <span className="truncate">{chip.path || 'directory'}</span>
+            </div>
             <div className="space-y-1">
               {items.map((item) => (
                 <div key={item.path} className="flex items-center gap-2 text-[13px]">
@@ -192,13 +276,13 @@ function ListFilesOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: b
                 </div>
               ))}
             </div>
-          ) : chip.ok === false ? (
-            <div className="text-[#ef4444]">Failed to list directory</div>
-          ) : (
-            <div className="text-[#858481]">No files found</div>
-          )}
-        </div>
-      )}
+          </div>
+        ) : chip.ok === false ? (
+          <div className="text-[#ef4444] text-[13px]">Failed to list directory</div>
+        ) : (
+          <div className="text-[#858481] text-[13px]">No files found</div>
+        )}
+      </ToolDetails>
     </div>
   )
 }
@@ -208,40 +292,59 @@ function WebSearchOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: b
   const data = (resultData?.data as Record<string, unknown> | undefined) ?? resultData
   const results = data?.results as Array<{ title: string; url: string; Description: string }> | undefined
   const isRunning = chip.ok === undefined
-
-  const statusLabel = isRunning ? 'running...' : chip.ok ? 'done' : 'error'
+  const resultCount = results?.length ?? 0
 
   return (
-    <div className="overflow-hidden rounded-[18px] border border-border bg-white shadow-sm">
+    <div className="w-full">
+      {/* Inline row - clickable header */}
       <button
         onClick={onToggle}
-        className={`flex w-full items-center gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-[rgba(55,53,47,0.04)] ${chip.ok === false ? 'text-[#ef4444]' : 'text-[#34322d]'}`}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-[5px] py-[6px] cursor-pointer text-left transition-opacity duration-[180ms] ease-out hover:opacity-[0.92]"
       >
-        <svg viewBox="0 0 24 24" className="size-[14px] shrink-0 text-[#858481]" strokeWidth={1.8}>
+        {/* Search Icon */}
+        <svg viewBox="0 0 24 24" className="size-[14px] shrink-0 text-[#858481]" strokeWidth={1.8} fill="none" stroke="currentColor">
           <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
         </svg>
-        <span className="flex-1 truncate text-[13px]">
-          {chip.label}
-          {chip.query ? <span className="ml-2 text-[11px] text-[#858481]">"{chip.query}"</span> : null}
+
+        {/* Action Text */}
+        <span className="text-[13px] font-medium text-[#858481] shrink-0">
+          Search
         </span>
-        <span className={`shrink-0 text-[11px] ${isRunning ? 'animate-pulse text-[#858481]' : chip.ok ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-          {statusLabel}
-        </span>
-        {results && results.length > 0 ? <span className="shrink-0 text-[10px] text-[#858481] ml-2">{results.length} results</span> : null}
+
+        {/* Query Badge */}
+        {chip.query ? <ToolRowBadge title={chip.query}>"{chip.query}"</ToolRowBadge> : null}
+
+        {/* Green Result Indicator */}
+        {!isRunning && chip.ok === true && resultCount > 0 ? (
+          <span className="shrink-0 text-[13px] font-semibold text-[#16a34a]">
+            {resultCount} result{resultCount !== 1 ? 's' : ''}
+          </span>
+        ) : (
+          <ToolRowStatus isRunning={isRunning} ok={chip.ok} runningLabel="searching..." />
+        )}
+
+        <ToolRowChevron isOpen={isOpen} />
       </button>
-      {isOpen && results && results.length > 0 ? (
-        <div className="border-t border-border p-3 space-y-2 bg-[#f5f5f5]">
-          {results.map((r, i) => (
-            <a key={i} href={r.url} target="_blank" rel="noopener noreferrer" className="block rounded-[12px] bg-white border border-border p-3 hover:shadow-sm transition-shadow">
-              <div className="text-[13px] font-semibold text-[#34322d] mb-1">{r.title}</div>
-              <div className="text-[11px] text-[#858481] mb-1 line-clamp-2">{r.Description}</div>
-              <div className="text-[10px] text-[#3b82f6] truncate">{r.url}</div>
-            </a>
-          ))}
-        </div>
-      ) : isOpen && chip.ok === false ? (
-        <div className="border-t border-border p-4 text-[#ef4444] text-[13px] bg-[#f5f5f5]">Search failed</div>
-      ) : null}
+
+      {/* Expanded content */}
+      <ToolDetails isOpen={isOpen}>
+        {results && results.length > 0 ? (
+          <div className="space-y-2">
+            {results.map((r, i) => (
+              <a key={i} href={r.url} target="_blank" rel="noopener noreferrer" className="block rounded-[12px] bg-white border border-border p-3 hover:shadow-sm transition-shadow">
+                <div className="text-[13px] font-semibold text-[#34322d] mb-1">{r.title}</div>
+                <div className="text-[11px] text-[#858481] mb-1 line-clamp-2">{r.Description}</div>
+                <div className="text-[10px] text-[#3b82f6] truncate">{r.url}</div>
+              </a>
+            ))}
+          </div>
+        ) : chip.ok === false ? (
+          <div className="text-[#ef4444] text-[13px]">Search failed</div>
+        ) : (
+          <div className="text-[#858481] text-[13px]">No results</div>
+        )}
+      </ToolDetails>
     </div>
   )
 }
@@ -253,38 +356,55 @@ function FetchWebOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: bo
   const url = data?.url as string | undefined
   const isRunning = chip.ok === undefined
 
-  const statusLabel = isRunning ? 'running...' : chip.ok ? 'done' : 'error'
   const displayContent = content ? (content.length > 4000 ? content.slice(0, 4000) + '...' : content) : ''
 
   return (
-    <div className="overflow-hidden rounded-[18px] border border-border bg-white shadow-sm">
+    <div className="w-full">
+      {/* Inline row - clickable header */}
       <button
         onClick={onToggle}
-        className={`flex w-full items-center gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-[rgba(55,53,47,0.04)] ${chip.ok === false ? 'text-[#ef4444]' : 'text-[#34322d]'}`}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-[5px] py-[6px] cursor-pointer text-left transition-opacity duration-[180ms] ease-out hover:opacity-[0.92]"
       >
-        <svg viewBox="0 0 24 24" className="size-[14px] shrink-0 text-[#858481]" strokeWidth={1.8}>
+        {/* Link Icon */}
+        <svg viewBox="0 0 24 24" className="size-[14px] shrink-0 text-[#858481]" strokeWidth={1.8} fill="none" stroke="currentColor">
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
         </svg>
-        <span className="flex-1 truncate text-[13px]">
-          {chip.label}
-          {url ? <span className="ml-2 text-[11px] text-[#858481] font-mono truncate">{url}</span> : null}
+
+        {/* Action Text */}
+        <span className="text-[13px] font-medium text-[#858481] shrink-0">
+          Fetch
         </span>
-        <span className={`shrink-0 text-[11px] ${isRunning ? 'animate-pulse text-[#858481]' : chip.ok ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-          {statusLabel}
-        </span>
+
+        {/* URL Badge */}
+        {url ? (
+          <ToolRowBadge title={url}>{url}</ToolRowBadge>
+        ) : (
+          <ToolRowBadge title="url">url</ToolRowBadge>
+        )}
+
+        <ToolRowStatus isRunning={isRunning} ok={chip.ok} runningLabel="fetching..." />
+
+        <ToolRowChevron isOpen={isOpen} />
       </button>
-      {isOpen && displayContent ? (
-        <div className="border-t border-border p-4 font-mono text-[12px] leading-relaxed bg-[#f5f5f5] max-h-[400px] overflow-auto">
-          <div className="flex items-center gap-2 mb-3 text-[10px] uppercase tracking-wider text-[#858481]">
-            <svg viewBox="0 0 24 24" className="size-3" strokeWidth={1.8}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <span>Fetched content</span>
-            {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="ml-auto text-[#3b82f6] underline truncate max-w-[200px]">{url}</a> : null}
+
+      {/* Expanded content */}
+      <ToolDetails isOpen={isOpen}>
+        {displayContent ? (
+          <div className="rounded-[12px] bg-white border border-border p-3 font-mono text-[12px] leading-relaxed max-h-[400px] overflow-auto">
+            <div className="flex items-center gap-2 mb-3 text-[10px] uppercase tracking-wider text-[#858481]">
+              <svg viewBox="0 0 24 24" className="size-3" strokeWidth={1.8} fill="none" stroke="currentColor"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <span>Fetched content</span>
+              {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="ml-auto text-[#3b82f6] underline truncate max-w-[200px]">{url}</a> : null}
+            </div>
+            <pre className="whitespace-pre-wrap text-[#34322d]">{displayContent}</pre>
           </div>
-          <pre className="whitespace-pre-wrap text-[#34322d]">{displayContent}</pre>
-        </div>
-      ) : isOpen && chip.ok === false ? (
-        <div className="border-t border-border p-4 text-[#ef4444] text-[13px] bg-[#f5f5f5]">Fetch failed</div>
-      ) : null}
+        ) : chip.ok === false ? (
+          <div className="text-[#ef4444] text-[13px]">Fetch failed</div>
+        ) : (
+          <div className="text-[#858481] text-[13px]">No content fetched</div>
+        )}
+      </ToolDetails>
     </div>
   )
 }
@@ -295,51 +415,70 @@ function ShellViewOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: b
   const sessions = data?.sessions as Array<{ session_name: string; status: string; output: string }> | undefined
   const isRunning = chip.ok === undefined
   const hasRunning = sessions?.some((s) => s.status === 'running') ?? false
-
-  const statusLabel = isRunning || hasRunning ? 'running...' : 'done'
+  const running = isRunning || hasRunning
+  const sessionCount = sessions?.length ?? 0
+  const sessionNames = chip.sessionNames?.length
+    ? chip.sessionNames.join(', ')
+    : chip.sessionName || 'sessions'
 
   return (
-    <div className="overflow-hidden rounded-[18px] border border-border bg-white shadow-sm">
+    <div className="w-full">
+      {/* Inline row - clickable header */}
       <button
         onClick={onToggle}
-        className={`flex w-full items-center gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-[rgba(55,53,47,0.04)] ${chip.ok === false ? 'text-[#ef4444]' : 'text-[#34322d]'}`}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-[5px] py-[6px] cursor-pointer text-left transition-opacity duration-[180ms] ease-out hover:opacity-[0.92]"
       >
+        {/* Eye Icon */}
         <Eye className="size-[14px] shrink-0 text-[#858481]" />
-        <span className="flex-1 truncate text-[13px]">
-          {chip.label}
+
+        {/* Action Text */}
+        <span className="text-[13px] font-medium text-[#858481] shrink-0">
+          View
         </span>
-        <span className={`shrink-0 text-[11px] ${(isRunning || hasRunning) ? 'animate-pulse text-[#858481]' : 'text-[#22c55e]'}`}>
-          {statusLabel}
-        </span>
+
+        {/* Sessions Badge */}
+        <ToolRowBadge title={sessionNames}>{sessionNames}</ToolRowBadge>
+
+        {/* Green Result Indicator */}
+        {!running && chip.ok === true && sessionCount > 0 ? (
+          <span className="shrink-0 text-[13px] font-semibold text-[#16a34a]">
+            {sessionCount} session{sessionCount !== 1 ? 's' : ''}
+          </span>
+        ) : (
+          <ToolRowStatus isRunning={running} ok={chip.ok} runningLabel="running..." />
+        )}
+
+        <ToolRowChevron isOpen={isOpen} />
       </button>
-      {isOpen && (
-        <div className="border-t border-border p-4 font-mono text-[13px] leading-relaxed bg-[#f5f5f5]">
-          {sessions && sessions.length > 0 ? (
-            <div className="space-y-4">
-              {sessions.map((session) => (
-                <div key={session.session_name}>
-                  <div className="mb-1 flex items-center gap-2 text-[11px] text-[#858481]">
-                    <Eye className="size-3" />
-                    <span className="font-semibold">{session.session_name}</span>
-                    <span className={`ml-auto ${session.status === 'running' ? 'text-[#f97316]' : 'text-[#22c55e]'}`}>
-                      {session.status}
-                    </span>
-                  </div>
-                  {session.output ? (
-                    <pre className="whitespace-pre-wrap text-[#34322d] bg-white rounded-lg p-3 border border-border text-[12px]">{session.output}</pre>
-                  ) : (
-                    <div className="text-[#858481] text-[12px]">No output yet</div>
-                  )}
+
+      {/* Expanded content */}
+      <ToolDetails isOpen={isOpen}>
+        {sessions && sessions.length > 0 ? (
+          <div className="space-y-4">
+            {sessions.map((session) => (
+              <div key={session.session_name}>
+                <div className="mb-1 flex items-center gap-2 text-[11px] text-[#858481]">
+                  <Eye className="size-3" />
+                  <span className="font-semibold">{session.session_name}</span>
+                  <span className={`ml-auto ${session.status === 'running' ? 'text-[#f97316]' : 'text-[#22c55e]'}`}>
+                    {session.status}
+                  </span>
                 </div>
-              ))}
-            </div>
-          ) : chip.ok === false ? (
-            <div className="text-[#ef4444]">Failed to view shell output</div>
-          ) : (
-            <div className="text-[#858481]">Awaiting output...</div>
-          )}
-        </div>
-      )}
+                {session.output ? (
+                  <pre className="whitespace-pre-wrap text-[#34322d] bg-white rounded-lg p-3 border border-border text-[12px]">{session.output}</pre>
+                ) : (
+                  <div className="text-[#858481] text-[12px]">No output yet</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : chip.ok === false ? (
+          <div className="text-[#ef4444] text-[13px]">Failed to view shell output</div>
+        ) : (
+          <div className="text-[#858481] text-[13px]">Awaiting output...</div>
+        )}
+      </ToolDetails>
     </div>
   )
 }
@@ -634,28 +773,49 @@ function StrReplaceOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: 
   const newString = chip.newString ?? (data?.new_string as string | undefined)
   const occurrences = data?.occurrences as number | undefined
   const isRunning = chip.ok === undefined
-
-  const statusLabel = isRunning ? 'running...' : chip.ok ? 'done' : 'error'
+  const fileName = chip.filePath ? chip.filePath.split('/').pop() : 'file'
 
   return (
-    <div className="overflow-hidden rounded-[18px] border border-border bg-white shadow-sm">
+    <div className="w-full">
+      {/* Inline row - clickable header */}
       <button
         onClick={onToggle}
-        className={`flex w-full items-center gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-[rgba(55,53,47,0.04)] ${chip.ok === false ? 'text-[#ef4444]' : 'text-[#34322d]'}`}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-[5px] py-[6px] cursor-pointer text-left transition-opacity duration-[180ms] ease-out hover:opacity-[0.92]"
       >
+        {/* Edit Icon */}
         <svg viewBox="0 0 24 24" className="size-[14px] shrink-0 text-[#858481]" strokeWidth={1.8} fill="none" stroke="currentColor">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
         </svg>
-        <span className="flex-1 truncate text-[13px]">
-          {chip.label}
+
+        {/* Action Text */}
+        <span className="text-[13px] font-medium text-[#858481] shrink-0">
+          Edit
         </span>
-        <span className={`shrink-0 text-[11px] ${isRunning ? 'animate-pulse text-[#858481]' : chip.ok ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-          {statusLabel}
-        </span>
+
+        {/* Filename Badge */}
+        {chip.filePath ? (
+          <ToolRowBadge title={chip.filePath}>{fileName}</ToolRowBadge>
+        ) : (
+          <ToolRowBadge title="file">file</ToolRowBadge>
+        )}
+
+        {/* Green Diff Indicator */}
+        {!isRunning && chip.ok === true && occurrences != null && occurrences > 0 ? (
+          <span className="shrink-0 text-[13px] font-semibold text-[#16a34a]">
+            +{occurrences}
+          </span>
+        ) : (
+          <ToolRowStatus isRunning={isRunning} ok={chip.ok} runningLabel="editing..." />
+        )}
+
+        <ToolRowChevron isOpen={isOpen} />
       </button>
-      {isOpen && (
-        <div className="border-t border-border p-4 font-mono text-[13px] leading-relaxed bg-[#f5f5f5] space-y-3">
+
+      {/* Expanded content */}
+      <ToolDetails isOpen={isOpen}>
+        <div className="rounded-[12px] bg-white border border-border p-3 font-mono text-[13px] leading-relaxed space-y-3">
           <div>
             <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#858481]">
               <svg viewBox="0 0 24 24" className="size-3" strokeWidth={1.8} fill="none" stroke="currentColor">
@@ -664,7 +824,7 @@ function StrReplaceOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: 
               </svg>
               <span>Old string</span>
             </div>
-            <pre className="whitespace-pre-wrap text-[#dc2626] bg-white rounded-lg p-3 border border-border text-[12px] max-h-[200px] overflow-auto">{oldString ?? ''}</pre>
+            <pre className="whitespace-pre-wrap text-[#dc2626] bg-[#f9fafb] rounded-lg p-3 border border-border text-[12px] max-h-[200px] overflow-auto">{oldString ?? ''}</pre>
           </div>
           <div>
             <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#858481]">
@@ -674,9 +834,9 @@ function StrReplaceOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: 
               </svg>
               <span>New string</span>
             </div>
-            <pre className={`whitespace-pre-wrap bg-white rounded-lg p-3 border border-border text-[12px] max-h-[200px] overflow-auto ${newString ? 'text-[#059669]' : 'text-[#858481]'}`}>{newString || '(empty)'}</pre>
+            <pre className={`whitespace-pre-wrap bg-[#f9fafb] rounded-lg p-3 border border-border text-[12px] max-h-[200px] overflow-auto ${newString ? 'text-[#059669]' : 'text-[#858481]'}`}>{newString || '(empty)'}</pre>
           </div>
-          {occurrences !== undefined ? (
+          {occurrences != null ? (
             <div className="text-[11px] text-[#858481]">
               {occurrences} occurrence{occurrences !== 1 ? 's' : ''} replaced
             </div>
@@ -685,7 +845,71 @@ function StrReplaceOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: 
             <div className="text-[#ef4444] text-[12px]">Edit failed</div>
           ) : null}
         </div>
-      )}
+      </ToolDetails>
+    </div>
+  )
+}
+
+function ListSubAgentsOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: boolean; onToggle: () => void }) {
+  const resultData = chip.resultData
+  const data = (resultData?.data as Record<string, unknown> | undefined) ?? resultData
+  const agents = data?.available_sub_agents as Array<{ name: string; description: string }> | undefined
+  const isRunning = chip.ok === undefined
+  const agentCount = agents?.length ?? 0
+
+  return (
+    <div className="w-full">
+      {/* Inline row - clickable header */}
+      <button
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-[5px] py-[6px] cursor-pointer text-left transition-opacity duration-[180ms] ease-out hover:opacity-[0.92]"
+      >
+        {/* Bot Icon */}
+        <Bot className="size-[14px] shrink-0 text-[#a855f7]" />
+
+        {/* Action Text */}
+        <span className="text-[13px] font-medium text-[#858481] shrink-0">
+          Agents
+        </span>
+
+        {/* Badge */}
+        <ToolRowBadge title="sub-agents">sub-agents</ToolRowBadge>
+
+        {/* Green Result Indicator */}
+        {!isRunning && chip.ok === true && agentCount > 0 ? (
+          <span className="shrink-0 text-[13px] font-semibold text-[#16a34a]">
+            {agentCount} agent{agentCount !== 1 ? 's' : ''}
+          </span>
+        ) : (
+          <ToolRowStatus isRunning={isRunning} ok={chip.ok} runningLabel="loading..." />
+        )}
+
+        <ToolRowChevron isOpen={isOpen} />
+      </button>
+
+      {/* Expanded content */}
+      <ToolDetails isOpen={isOpen}>
+        {agents && agents.length > 0 ? (
+          <div className="rounded-[12px] bg-white border border-border p-3 space-y-3">
+            {agents.map((agent, i) => (
+              <div key={`${agent.name}-${i}`} className="flex items-start gap-2.5">
+                <Bot className="size-3.5 shrink-0 text-[#a855f7] mt-0.5" />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold text-[#34322d]">{agent.name}</div>
+                  {agent.description ? (
+                    <div className="text-[12px] text-[#858481] leading-relaxed mt-0.5">{agent.description}</div>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : chip.ok === false ? (
+          <div className="text-[#ef4444] text-[13px]">Failed to list sub-agents</div>
+        ) : (
+          <div className="text-[#858481] text-[13px]">No sub-agents available</div>
+        )}
+      </ToolDetails>
     </div>
   )
 }
@@ -707,6 +931,9 @@ function SubAgentOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: bo
     }
     if (subChip.name === 'list_files') {
       return <ListFilesOutput chip={subChip} isOpen={false} onToggle={() => {}} />
+    }
+    if (subChip.name === 'list_sub_agents') {
+      return <ListSubAgentsOutput chip={subChip} isOpen={false} onToggle={() => {}} />
     }
     if (subChip.name === 'web_search') {
       return <WebSearchOutput chip={subChip} isOpen={false} onToggle={() => {}} />
@@ -981,10 +1208,9 @@ export function ChatWorkspace({
                             <SubAgentOutput chip={tool} isOpen={openTerminals.has(tool.id)} onToggle={() => toggleTerminal(tool.id)} />
                           </div>
                         ) : tool.name === 'list_sub_agents' ? (
-                          <span key={tool.id} className={`inline-flex items-center gap-2 px-3 py-[6px] rounded-full bg-white border border-border text-xs text-[#34322d] shadow-sm ${tool.ok === false ? 'border-red-300 bg-red-50 text-red-600' : ''}`}>
-                            <Bot className="size-[14px] text-[#a855f7]" />
-                            <span>{tool.label}</span>
-                          </span>
+                          <div key={tool.id} className="w-full max-w-xl">
+                            <ListSubAgentsOutput chip={tool} isOpen={openTerminals.has(tool.id)} onToggle={() => toggleTerminal(tool.id)} />
+                          </div>
                         ) : tool.name === 'shall_tool' ? (
                           <div key={tool.id} className="w-full max-w-xl">
                             <TerminalOutput chip={tool} isOpen={openTerminals.has(tool.id)} onToggle={() => toggleTerminal(tool.id)} />
