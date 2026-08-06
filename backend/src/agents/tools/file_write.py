@@ -30,7 +30,18 @@ async def execute_file_write(*, sandbox_adapter, sandbox_context: SandboxContext
     try:
         file_path = arguments["file_path"]
         content = arguments["content"]
+        
+        # Calculate the number of lines in the content
+        line_count = content.count('\n') + (1 if content and not content.endswith('\n') else 0)
+        
         data = await sandbox_adapter.write_file(sandbox_context, file_path, content)
+        
+        # Add line_count to the returned data
+        if isinstance(data, dict):
+            data["line_count"] = line_count
+        else:
+            data = {"line_count": line_count, "result": data}
+        
         return ToolExecutionResult(ok=True, data=data)
     except Exception as exc:
         return ToolExecutionResult(

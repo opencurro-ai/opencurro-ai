@@ -461,6 +461,104 @@ function ApplyPatchOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: 
   )
 }
 
+function FileWriteOutput({ chip }: { chip: ToolChip }) {
+  const resultData = chip.resultData
+  const data = (resultData?.data as Record<string, unknown> | undefined) ?? resultData
+  const lineCount = data?.line_count as number | undefined
+  const fileName = chip.filePath ? chip.filePath.split('/').pop() : 'file'
+  const isRunning = chip.ok === undefined
+
+  return (
+    <div className="flex items-center gap-[5px] py-[6px]">
+      {/* File Icon */}
+      <svg 
+        className="size-[14px] shrink-0 text-[#858481]" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <path d="M12 11v6"/>
+        <path d="M9 14h6"/>
+      </svg>
+
+      {/* Action Text */}
+      <span className="text-[13px] font-medium text-[#858481]">
+        Create
+      </span>
+
+      {/* Filename Badge - Slimmer */}
+      <span className="inline-flex items-center px-[8px] py-[2px] bg-[#f9fafb] border border-[#e5e7eb] rounded-[6px] text-[#6b7280] text-[13px] font-mono">
+        {fileName}
+      </span>
+
+      {/* Green Diff Indicator */}
+      {!isRunning && chip.ok && lineCount !== undefined && (
+        <span className="text-[#16a34a] text-[13px] font-semibold">
+          +{lineCount}
+        </span>
+      )}
+
+      {/* Status indicators for running/error states */}
+      {isRunning && (
+        <span className="text-[11px] text-[#858481] animate-pulse ml-1">
+          writing...
+        </span>
+      )}
+      {!isRunning && chip.ok === false && (
+        <span className="text-[11px] text-[#ef4444] ml-1">
+          failed
+        </span>
+      )}
+    </div>
+  )
+}
+
+function FileReadOutput({ chip }: { chip: ToolChip }) {
+  const fileName = chip.filePath ? chip.filePath.split('/').pop() : 'file'
+  const isRunning = chip.ok === undefined
+
+  return (
+    <div className="flex items-center gap-[5px] py-[6px]">
+      {/* File Icon */}
+      <svg 
+        className="size-[14px] shrink-0 text-[#858481]" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+
+      {/* Action Text */}
+      <span className="text-[13px] font-medium text-[#858481]">
+        Read
+      </span>
+
+      {/* Filename Badge - Slimmer */}
+      <span className="inline-flex items-center px-[8px] py-[2px] bg-[#f9fafb] border border-[#e5e7eb] rounded-[6px] text-[#6b7280] text-[13px] font-mono">
+        {fileName}
+      </span>
+
+      {/* Status indicators for running/error states */}
+      {isRunning && (
+        <span className="text-[11px] text-[#858481] animate-pulse ml-1">
+          reading...
+        </span>
+      )}
+      {!isRunning && chip.ok === false && (
+        <span className="text-[11px] text-[#ef4444] ml-1">
+          failed
+        </span>
+      )}
+    </div>
+  )
+}
+
 function StrReplaceOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: boolean; onToggle: () => void }) {
   const resultData = chip.resultData
   const data = (resultData?.data as Record<string, unknown> | undefined) ?? resultData
@@ -846,6 +944,14 @@ export function ChatWorkspace({
                         ) : tool.name === 'apply_patch' ? (
                           <div key={tool.id} className="w-full max-w-xl">
                             <ApplyPatchOutput chip={tool} isOpen={openTerminals.has(tool.id)} onToggle={() => toggleTerminal(tool.id)} />
+                          </div>
+                        ) : tool.name === 'file_write' ? (
+                          <div key={tool.id} className="w-full max-w-xl">
+                            <FileWriteOutput chip={tool} />
+                          </div>
+                        ) : tool.name === 'file_read' ? (
+                          <div key={tool.id} className="w-full max-w-xl">
+                            <FileReadOutput chip={tool} />
                           </div>
                         ) : (
                           <span key={tool.id} className={`inline-flex items-center gap-2 px-3 py-[6px] rounded-full bg-white border border-border text-xs text-[#34322d] shadow-sm ${tool.ok === false ? 'border-red-300 bg-red-50 text-red-600' : ''}`}>
