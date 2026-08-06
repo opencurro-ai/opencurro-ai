@@ -1,5 +1,5 @@
 import { useState, useId } from 'react'
-import { Bot, BrainCircuit, ChevronRight, Eye, FolderOpen, Settings, Terminal, X } from 'lucide-react'
+import { Bot, BrainCircuit, ChevronRight, Eye, FolderOpen, Settings, X } from 'lucide-react'
 
 import { Composer } from '@/components/chat/Composer'
 import { useChatStore } from '@/store/useChatStore'
@@ -21,63 +21,131 @@ function TerminalOutput({ chip, isOpen, onToggle }: { chip: ToolChip; isOpen: bo
   const resultData = chip.resultData
   const commandData = (resultData?.data as Record<string, unknown> | undefined) ?? resultData
   const stdout = commandData?.stdout as string | undefined
-  const stderr = commandData?.stderr as string | undefined
   const exitCode = commandData?.exit_code as number | undefined
   const status = commandData?.status as string | undefined
   const pid = commandData?.pid as number | undefined
   const message = commandData?.message as string | undefined
   const isRunning = chip.ok === undefined
 
-  const statusLabel = isRunning ? 'running...'
-    : status === 'started' ? 'started'
-    : exitCode === 0 ? 'done'
-    : exitCode !== undefined ? `exit ${exitCode}`
-    : 'done'
-
   return (
-    <div className="overflow-hidden rounded-[18px] border border-border bg-white shadow-sm">
+    <div className="w-full">
+      {/* Inline bash row - clickable header */}
       <button
         onClick={onToggle}
-        className={`flex w-full items-center gap-2 px-4 py-3 text-left text-xs transition-colors hover:bg-[rgba(55,53,47,0.04)] ${chip.ok === false ? 'text-[#ef4444]' : 'text-[#34322d]'}`}
+        className="flex w-full items-center gap-3 py-2 cursor-pointer transition-opacity duration-[180ms] ease-out hover:opacity-[0.92]"
       >
-        <Terminal className="size-[14px] shrink-0 text-[#858481]" />
-        <span className="flex-1 truncate font-mono text-[13px]">
-          {chip.label}
-          {chip.sessionName ? <span className="ml-2 text-[11px] text-[#858481]">[{chip.sessionName}]</span> : null}
-        </span>
-        <span className={`shrink-0 text-[11px] ${isRunning ? 'animate-pulse text-[#858481]' : status === 'started' ? 'text-[#f97316]' : exitCode === 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-          {statusLabel}
-        </span>
-      </button>
-      {isOpen && (
-        <div className="border-t border-border p-4 font-mono text-[13px] leading-relaxed bg-[#f5f5f5]">
-          <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#858481]">
-            <Terminal className="size-3" />
-            <span>$ {chip.command || 'command'}</span>
-            {chip.sessionName ? <span className="ml-auto text-[#858481]/60">session: {chip.sessionName}</span> : null}
-          </div>
-          {chip.ok !== undefined ? (
-            <div className="space-y-1">
-              {stdout ? <pre className="whitespace-pre-wrap text-[#059669]">{stdout}</pre> : null}
-              {stderr ? <pre className="whitespace-pre-wrap text-[#dc2626]/80">{stderr}</pre> : null}
-              {message ? <div className="text-[#34322d]/70">{message}</div> : null}
-              {pid !== undefined ? <div className="text-[11px] text-[#858481]">PID: {pid}</div> : null}
-              {exitCode !== undefined ? (
-                <div className={`pt-1 text-[11px] ${exitCode === 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                  Exit code: {exitCode}
-                </div>
-              ) : null}
-            </div>
-          ) : isRunning ? (
-            <div className="flex items-center gap-2 text-[#858481]">
-              <span className="inline-block size-2 animate-pulse rounded-full bg-[#ffc700]" />
-              Running...
-            </div>
-          ) : (
-            <div className="text-[#858481]">No output</div>
-          )}
+        {/* Terminal Icon */}
+        <svg
+          className="size-[18px] shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#505050"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="4 17 10 11 4 5" />
+          <line x1="13" y1="19" x2="20" y2="19" />
+        </svg>
+
+        {/* Bash title */}
+        <div className="text-[15px] font-medium text-[#474747] shrink-0" style={{ letterSpacing: '-0.01em' }}>
+          Bash
         </div>
-      )}
+
+        {/* Command text */}
+        <div
+          className="flex-1 min-w-0 text-[15px] font-normal text-[#666666] whitespace-nowrap overflow-hidden text-ellipsis"
+          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}
+        >
+          {chip.label || chip.command || 'command'}
+        </div>
+      </button>
+
+      {/* Expanded content area with animation */}
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+          isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div
+            className="pt-2 pb-3 pl-[30px] space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Full command display */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold text-[#858481] uppercase tracking-wider">
+                Command
+              </div>
+              <pre
+                className="text-[13px] text-[#34322d] whitespace-pre-wrap break-all"
+                style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}
+              >
+                {chip.command || chip.label || 'command'}
+              </pre>
+              {chip.sessionName && (
+                <div className="text-[11px] text-[#858481]">
+                  Session: <span className="font-mono">{chip.sessionName}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Output section */}
+            {chip.ok !== undefined ? (
+              <div className="space-y-3">
+                {/* stdout */}
+                {stdout && (
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-semibold text-[#059669] uppercase tracking-wider">
+                      Output
+                    </div>
+                    <pre
+                      className="text-[13px] text-[#059669] whitespace-pre-wrap break-all max-h-[400px] overflow-auto"
+                      style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}
+                    >
+                      {stdout}
+                    </pre>
+                  </div>
+                )}
+
+                {/* message */}
+                {message && (
+                  <div className="text-[13px] text-[#34322d]/70">
+                    {message}
+                  </div>
+                )}
+
+                {/* pid and exit code */}
+                <div className="flex items-center gap-4 text-[11px]">
+                  {pid !== undefined && (
+                    <div className="text-[#858481]">
+                      PID: <span className="font-mono">{pid}</span>
+                    </div>
+                  )}
+                  {exitCode !== undefined && (
+                    <div className={exitCode === 0 ? 'text-[#22c55e] font-semibold' : 'text-[#ef4444] font-semibold'}>
+                      Exit code: <span className="font-mono">{exitCode}</span>
+                    </div>
+                  )}
+                  {status && (
+                    <div className="text-[#858481]">
+                      Status: <span className="font-mono">{status}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : isRunning ? (
+              <div className="flex items-center gap-2 text-[#858481]">
+                <span className="inline-block size-2 animate-pulse rounded-full bg-[#ffc700]" />
+                <span className="text-[13px]">Running...</span>
+              </div>
+            ) : (
+              <div className="text-[13px] text-[#858481]">No output</div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
