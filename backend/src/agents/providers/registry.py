@@ -49,6 +49,13 @@ class ProviderRegistry:
                     default_base_url="https://opencode.ai/zen/v1",
                 )
             ),
+            ProviderType.AIHUBMIX: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.AIHUBMIX,
+                    label="AIHubMix",
+                    default_base_url="https://api.aihubmix.com/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:
