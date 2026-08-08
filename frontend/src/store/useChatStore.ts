@@ -65,7 +65,7 @@ function emptyState() {
 
 const initialState = emptyState()
 
-export const useChatStore = create<ChatState>()((set, get) => ({
+export const useChatStore = create<ChatState>()((set) => ({
   ...initialState,
 
   setStatusLabel: (value) => set({ statusLabel: value }),

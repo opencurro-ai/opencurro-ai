@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MessagesSquare, Search, Server, SquarePen, Terminal, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { MessagesSquare, Search, SquarePen, Terminal, X } from 'lucide-react'
 
 import { killSandbox } from '@/lib/api'
 import { navigate } from '@/lib/router'
-import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store/useChatStore'
 
 interface HistorySidebarProps {
