@@ -9,6 +9,7 @@ class ProviderType(str, Enum):
     GROQ = "groq"
     NVIDIA = "nvidia"
     FIREWORKS = "fireworks"
+    OLLAMA_CLOUD = "ollama_cloud"
 
 
 class ProviderMetadata(BaseModel):

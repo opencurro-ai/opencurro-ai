@@ -1,5 +1,6 @@
 from src.agents.providers.base import LLMProvider
 from src.agents.providers.openai_compatible import OpenAICompatibleProvider
+from src.agents.providers.ollama_cloud import OllamaCloudProvider
 from src.schemas.providers import ProviderMetadata, ProviderType
 
 
@@ -32,6 +33,13 @@ class ProviderRegistry:
                     id=ProviderType.FIREWORKS,
                     label="Fireworks AI",
                     default_base_url="https://api.fireworks.ai/inference/v1",
+                )
+            ),
+            ProviderType.OLLAMA_CLOUD: OllamaCloudProvider(
+                ProviderMetadata(
+                    id=ProviderType.OLLAMA_CLOUD,
+                    label="Ollama Cloud",
+                    default_base_url="https://ollama.com/api/v1",
                 )
             ),
         }
