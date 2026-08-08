@@ -7,12 +7,13 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import { cn } from '@/lib/utils'
 import type { ProviderId } from '@/types/chat'
 
-const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia']
+const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks']
 
 const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string }> = {
   openrouter: { description: 'Access any foundation model', iconClass: 'bg-[rgba(59,130,246,0.12)] text-[#3b82f6]' },
   groq: { description: 'Fast inference API', iconClass: 'bg-[rgba(249,115,22,0.12)] text-[#f97316]' },
   nvidia: { description: 'NVIDIA AI models', iconClass: 'bg-[rgba(16,185,129,0.12)] text-[#10b981]' },
+  fireworks: { description: 'Fast open-source model inference', iconClass: 'bg-[rgba(139,92,246,0.12)] text-[#8b5cf6]' },
 }
 
 export function ModelsTab() {
@@ -63,11 +64,11 @@ export function ModelsTab() {
               className={selectClass}
             >
               <option value="">Select model</option>
-              {modelsByProvider[selectedProvider].map((model) => (
+              {(modelsByProvider[selectedProvider] ?? []).map((model) => (
                 <option key={model.id} value={model.id}>{model.label}</option>
               ))}
             </select>
-            {modelsByProvider[selectedProvider].length === 0 ? (
+            {(modelsByProvider[selectedProvider] ?? []).length === 0 ? (
               <p className="mt-1.5 text-[11px] text-[#858481]">Fetch models with the button below to populate this list.</p>
             ) : null}
           </div>
@@ -107,13 +108,13 @@ export function ModelsTab() {
                   </button>
                 </div>
                 <input
-                  value={providerKeys[provider]}
+                  value={providerKeys[provider] ?? ''}
                   onChange={(event) => setProviderKey(provider, event.target.value)}
                   placeholder={`${provider.toUpperCase()} API key`}
                   className={inputClass}
                 />
                 <input
-                  value={providerBaseUrls[provider]}
+                  value={providerBaseUrls[provider] ?? ''}
                   onChange={(event) => setProviderBaseUrl(provider, event.target.value)}
                   placeholder="Base URL"
                   className={cn(inputClass, 'mt-2')}

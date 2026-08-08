@@ -27,6 +27,13 @@ class ProviderRegistry:
                     default_base_url="https://integrate.api.nvidia.com/v1",
                 )
             ),
+            ProviderType.FIREWORKS: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.FIREWORKS,
+                    label="Fireworks AI",
+                    default_base_url="https://api.fireworks.ai/inference/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:

@@ -48,11 +48,12 @@ function generateId(): string {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      providerKeys: { openrouter: '', groq: '', nvidia: '' },
+      providerKeys: { openrouter: '', groq: '', nvidia: '', fireworks: '' },
       providerBaseUrls: {
         openrouter: 'https://openrouter.ai/api/v1',
         groq: 'https://api.groq.com/openai/v1',
         nvidia: 'https://integrate.api.nvidia.com/v1',
+        fireworks: 'https://api.fireworks.ai/inference/v1',
       },
       selectedProvider: 'openrouter',
       selectedModel: '',
@@ -64,7 +65,7 @@ export const useSettingsStore = create<SettingsState>()(
       searchProvider: 'tavily',
       firecrawlApiKey: '',
       providerCatalog: [],
-      modelsByProvider: { openrouter: [], groq: [], nvidia: [] },
+      modelsByProvider: { openrouter: [], groq: [], nvidia: [], fireworks: [] },
       subAgents: [],
       setProviderKey: (provider, value) => set((state) => ({ providerKeys: { ...state.providerKeys, [provider]: value } })),
       setProviderBaseUrl: (provider, value) => set((state) => ({ providerBaseUrls: { ...state.providerBaseUrls, [provider]: value } })),
@@ -94,6 +95,16 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'novita-agent-settings',
+      merge: (persisted, current) => {
+        const p = persisted as Partial<SettingsState>
+        return {
+          ...current,
+          ...p,
+          providerKeys: { ...current.providerKeys, ...p.providerKeys },
+          providerBaseUrls: { ...current.providerBaseUrls, ...p.providerBaseUrls },
+          modelsByProvider: { ...current.modelsByProvider, ...p.modelsByProvider },
+        }
+      },
       partialize: (state) => ({
         providerKeys: state.providerKeys,
         providerBaseUrls: state.providerBaseUrls,

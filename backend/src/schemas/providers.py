@@ -8,6 +8,7 @@ class ProviderType(str, Enum):
     OPENROUTER = "openrouter"
     GROQ = "groq"
     NVIDIA = "nvidia"
+    FIREWORKS = "fireworks"
 
 
 class ProviderMetadata(BaseModel):
