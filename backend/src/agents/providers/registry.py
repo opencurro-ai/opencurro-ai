@@ -42,6 +42,13 @@ class ProviderRegistry:
                     default_base_url="https://ollama.com/api/v1",
                 )
             ),
+            ProviderType.OPENCODE_ZEN: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.OPENCODE_ZEN,
+                    label="OpenCode Zen",
+                    default_base_url="https://opencode.ai/zen/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:

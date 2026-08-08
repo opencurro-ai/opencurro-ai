@@ -10,6 +10,7 @@ class ProviderType(str, Enum):
     NVIDIA = "nvidia"
     FIREWORKS = "fireworks"
     OLLAMA_CLOUD = "ollama_cloud"
+    OPENCODE_ZEN = "opencode_zen"
 
 
 class ProviderMetadata(BaseModel):

@@ -48,13 +48,14 @@ function generateId(): string {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      providerKeys: { openrouter: '', groq: '', nvidia: '', fireworks: '', ollama_cloud: '' },
+      providerKeys: { openrouter: '', groq: '', nvidia: '', fireworks: '', ollama_cloud: '', opencode_zen: '' },
       providerBaseUrls: {
         openrouter: 'https://openrouter.ai/api/v1',
         groq: 'https://api.groq.com/openai/v1',
         nvidia: 'https://integrate.api.nvidia.com/v1',
         fireworks: 'https://api.fireworks.ai/inference/v1',
         ollama_cloud: 'https://ollama.com/api/v1',
+        opencode_zen: 'https://opencode.ai/zen/v1',
       },
       selectedProvider: 'openrouter',
       selectedModel: '',
@@ -66,7 +67,7 @@ export const useSettingsStore = create<SettingsState>()(
       searchProvider: 'tavily',
       firecrawlApiKey: '',
       providerCatalog: [],
-      modelsByProvider: { openrouter: [], groq: [], nvidia: [], fireworks: [], ollama_cloud: [] },
+      modelsByProvider: { openrouter: [], groq: [], nvidia: [], fireworks: [], ollama_cloud: [], opencode_zen: [] },
       subAgents: [],
       setProviderKey: (provider, value) => set((state) => ({ providerKeys: { ...state.providerKeys, [provider]: value } })),
       setProviderBaseUrl: (provider, value) => set((state) => ({ providerBaseUrls: { ...state.providerBaseUrls, [provider]: value } })),
