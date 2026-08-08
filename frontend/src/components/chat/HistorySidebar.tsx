@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MessagesSquare, Search, Server, SquarePen, Terminal, Trash2, X } from 'lucide-react'
+import { MessagesSquare, Search, Server, SquarePen, Terminal, X } from 'lucide-react'
 
 import { killSandbox } from '@/lib/api'
-import { navigate, sessionPath } from '@/lib/router'
+import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store/useChatStore'
-import type { ChatRecord } from '@/types/chat'
 
 interface HistorySidebarProps {
   onClose: () => void
@@ -14,66 +13,18 @@ interface HistorySidebarProps {
 }
 
 interface ContextMenuState {
-  chatId: string
   x: number
   y: number
-}
-
-const GROUP_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older'] as const
-type ChatGroup = (typeof GROUP_ORDER)[number]
-
-const DAY_MS = 86_400_000
-
-function startOfDay(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-}
-
-function getChatGroup(isoDate: string): ChatGroup {
-  const date = new Date(isoDate)
-  if (Number.isNaN(date.getTime())) return 'Older'
-  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(date)) / DAY_MS)
-  if (diffDays <= 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return 'Previous 7 days'
-  return 'Older'
-}
-
-function getPreview(chat: ChatRecord): string {
-  const lastMessage = chat.messages[chat.messages.length - 1]
-  return lastMessage?.content.trim() || 'No messages yet'
 }
 
 const CONTEXT_MENU = { width: 190, height: 120 } as const
 
 export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySidebarProps) {
-  const { activeChatId, chats, deleteChat, setActiveChat, isStreaming, streamingChatId } = useChatStore()
-  const currentChatId = activeChatId || chats[0]?.id
+  const { isStreaming, chatId } = useChatStore()
   const [query, setQuery] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [killingId, setKillingId] = useState<string | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-  const groupedChats = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    const visible = (normalizedQuery
-      ? chats.filter((chat) =>
-          chat.title.toLowerCase().includes(normalizedQuery)
-          || getPreview(chat).toLowerCase().includes(normalizedQuery),
-        )
-      : [...chats]
-    ).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-
-    const groups = new Map<ChatGroup, ChatRecord[]>()
-    for (const chat of visible) {
-      const group = getChatGroup(chat.updatedAt)
-      const bucket = groups.get(group)
-      if (bucket) bucket.push(chat)
-      else groups.set(group, [chat])
-    }
-    return GROUP_ORDER
-      .filter((group) => groups.has(group))
-      .map((group) => ({ group, items: groups.get(group) ?? [] }))
-  }, [chats, query])
 
   useEffect(() => {
     const handleClick = () => setContextMenu(null)
@@ -90,24 +41,23 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
     }
   }, [contextMenu])
 
-  const openContextMenu = useCallback((chatId: string, x: number, y: number) => {
+  const openContextMenu = useCallback((x: number, y: number) => {
     setContextMenu({
-      chatId,
       x: Math.max(8, Math.min(x, window.innerWidth - CONTEXT_MENU.width - 8)),
       y: Math.max(8, Math.min(y, window.innerHeight - CONTEXT_MENU.height - 8)),
     })
   }, [])
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, chatId: string) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
-    openContextMenu(chatId, e.clientX, e.clientY)
+    openContextMenu(e.clientX, e.clientY)
   }, [openContextMenu])
 
-  const handleTouchStart = useCallback((e: React.TouchEvent, chatId: string) => {
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0]
     if (!touch) return
     longPressTimer.current = setTimeout(() => {
-      openContextMenu(chatId, touch.clientX, touch.clientY)
+      openContextMenu(touch.clientX, touch.clientY)
     }, 500)
   }, [openContextMenu])
 
@@ -117,7 +67,7 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
     }
   }, [])
 
-  const handleKillSandbox = useCallback(async (chatId: string) => {
+  const handleKillSandbox = useCallback(async () => {
     setKillingId(chatId)
     setContextMenu(null)
     try {
@@ -127,22 +77,7 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
     } finally {
       setKillingId(null)
     }
-  }, [])
-
-  const handleDeleteChat = useCallback((chatId: string) => {
-    const remaining = chats.filter((chat) => chat.id !== chatId)
-    if (streamingChatId === chatId) {
-      onStop?.()
-    }
-    deleteChat(chatId)
-    if (chatId === currentChatId) {
-      if (remaining.length > 0) {
-        navigate(sessionPath(remaining[0].id))
-      } else {
-        navigate('/')
-      }
-    }
-  }, [chats, currentChatId, deleteChat, onStop, streamingChatId])
+  }, [chatId])
 
   const handleNewChat = useCallback(() => {
     if (isStreaming) {
@@ -152,12 +87,19 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
     onClose()
   }, [isStreaming, onClose, onStop])
 
+  const handleGoToCurrentChat = useCallback(() => {
+    if (isStreaming) {
+      return
+    }
+    navigate('/chat')
+    onClose()
+  }, [isStreaming, onClose])
+
   return (
     <aside className="flex h-full flex-col">
       <div className="flex items-center justify-between px-4 pb-2 pt-4">
         <div className="flex items-baseline gap-2">
-          <h2 className="text-[15px] font-bold text-[#34322d]">Chats</h2>
-          <span className="text-[11px] font-medium text-[#858481]">{chats.length}</span>
+          <h2 className="text-[15px] font-bold text-[#34322d]">Chat</h2>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -202,98 +144,58 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-3">
-        {groupedChats.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <div className="grid size-10 place-items-center rounded-[14px] bg-[rgba(255,199,0,0.1)]">
-              <MessagesSquare className="size-[18px] text-[#b78200]" />
-            </div>
-            <p className="text-[13px] font-medium text-[#34322d]">
-              {query.trim() ? 'No chats match your search' : 'No chats yet'}
-            </p>
-            <p className="text-[11px] text-[#858481]">
-              {query.trim() ? 'Try a different keyword.' : 'Start a new chat to see it here.'}
-            </p>
-            {!query.trim() ? (
-              <button
-                onClick={handleNewChat}
-                className="mt-1 inline-flex items-center gap-1.5 rounded-[10px] bg-[#ffc700] px-3 py-2 text-[12px] font-semibold text-[#34322d] transition-all hover:brightness-[1.03] active:scale-[0.97]"
-              >
-                <SquarePen className="size-[14px]" />
-                New chat
-              </button>
-            ) : null}
+        <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+          <div className="grid size-10 place-items-center rounded-[14px] bg-[rgba(255,199,0,0.1)]">
+            <MessagesSquare className="size-[18px] text-[#b78200]" />
           </div>
-        ) : (
-          groupedChats.map(({ group, items }, groupIndex) => (
-            <section key={group}>
-              <h3
-                className={cn(
-                  'px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#858481]/70',
-                  groupIndex === 0 ? 'pt-1' : 'pt-4',
-                )}
-              >
-                {group}
-              </h3>
-              <div className="space-y-[2px]">
-                {items.map((chat) => {
-                  const isActive = chat.id === currentChatId
-                  const isChatStreaming = isStreaming && streamingChatId === chat.id
-                  const sandboxId = chat.sandbox?.sandboxId
-                  return (
-                    <div
-                      key={chat.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-current={isActive || undefined}
-                      className={cn(
-                        'relative flex cursor-pointer items-center gap-2.5 rounded-[12px] border border-transparent px-3 py-2.5 transition-colors',
-                        isActive
-                          ? 'bg-[rgba(255,199,0,0.1)]'
-                          : 'hover:bg-[rgba(55,53,47,0.04)]',
-                      )}
-                      onClick={() => { setActiveChat(chat.id); navigate(sessionPath(chat.id)); onClose() }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          setActiveChat(chat.id)
-                          navigate(sessionPath(chat.id))
-                          onClose()
-                        }
-                      }}
-                      onContextMenu={(e) => handleContextMenu(e, chat.id)}
-                      onTouchStart={(e) => handleTouchStart(e, chat.id)}
-                      onTouchEnd={handleTouchEnd}
-                      onTouchMove={handleTouchEnd}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          {isChatStreaming ? (
-                            <span className="size-1.5 shrink-0 rounded-full bg-[#ffc700] animate-[pulse_1.4s_infinite_ease-in-out]" />
-                          ) : null}
-                          <span className="truncate text-[13px] font-medium text-[#34322d]">
-                            {chat.title || 'New chat'}
-                          </span>
-                        </div>
-                        <div className="mt-[3px] truncate text-[11px] leading-[1.45] text-[#858481]">
-                          {getPreview(chat)}
-                        </div>
-                      </div>
-                      {sandboxId ? (
-                        <span
-                          className="shrink-0 text-[#858481]/50"
-                          title={`Sandbox: ${sandboxId}`}
-                          aria-label={`Sandbox ${sandboxId}`}
-                        >
-                          <Server className="size-[12px]" />
-                        </span>
-                      ) : null}
-                    </div>
-                  )
-                })}
+          <p className="text-[13px] font-medium text-[#34322d]">
+            {query.trim() ? 'No chats match your search' : 'Current session'}
+          </p>
+          <p className="text-[11px] text-[#858481]">
+            {query.trim() ? 'Try a different keyword.' : 'Chat history is not persisted.'}
+          </p>
+
+          <div className="mt-2 space-y-[2px] w-full">
+            <div
+              role="button"
+              tabIndex={0}
+              className="relative flex cursor-pointer items-center gap-2.5 rounded-[12px] border border-transparent px-3 py-2.5 transition-colors bg-[rgba(255,199,0,0.1)]"
+              onClick={handleGoToCurrentChat}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleGoToCurrentChat()
+                }
+              }}
+              onContextMenu={handleContextMenu}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              onTouchMove={handleTouchEnd}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  {isStreaming ? (
+                    <span className="size-1.5 shrink-0 rounded-full bg-[#ffc700] animate-[pulse_1.4s_infinite_ease-in-out]" />
+                  ) : null}
+                  <span className="truncate text-[13px] font-medium text-[#34322d]">
+                    Active session
+                  </span>
+                </div>
+                <div className="mt-[3px] truncate text-[11px] leading-[1.45] text-[#858481]">
+                  Ephemeral — cleared on refresh
+                </div>
               </div>
-            </section>
-          ))
-        )}
+            </div>
+          </div>
+
+          <button
+            onClick={handleNewChat}
+            className="mt-1 inline-flex items-center gap-1.5 rounded-[10px] bg-[#ffc700] px-3 py-2 text-[12px] font-semibold text-[#34322d] transition-all hover:brightness-[1.03] active:scale-[0.97]"
+          >
+            <SquarePen className="size-[14px]" />
+            New chat
+          </button>
+        </div>
       </div>
 
       {contextMenu && (
@@ -305,30 +207,18 @@ export function HistorySidebar({ onClose, onStop, hideClose = false }: HistorySi
           }}
         >
           <div className="px-3 py-2 text-[11px] text-[#858481] font-medium border-b border-[#eee]">
-            Chat Actions
+            Session Actions
           </div>
           <button
             className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[#34322d] hover:bg-[rgba(55,53,47,0.04)] transition disabled:opacity-40"
-            disabled={killingId === contextMenu.chatId}
+            disabled={killingId === chatId}
             onClick={(e) => {
               e.stopPropagation()
-              handleKillSandbox(contextMenu.chatId)
+              handleKillSandbox()
             }}
           >
             <Terminal className="size-[14px] text-[#858481]" />
-            <span>{killingId === contextMenu.chatId ? 'Killing...' : 'Kill Sandbox'}</span>
-          </button>
-          <button
-            className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[#ef4444] hover:bg-[rgba(239,68,68,0.04)] transition"
-            onClick={(e) => {
-              e.stopPropagation()
-              const id = contextMenu.chatId
-              setContextMenu(null)
-              handleDeleteChat(id)
-            }}
-          >
-            <Trash2 className="size-[14px]" />
-            <span>Delete Chat</span>
+            <span>{killingId === chatId ? 'Killing...' : 'Kill Sandbox'}</span>
           </button>
         </div>
       )}

@@ -8,13 +8,9 @@ import { consumePendingPrompt } from '@/lib/pendingPrompt'
 import { useChatStore } from '@/store/useChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 
-interface ChatPageProps {
-  sessionId: string
-}
-
-export function ChatPage({ sessionId }: ChatPageProps) {
+export function ChatPage() {
   const { sendMessage, stopStreaming } = useAgentChat()
-  const { activeChatId, chats, createChatWithId, isStreaming, iterationCurrent, iterationLimit, setActiveChat, streamingChatId } = useChatStore()
+  const { chatId, title, messages, sandbox, eventHistory, modelHistory, isStreaming, iterationCurrent, iterationLimit, streamingChatId } = useChatStore()
   const { novitaApiKey, providerKeys, selectedModel, selectedProvider } = useSettingsStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [error, setError] = useState('')
@@ -35,13 +31,6 @@ export function ChatPage({ sessionId }: ChatPageProps) {
   }, [sendMessage])
 
   useEffect(() => {
-    if (!sessionId) return
-    const chat = chats.find((item) => item.id === sessionId)
-    if (!chat) {
-      createChatWithId(sessionId)
-      return
-    }
-    setActiveChat(sessionId)
     if (pendingSentRef.current) return
     const prompt = consumePendingPrompt()
     if (prompt) {
@@ -49,16 +38,20 @@ export function ChatPage({ sessionId }: ChatPageProps) {
       void handleSendMessage(prompt)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId])
+  }, [])
 
-  const activeChat = useMemo(
-    () => chats.find((chat) => chat.id === sessionId) ?? chats.find((chat) => chat.id === activeChatId) ?? chats[0],
-    [activeChatId, chats, sessionId],
-  )
+  const activeChat = useMemo(() => ({
+    id: chatId,
+    title,
+    messages,
+    sandbox,
+    eventHistory,
+    modelHistory,
+    createdAt: '',
+    updatedAt: '',
+  }), [chatId, title, messages, sandbox, eventHistory, modelHistory])
 
-  const activeChatIsStreaming = isStreaming && streamingChatId === activeChat?.id
-
-  if (!activeChat) return null
+  const activeChatIsStreaming = isStreaming && streamingChatId === chatId
 
   return (
     <div className="app h-dvh w-dvw flex overflow-hidden" style={{ background: '#f8f8f7' }}>

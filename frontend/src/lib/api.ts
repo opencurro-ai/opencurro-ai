@@ -61,14 +61,6 @@ export async function fetchModels(provider: ProviderId, apiKey: string, baseUrl?
   return payload.models as ProviderModel[]
 }
 
-export async function ensureChatSession(chatId: string, history: BackendMessage[]): Promise<void> {
-  await fetch(`${env.backendUrl}/api/chat/session`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, history }),
-  })
-}
-
 export async function abortChat(chatId: string): Promise<void> {
   await fetch(`${env.backendUrl}/api/chat/abort/${encodeURIComponent(chatId)}`, {
     method: 'POST',

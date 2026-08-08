@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-import { abortChat, ensureChatSession, streamChat } from '@/lib/api'
+import { abortChat, streamChat } from '@/lib/api'
 import type { StreamConnection } from '@/lib/api'
 import { useChatStore } from '@/store/useChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
@@ -15,7 +15,7 @@ export function useAgentChat() {
   const makeHandler = useCallback(
     (chatId: string) => {
       return (event: string, data: Record<string, unknown>) => {
-        store.addEvent(chatId, { type: event, data })
+        store.addEvent({ type: event, data })
         if (event === 'status') {
           const label = typeof data.label === 'string' ? data.label : 'Working...'
           store.setStatusLabel(label)
@@ -30,7 +30,7 @@ export function useAgentChat() {
           const provider = typeof data.provider === 'string' ? data.provider : 'novita'
           const rootPath = typeof data.root_path === 'string' ? data.root_path : '/home/user'
           const codeServerUrl = typeof data.code_server_url === 'string' ? data.code_server_url : undefined
-          store.setSandboxInfo(chatId, { sandboxId, provider, rootPath, codeServerUrl })
+          store.setSandboxInfo({ sandboxId, provider, rootPath, codeServerUrl })
           store.setStatusLabel('Thinking...')
         }
         if (event === 'tool_call') {
@@ -38,7 +38,7 @@ export function useAgentChat() {
           const sessionNames = Array.isArray(dataSessionNames) ? dataSessionNames.filter((s: unknown): s is string => typeof s === 'string') : undefined
           const toolName = typeof data.name === 'string' ? data.name : 'tool'
           const chipSession = typeof data.session === 'string' ? data.session : (typeof data.session_name === 'string' ? data.session_name : undefined)
-          store.addToolChip(chatId, {
+          store.addToolChip({
             id: createId('tool'),
             name: toolName,
             label: typeof data.label === 'string' ? data.label : 'Tool activity',
@@ -65,28 +65,28 @@ export function useAgentChat() {
           }
         }
         if (event === 'tool_result') {
-          store.updateLastToolChip(chatId, {
+          store.updateLastToolChip({
             ok: typeof data.ok === 'boolean' ? data.ok : undefined,
             resultData: typeof data.result === 'object' && data.result !== null ? data.result as Record<string, unknown> : undefined,
           })
         }
         if (event === 'reasoning') {
           const token = typeof data.value === 'string' ? data.value : ''
-          store.appendAssistantReasoning(chatId, token)
+          store.appendAssistantReasoning(token)
         }
         if (event === 'token') {
           const token = typeof data.value === 'string' ? data.value : ''
-          store.appendAssistantToken(chatId, token)
+          store.appendAssistantToken(token)
         }
         if (event === 'message_complete') {
           const finalContent = typeof data.content === 'string' ? data.content : ''
           const finalReasoning = typeof data.reasoning === 'string' ? data.reasoning : undefined
-          store.finalizeAssistantMessage(chatId, finalContent, finalReasoning)
+          store.finalizeAssistantMessage(finalContent, finalReasoning)
           store.setStatusLabel('Ready')
         }
         if (event === 'error') {
           const message = typeof data.message === 'string' ? data.message : 'Unknown error'
-          store.markAssistantError(chatId, message)
+          store.markAssistantError(message)
           store.setStatusLabel('Issue detected')
           if (store.streamingChatId === chatId) {
             store.setStreamingChatId(null)
@@ -184,20 +184,19 @@ export function useAgentChat() {
     if (!store.streamingChatId) return
     const chatId = store.streamingChatId
     const handler = makeHandler(chatId)
-    const sinceId = store.lastEventId[chatId] ?? -1
+    const sinceId = -1
     const payload = getStreamPayload(chatId, undefined, undefined, sinceId)
 
     const conn = streamChat(
       payload,
       handler,
-      (eventId) => store.setLastEventId(chatId, eventId),
     )
     connectionRef.current = conn
 
     conn.promise.catch((error) => {
       if (store.streamingChatId !== chatId) return
       const message = error instanceof Error ? error.message : 'Unknown error'
-      store.markAssistantError(chatId, message)
+      store.markAssistantError(message)
       store.setStreamingChatId(null)
       store.setStreaming(false)
     })
@@ -212,7 +211,7 @@ export function useAgentChat() {
   }, [])
 
   const sendMessage = useCallback(async (content: string) => {
-    const chatId = store.activeChatId || store.chats[0]?.id
+    const chatId = store.chatId
     if (!chatId) {
       throw new Error('No active chat available.')
     }
@@ -227,11 +226,6 @@ export function useAgentChat() {
       throw new Error('Add a Novita sandbox API key first.')
     }
 
-    const chat = store.chats.find((item) => item.id === chatId)
-    if (!chat) {
-      throw new Error('Chat not found.')
-    }
-
     if (connectionRef.current) {
       connectionRef.current.abort()
       connectionRef.current = null
@@ -244,30 +238,24 @@ export function useAgentChat() {
       } catch {
         // The server session may already be gone
       }
-      store.setLastMessageIdle(previousStream)
+      store.setLastMessageIdle()
       store.setStreamingChatId(null)
     }
 
-    store.addUserMessage(chatId, content)
-    store.addEvent(chatId, { type: 'user_message', content })
-    const assistantId = store.startAssistantMessage(chatId)
-    void assistantId
+    store.addUserMessage(content)
+    store.addEvent({ type: 'user_message', content })
+    store.startAssistantMessage()
     store.setStatusLabel('Thinking...')
     store.setStreaming(true)
     store.setStreamingChatId(chatId)
     store.setIteration(0, 1000)
-    store.setLastEventId(chatId, -1)
-
-    const nextHistory = [...chat.modelHistory, { role: 'user' as const, content }]
-    await ensureChatSession(chatId, nextHistory)
 
     const handler = makeHandler(chatId)
-    const payload = getStreamPayload(chatId, content, chat.modelHistory, -1)
+    const payload = getStreamPayload(chatId, content, store.modelHistory, -1)
 
     const conn = streamChat(
       payload,
       handler,
-      (eventId) => store.setLastEventId(chatId, eventId),
     )
     connectionRef.current = conn
 
@@ -275,7 +263,7 @@ export function useAgentChat() {
       await conn.promise
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      store.markAssistantError(chatId, message)
+      store.markAssistantError(message)
       store.setStreamingChatId(null)
       store.setStreaming(false)
       store.setStatusLabel('Issue detected')
@@ -289,7 +277,7 @@ export function useAgentChat() {
   ])
 
   const stopStreaming = useCallback(async () => {
-    const chatId = store.streamingChatId ?? store.activeChatId
+    const chatId = store.streamingChatId ?? store.chatId
     if (connectionRef.current) {
       connectionRef.current.abort()
       connectionRef.current = null
@@ -299,7 +287,7 @@ export function useAgentChat() {
     store.setStatusLabel('Stopped')
     store.setIteration(0, 1000)
     if (chatId) {
-      store.setLastMessageIdle(chatId)
+      store.setLastMessageIdle()
       try {
         await abortChat(chatId)
       } catch {

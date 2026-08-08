@@ -24,7 +24,7 @@ function App() {
   }, [route])
 
   if (route.name === 'chat') {
-    return <ChatPage sessionId={route.sessionId} />
+    return <ChatPage />
   }
 
   if (route.name === 'sub-agents') {

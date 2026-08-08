@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 export type AppRoute =
   | { name: 'home' }
-  | { name: 'chat'; sessionId: string }
+  | { name: 'chat' }
   | { name: 'sub-agents' }
 
 const listeners = new Set<() => void>()
@@ -28,22 +28,10 @@ export function parseRoute(pathname: string): AppRoute {
   if (pathname === '/sub-agents') {
     return { name: 'sub-agents' }
   }
-  const match = pathname.match(/^\/chat\/session=([^/]+)\/?$/)
-  if (match) {
-    try {
-      const sessionId = decodeURIComponent(match[1])
-      if (sessionId) {
-        return { name: 'chat', sessionId }
-      }
-    } catch {
-      // Invalid percent-encoding — fall through to home
-    }
+  if (pathname === '/chat') {
+    return { name: 'chat' }
   }
   return { name: 'home' }
-}
-
-export function sessionPath(sessionId: string): string {
-  return `/chat/session=${encodeURIComponent(sessionId)}`
 }
 
 export function navigate(path: string, replace = false): void {

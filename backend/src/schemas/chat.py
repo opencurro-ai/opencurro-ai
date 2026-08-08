@@ -21,17 +21,6 @@ class ChatMessage(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class ChatSessionCreateRequest(BaseModel):
-    chat_id: str = Field(min_length=1)
-    history: list[ChatMessage] = Field(default_factory=list)
-
-
-class ChatSessionResponse(BaseModel):
-    chat_id: str
-    message_count: int
-    has_sandbox: bool
-
-
 class ChatStreamRequest(BaseModel):
     chat_id: str = Field(min_length=1)
     user_message: str | None = None

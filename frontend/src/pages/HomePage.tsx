@@ -4,12 +4,12 @@ import { ArrowUp, TriangleAlert } from 'lucide-react'
 import { SettingsModal } from '@/components/settings/SettingsModal'
 import { NavigationRail } from '@/components/sidebar/NavigationRail'
 import { setPendingPrompt } from '@/lib/pendingPrompt'
-import { navigate, sessionPath } from '@/lib/router'
+import { navigate } from '@/lib/router'
 import { useChatStore } from '@/store/useChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 
 export function HomePage() {
-  const { createChat } = useChatStore()
+  const { resetChat } = useChatStore()
   const { novitaApiKey, providerKeys, selectedModel, selectedProvider } = useSettingsStore()
   const [prompt, setPrompt] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -37,9 +37,9 @@ export function HomePage() {
     }
     setSubmitting(true)
     try {
-      const chatId = createChat()
+      resetChat()
       setPendingPrompt(value)
-      navigate(sessionPath(chatId))
+      navigate('/chat')
     } catch {
       setSubmitting(false)
     }
