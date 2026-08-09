@@ -63,6 +63,13 @@ class ProviderRegistry:
                     default_base_url="https://openai.blueclaw.network/v1",
                 )
             ),
+            ProviderType.REQUESTY: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.REQUESTY,
+                    label="Requesty",
+                    default_base_url="https://router.requesty.ai/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:
