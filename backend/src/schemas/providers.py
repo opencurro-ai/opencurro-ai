@@ -15,6 +15,7 @@ class ProviderType(str, Enum):
     BLUECLAW = "blueclaw"
     REQUESTY = "requesty"
     UNOROUTER = "unorouter"
+    VERCEL_AI_GATEWAY = "vercel_ai_gateway"
 
 
 class ProviderMetadata(BaseModel):
