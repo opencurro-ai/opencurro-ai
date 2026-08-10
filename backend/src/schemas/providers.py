@@ -14,6 +14,7 @@ class ProviderType(str, Enum):
     AIHUBMIX = "aihubmix"
     BLUECLAW = "blueclaw"
     REQUESTY = "requesty"
+    UNOROUTER = "unorouter"
 
 
 class ProviderMetadata(BaseModel):
