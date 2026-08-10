@@ -77,6 +77,13 @@ class ProviderRegistry:
                     default_base_url="https://api.unorouter.com/v1",
                 )
             ),
+            ProviderType.VERCEL_AI_GATEWAY: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.VERCEL_AI_GATEWAY,
+                    label="Vercel AI Gateway",
+                    default_base_url="https://ai-gateway.vercel.sh/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:
