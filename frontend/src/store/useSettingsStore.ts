@@ -48,7 +48,7 @@ function generateId(): string {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      providerKeys: { openrouter: '', groq: '', nvidia: '', fireworks: '', ollama_cloud: '', opencode_zen: '', aihubmix: '', blueclaw: '', requesty: '' },
+      providerKeys: { openrouter: '', groq: '', nvidia: '', fireworks: '', ollama_cloud: '', opencode_zen: '', aihubmix: '', blueclaw: '', requesty: '', unorouter: '' },
       providerBaseUrls: {
         openrouter: 'https://openrouter.ai/api/v1',
         groq: 'https://api.groq.com/openai/v1',
@@ -59,6 +59,7 @@ export const useSettingsStore = create<SettingsState>()(
         aihubmix: 'https://api.aihubmix.com/v1',
         blueclaw: 'https://openai.blueclaw.network/v1',
         requesty: 'https://router.requesty.ai/v1',
+        unorouter: 'https://api.unorouter.com/v1',
       },
       selectedProvider: 'openrouter',
       selectedModel: '',
@@ -70,7 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
       searchProvider: 'tavily',
       firecrawlApiKey: '',
       providerCatalog: [],
-      modelsByProvider: { openrouter: [], groq: [], nvidia: [], fireworks: [], ollama_cloud: [], opencode_zen: [], aihubmix: [], blueclaw: [], requesty: [] },
+      modelsByProvider: { openrouter: [], groq: [], nvidia: [], fireworks: [], ollama_cloud: [], opencode_zen: [], aihubmix: [], blueclaw: [], requesty: [], unorouter: [] },
       subAgents: [],
       setProviderKey: (provider, value) => set((state) => ({ providerKeys: { ...state.providerKeys, [provider]: value } })),
       setProviderBaseUrl: (provider, value) => set((state) => ({ providerBaseUrls: { ...state.providerBaseUrls, [provider]: value } })),

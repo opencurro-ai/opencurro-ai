@@ -70,6 +70,13 @@ class ProviderRegistry:
                     default_base_url="https://router.requesty.ai/v1",
                 )
             ),
+            ProviderType.UNOROUTER: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.UNOROUTER,
+                    label="UnoRouter",
+                    default_base_url="https://api.unorouter.com/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:
