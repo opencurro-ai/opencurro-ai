@@ -1,4 +1,5 @@
 from src.agents.providers.base import LLMProvider
+from src.agents.providers.cohere import CohereProvider
 from src.agents.providers.openai_compatible import OpenAICompatibleProvider
 from src.agents.providers.ollama_cloud import OllamaCloudProvider
 from src.schemas.providers import ProviderMetadata, ProviderType
@@ -89,6 +90,27 @@ class ProviderRegistry:
                     id=ProviderType.ZENMUX,
                     label="ZenMux",
                     default_base_url="https://zenmux.ai/api/v1",
+                )
+            ),
+            ProviderType.KILO_CODE: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.KILO_CODE,
+                    label="Kilo Code",
+                    default_base_url="https://api.kilo.ai/api/gateway",
+                )
+            ),
+            ProviderType.CHUTES: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.CHUTES,
+                    label="Chutes",
+                    default_base_url="https://llm.chutes.ai/v1",
+                )
+            ),
+            ProviderType.COHERE: CohereProvider(
+                ProviderMetadata(
+                    id=ProviderType.COHERE,
+                    label="Cohere",
+                    default_base_url="https://api.cohere.ai/compatibility/v1",
                 )
             ),
         }

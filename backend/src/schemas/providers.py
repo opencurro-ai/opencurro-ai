@@ -17,6 +17,9 @@ class ProviderType(str, Enum):
     UNOROUTER = "unorouter"
     VERCEL_AI_GATEWAY = "vercel_ai_gateway"
     ZENMUX = "zenmux"
+    KILO_CODE = "kilo_code"
+    CHUTES = "chutes"
+    COHERE = "cohere"
 
 
 class ProviderMetadata(BaseModel):

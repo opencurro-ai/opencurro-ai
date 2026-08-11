@@ -7,7 +7,7 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import { cn } from '@/lib/utils'
 import type { ProviderId } from '@/types/chat'
 
-const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks', 'ollama_cloud', 'opencode_zen', 'aihubmix', 'blueclaw', 'requesty', 'unorouter', 'vercel_ai_gateway', 'zenmux']
+const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks', 'ollama_cloud', 'opencode_zen', 'aihubmix', 'blueclaw', 'requesty', 'unorouter', 'vercel_ai_gateway', 'zenmux', 'kilo_code', 'chutes', 'cohere']
 
 const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string }> = {
   openrouter: { description: 'Access any foundation model', iconClass: 'bg-[rgba(59,130,246,0.12)] text-[#3b82f6]' },
@@ -22,6 +22,9 @@ const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string
   unorouter: { description: 'One unified API key for 297+ AI models', iconClass: 'bg-[rgba(217,70,239,0.12)] text-[#d946ef]' },
   vercel_ai_gateway: { description: 'Unified OpenAI-compatible gateway to 275+ models', iconClass: 'bg-[rgba(113,113,122,0.12)] text-[#52525b]' },
   zenmux: { description: 'Unified API for 100+ AI models with built-in failover', iconClass: 'bg-[rgba(244,114,182,0.12)] text-[#f472b6]' },
+  kilo_code: { description: '500+ models, zero markup, agent-ready gateway', iconClass: 'bg-[rgba(251,191,36,0.12)] text-[#fbbf24]' },
+  chutes: { description: 'Decentralized serverless AI inference platform', iconClass: 'bg-[rgba(99,102,241,0.12)] text-[#6366f1]' },
+  cohere: { description: 'Command models with tool use and structured outputs', iconClass: 'bg-[rgba(45,120,104,0.12)] text-[#2d7868]' },
 }
 
 export function ModelsTab() {
