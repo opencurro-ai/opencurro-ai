@@ -20,6 +20,10 @@ class ProviderType(str, Enum):
     KILO_CODE = "kilo_code"
     CHUTES = "chutes"
     COHERE = "cohere"
+    MISTRAL = "mistral"
+    CEREBRAS = "cerebras"
+    SAMBANOVA = "sambanova"
+    HUGGINGFACE = "huggingface"
 
 
 class ProviderMetadata(BaseModel):
