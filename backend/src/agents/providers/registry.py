@@ -141,6 +141,27 @@ class ProviderRegistry:
                     default_base_url="https://router.huggingface.co/v1",
                 )
             ),
+            ProviderType.POLLINATIONS: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.POLLINATIONS,
+                    label="Pollinations AI",
+                    default_base_url="https://gen.pollinations.ai/v1",
+                )
+            ),
+            ProviderType.Z_AI: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.Z_AI,
+                    label="Z.ai (Zhipu AI)",
+                    default_base_url="https://open.bigmodel.cn/api/paas/v4/",
+                )
+            ),
+            ProviderType.SILICONFLOW: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.SILICONFLOW,
+                    label="SiliconFlow",
+                    default_base_url="https://api.siliconflow.com/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:

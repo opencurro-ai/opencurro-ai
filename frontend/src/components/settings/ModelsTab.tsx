@@ -7,7 +7,7 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import { cn } from '@/lib/utils'
 import type { ProviderId } from '@/types/chat'
 
-const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks', 'ollama_cloud', 'opencode_zen', 'aihubmix', 'blueclaw', 'requesty', 'unorouter', 'vercel_ai_gateway', 'zenmux', 'kilo_code', 'chutes', 'cohere', 'mistral', 'cerebras', 'sambanova', 'huggingface']
+const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks', 'ollama_cloud', 'opencode_zen', 'aihubmix', 'blueclaw', 'requesty', 'unorouter', 'vercel_ai_gateway', 'zenmux', 'kilo_code', 'chutes', 'cohere', 'mistral', 'cerebras', 'sambanova', 'huggingface', 'pollinations', 'z_ai', 'siliconflow']
 
 const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string }> = {
   openrouter: { description: 'Access any foundation model', iconClass: 'bg-[rgba(59,130,246,0.12)] text-[#3b82f6]' },
@@ -29,6 +29,9 @@ const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string
   cerebras: { description: 'World\'s fastest AI inference with wafer-scale engines', iconClass: 'bg-[rgba(236,72,72,0.12)] text-[#ec4848]' },
   sambanova: { description: 'Enterprise-grade models on reconfigurable dataflow architecture', iconClass: 'bg-[rgba(0,168,98,0.12)] text-[#00a862]' },
   huggingface: { description: 'Community models via Inference Providers router', iconClass: 'bg-[rgba(255,156,0,0.12)] text-[#ff9c00]' },
+  pollinations: { description: 'Free & open-source Gen-AI platform with 500+ projects', iconClass: 'bg-[rgba(236,72,153,0.12)] text-[#ec4899]' },
+  z_ai: { description: 'Zhipu AI GLM models with 1M context window', iconClass: 'bg-[rgba(59,130,246,0.12)] text-[#3b82f6]' },
+  siliconflow: { description: '200+ optimized LLMs & multimodal models, one API', iconClass: 'bg-[rgba(34,197,94,0.12)] text-[#22c55e]' },
 }
 
 export function ModelsTab() {
