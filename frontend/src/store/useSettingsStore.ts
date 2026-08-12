@@ -48,7 +48,7 @@ function generateId(): string {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-       providerKeys: { openrouter: '', groq: '', nvidia: '', fireworks: '', ollama_cloud: '', opencode_zen: '', aihubmix: '', blueclaw: '', requesty: '', unorouter: '', vercel_ai_gateway: '', zenmux: '', kilo_code: '', chutes: '', cohere: '', mistral: '', cerebras: '', sambanova: '', huggingface: '', pollinations: '', z_ai: '', siliconflow: '' },
+       providerKeys: { openrouter: '', groq: '', nvidia: '', fireworks: '', ollama_cloud: '', opencode_zen: '', aihubmix: '', blueclaw: '', requesty: '', unorouter: '', vercel_ai_gateway: '', zenmux: '', kilo_code: '', chutes: '', cohere: '', mistral: '', cerebras: '', sambanova: '', huggingface: '', pollinations: '', z_ai: '', siliconflow: '', airforce: '', inceptionlabs: '', deepseek: '', routeway: '', opentyphoon: '', sarvam: '', sealion: '', openadapter: '' },
       providerBaseUrls: {
         openrouter: 'https://openrouter.ai/api/v1',
         groq: 'https://api.groq.com/openai/v1',
@@ -72,6 +72,14 @@ export const useSettingsStore = create<SettingsState>()(
         pollinations: 'https://gen.pollinations.ai/v1',
         z_ai: 'https://open.bigmodel.cn/api/paas/v4/',
         siliconflow: 'https://api.siliconflow.com/v1',
+        airforce: 'https://api.airforce/v1',
+        inceptionlabs: 'https://api.inceptionlabs.ai/v1',
+        deepseek: 'https://api.deepseek.com/v1',
+        routeway: 'https://api.routeway.ai/v1',
+        opentyphoon: 'https://api.opentyphoon.ai/v1',
+        sarvam: 'https://api.sarvam.ai/v1',
+        sealion: 'https://api.sea-lion.ai/v1',
+        openadapter: 'https://api.openadapter.in/v1',
       },
       selectedProvider: 'openrouter',
       selectedModel: '',
@@ -83,7 +91,7 @@ export const useSettingsStore = create<SettingsState>()(
       searchProvider: 'tavily',
       firecrawlApiKey: '',
       providerCatalog: [],
-      modelsByProvider: { openrouter: [], groq: [], nvidia: [], fireworks: [], ollama_cloud: [], opencode_zen: [], aihubmix: [], blueclaw: [], requesty: [], unorouter: [], vercel_ai_gateway: [], zenmux: [], kilo_code: [], chutes: [], cohere: [], mistral: [], cerebras: [], sambanova: [], huggingface: [], pollinations: [], z_ai: [], siliconflow: [] },
+      modelsByProvider: { openrouter: [], groq: [], nvidia: [], fireworks: [], ollama_cloud: [], opencode_zen: [], aihubmix: [], blueclaw: [], requesty: [], unorouter: [], vercel_ai_gateway: [], zenmux: [], kilo_code: [], chutes: [], cohere: [], mistral: [], cerebras: [], sambanova: [], huggingface: [], pollinations: [], z_ai: [], siliconflow: [], airforce: [], inceptionlabs: [], deepseek: [], routeway: [], opentyphoon: [], sarvam: [], sealion: [], openadapter: [] },
       subAgents: [],
       setProviderKey: (provider, value) => set((state) => ({ providerKeys: { ...state.providerKeys, [provider]: value } })),
       setProviderBaseUrl: (provider, value) => set((state) => ({ providerBaseUrls: { ...state.providerBaseUrls, [provider]: value } })),
