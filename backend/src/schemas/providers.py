@@ -24,6 +24,9 @@ class ProviderType(str, Enum):
     CEREBRAS = "cerebras"
     SAMBANOVA = "sambanova"
     HUGGINGFACE = "huggingface"
+    POLLINATIONS = "pollinations"
+    Z_AI = "z_ai"
+    SILICONFLOW = "siliconflow"
 
 
 class ProviderMetadata(BaseModel):
