@@ -162,6 +162,62 @@ class ProviderRegistry:
                     default_base_url="https://api.siliconflow.com/v1",
                 )
             ),
+            ProviderType.AIRFORCE: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.AIRFORCE,
+                    label="Airforce AI",
+                    default_base_url="https://api.airforce/v1",
+                )
+            ),
+            ProviderType.INCEPTIONLABS: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.INCEPTIONLABS,
+                    label="Inception Labs",
+                    default_base_url="https://api.inceptionlabs.ai/v1",
+                )
+            ),
+            ProviderType.DEEPSEEK: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.DEEPSEEK,
+                    label="DeepSeek",
+                    default_base_url="https://api.deepseek.com/v1",
+                )
+            ),
+            ProviderType.ROUTEWAY: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.ROUTEWAY,
+                    label="Routeway",
+                    default_base_url="https://api.routeway.ai/v1",
+                )
+            ),
+            ProviderType.OPENTYPHOON: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.OPENTYPHOON,
+                    label="OpenTyphoon",
+                    default_base_url="https://api.opentyphoon.ai/v1",
+                )
+            ),
+            ProviderType.SARVAM: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.SARVAM,
+                    label="Sarvam AI",
+                    default_base_url="https://api.sarvam.ai/v1",
+                )
+            ),
+            ProviderType.SEALION: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.SEALION,
+                    label="SEA-LION",
+                    default_base_url="https://api.sea-lion.ai/v1",
+                )
+            ),
+            ProviderType.OPENADAPTER: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.OPENADAPTER,
+                    label="OpenAdapter",
+                    default_base_url="https://api.openadapter.in/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:

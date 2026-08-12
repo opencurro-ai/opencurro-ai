@@ -21,7 +21,10 @@ class OpenAICompatibleProvider(LLMProvider):
             response.raise_for_status()
             payload = response.json()
 
-        items = payload.get("data", payload)
+        if isinstance(payload, list):
+            items = payload
+        else:
+            items = payload.get("data", payload)
         models: list[ProviderModel] = []
         for item in items:
             model_id = item.get("id") or item.get("name")

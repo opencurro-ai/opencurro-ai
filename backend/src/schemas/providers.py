@@ -27,6 +27,14 @@ class ProviderType(str, Enum):
     POLLINATIONS = "pollinations"
     Z_AI = "z_ai"
     SILICONFLOW = "siliconflow"
+    AIRFORCE = "airforce"
+    INCEPTIONLABS = "inceptionlabs"
+    DEEPSEEK = "deepseek"
+    ROUTEWAY = "routeway"
+    OPENTYPHOON = "opentyphoon"
+    SARVAM = "sarvam"
+    SEALION = "sealion"
+    OPENADAPTER = "openadapter"
 
 
 class ProviderMetadata(BaseModel):

@@ -7,7 +7,7 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import { cn } from '@/lib/utils'
 import type { ProviderId } from '@/types/chat'
 
-const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks', 'ollama_cloud', 'opencode_zen', 'aihubmix', 'blueclaw', 'requesty', 'unorouter', 'vercel_ai_gateway', 'zenmux', 'kilo_code', 'chutes', 'cohere', 'mistral', 'cerebras', 'sambanova', 'huggingface', 'pollinations', 'z_ai', 'siliconflow']
+const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks', 'ollama_cloud', 'opencode_zen', 'aihubmix', 'blueclaw', 'requesty', 'unorouter', 'vercel_ai_gateway', 'zenmux', 'kilo_code', 'chutes', 'cohere', 'mistral', 'cerebras', 'sambanova', 'huggingface', 'pollinations', 'z_ai', 'siliconflow', 'airforce', 'inceptionlabs', 'deepseek', 'routeway', 'opentyphoon', 'sarvam', 'sealion', 'openadapter']
 
 const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string }> = {
   openrouter: { description: 'Access any foundation model', iconClass: 'bg-[rgba(59,130,246,0.12)] text-[#3b82f6]' },
@@ -32,6 +32,14 @@ const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string
   pollinations: { description: 'Free & open-source Gen-AI platform with 500+ projects', iconClass: 'bg-[rgba(236,72,153,0.12)] text-[#ec4899]' },
   z_ai: { description: 'Zhipu AI GLM models with 1M context window', iconClass: 'bg-[rgba(59,130,246,0.12)] text-[#3b82f6]' },
   siliconflow: { description: '200+ optimized LLMs & multimodal models, one API', iconClass: 'bg-[rgba(34,197,94,0.12)] text-[#22c55e]' },
+  airforce: { description: 'OpenAI-compatible gateway to 200+ models including Claude, GPT & Gemini', iconClass: 'bg-[rgba(59,130,246,0.12)] text-[#3b82f6]' },
+  inceptionlabs: { description: 'Mercury diffusion LLMs — fastest inference, OpenAI-compatible', iconClass: 'bg-[rgba(139,92,246,0.12)] text-[#8b5cf6]' },
+  deepseek: { description: 'Lightning-fast, low-cost open reasoning models', iconClass: 'bg-[rgba(168,85,247,0.12)] text-[#a855f7]' },
+  routeway: { description: 'One API for 100+ models with smart routing', iconClass: 'bg-[rgba(14,165,233,0.12)] text-[#0ea5e9]' },
+  opentyphoon: { description: 'Thai-first LLMs with a free OpenAI-compatible API', iconClass: 'bg-[rgba(16,185,129,0.12)] text-[#10b981]' },
+  sarvam: { description: 'India-first LLMs for 10+ Indic languages', iconClass: 'bg-[rgba(251,191,36,0.12)] text-[#f59e0b]' },
+  sealion: { description: 'Southeast Asia open AI models from AI Singapore', iconClass: 'bg-[rgba(236,72,153,0.12)] text-[#ec4899]' },
+  openadapter: { description: 'One subscription, 40+ SOTA open-source models', iconClass: 'bg-[rgba(34,197,94,0.12)] text-[#22c55e]' },
 }
 
 export function ModelsTab() {
