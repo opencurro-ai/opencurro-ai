@@ -113,6 +113,34 @@ class ProviderRegistry:
                     default_base_url="https://api.cohere.ai/compatibility/v1",
                 )
             ),
+            ProviderType.MISTRAL: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.MISTRAL,
+                    label="Mistral AI",
+                    default_base_url="https://api.mistral.ai/v1",
+                )
+            ),
+            ProviderType.CEREBRAS: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.CEREBRAS,
+                    label="Cerebras",
+                    default_base_url="https://api.cerebras.ai/v1",
+                )
+            ),
+            ProviderType.SAMBANOVA: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.SAMBANOVA,
+                    label="SambaNova",
+                    default_base_url="https://api.sambanova.ai/v1",
+                )
+            ),
+            ProviderType.HUGGINGFACE: OpenAICompatibleProvider(
+                ProviderMetadata(
+                    id=ProviderType.HUGGINGFACE,
+                    label="Hugging Face",
+                    default_base_url="https://router.huggingface.co/v1",
+                )
+            ),
         }
 
     def get(self, provider_type: ProviderType) -> LLMProvider:

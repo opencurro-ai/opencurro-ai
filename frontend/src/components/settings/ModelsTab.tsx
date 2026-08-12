@@ -7,7 +7,7 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import { cn } from '@/lib/utils'
 import type { ProviderId } from '@/types/chat'
 
-const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks', 'ollama_cloud', 'opencode_zen', 'aihubmix', 'blueclaw', 'requesty', 'unorouter', 'vercel_ai_gateway', 'zenmux', 'kilo_code', 'chutes', 'cohere']
+const providers: ProviderId[] = ['openrouter', 'groq', 'nvidia', 'fireworks', 'ollama_cloud', 'opencode_zen', 'aihubmix', 'blueclaw', 'requesty', 'unorouter', 'vercel_ai_gateway', 'zenmux', 'kilo_code', 'chutes', 'cohere', 'mistral', 'cerebras', 'sambanova', 'huggingface']
 
 const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string }> = {
   openrouter: { description: 'Access any foundation model', iconClass: 'bg-[rgba(59,130,246,0.12)] text-[#3b82f6]' },
@@ -25,6 +25,10 @@ const PROVIDER_META: Record<ProviderId, { description: string; iconClass: string
   kilo_code: { description: '500+ models, zero markup, agent-ready gateway', iconClass: 'bg-[rgba(251,191,36,0.12)] text-[#fbbf24]' },
   chutes: { description: 'Decentralized serverless AI inference platform', iconClass: 'bg-[rgba(99,102,241,0.12)] text-[#6366f1]' },
   cohere: { description: 'Command models with tool use and structured outputs', iconClass: 'bg-[rgba(45,120,104,0.12)] text-[#2d7868]' },
+  mistral: { description: 'Flagship open-weight models with strong reasoning', iconClass: 'bg-[rgba(234,179,8,0.12)] text-[#eab308]' },
+  cerebras: { description: 'World\'s fastest AI inference with wafer-scale engines', iconClass: 'bg-[rgba(236,72,72,0.12)] text-[#ec4848]' },
+  sambanova: { description: 'Enterprise-grade models on reconfigurable dataflow architecture', iconClass: 'bg-[rgba(0,168,98,0.12)] text-[#00a862]' },
+  huggingface: { description: 'Community models via Inference Providers router', iconClass: 'bg-[rgba(255,156,0,0.12)] text-[#ff9c00]' },
 }
 
 export function ModelsTab() {
