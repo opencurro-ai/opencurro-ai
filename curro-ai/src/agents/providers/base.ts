@@ -68,16 +68,23 @@ export class OpenAICompatibleProvider implements Provider {
     return models;
   }
 
-  async *streamChatCompletion(options: ChatCompletionOptions): AsyncGenerator<StreamDelta, void, unknown> {
-    const body = {
+  /**
+   * Build the JSON body for the chat/completions request. Subclasses override this
+   * to tweak the payload (e.g. providers that reject `parallel_tool_calls`).
+   */
+  protected buildRequestBody(options: ChatCompletionOptions): Record<string, unknown> {
+    const hasTools = Array.isArray(options.tools) && options.tools.length > 0;
+    return {
       model: options.model,
       messages: options.messages,
-      tools: options.tools,
-      tool_choice: "auto",
-      parallel_tool_calls: false,
+      ...(hasTools ? { tools: options.tools, tool_choice: "auto", parallel_tool_calls: false } : {}),
       temperature: options.temperature ?? 0.2,
       stream: true,
     };
+  }
+
+  async *streamChatCompletion(options: ChatCompletionOptions): AsyncGenerator<StreamDelta, void, unknown> {
+    const body = this.buildRequestBody(options);
 
     const response = await fetch(`${this.baseUrl(options.baseUrl)}/chat/completions`, {
       method: "POST",

@@ -2,6 +2,33 @@ import type { Provider, ProviderMetadata } from "./types.js";
 import { openRouterProvider } from "./openrouter.js";
 import { groqProvider } from "./groq.js";
 import { nvidiaProvider } from "./nvidia.js";
+import { fireworksProvider } from "./fireworks.js";
+import { ollamaCloudProvider } from "./ollamaCloud.js";
+import { opencodeZenProvider } from "./opencodeZen.js";
+import { aihubmixProvider } from "./aihubmix.js";
+import { blueclawProvider } from "./blueclaw.js";
+import { requestyProvider } from "./requesty.js";
+import { unorouterProvider } from "./unorouter.js";
+import { vercelAiGatewayProvider } from "./vercelAiGateway.js";
+import { zenmuxProvider } from "./zenmux.js";
+import { kiloCodeProvider } from "./kiloCode.js";
+import { chutesProvider } from "./chutes.js";
+import { cohereProvider } from "./cohere.js";
+import { mistralProvider } from "./mistral.js";
+import { cerebrasProvider } from "./cerebras.js";
+import { sambanovaProvider } from "./sambanova.js";
+import { huggingfaceProvider } from "./huggingface.js";
+import { pollinationsProvider } from "./pollinations.js";
+import { zaiProvider } from "./zai.js";
+import { siliconflowProvider } from "./siliconflow.js";
+import { airforceProvider } from "./airforce.js";
+import { inceptionlabsProvider } from "./inceptionlabs.js";
+import { deepseekProvider } from "./deepseek.js";
+import { routewayProvider } from "./routeway.js";
+import { opentyphoonProvider } from "./opentyphoon.js";
+import { sarvamProvider } from "./sarvam.js";
+import { sealionProvider } from "./sealion.js";
+import { openadapterProvider } from "./openadapter.js";
 
 /**
  * ProviderRegistry maps a provider id to a Provider implementation.
@@ -35,6 +62,43 @@ export class ProviderRegistry {
   }
 }
 
+/**
+ * The full set of supported providers. Order here is the order the frontend renders
+ * them in the provider dropdown, and mirrors the backend registry.
+ */
+export const ALL_PROVIDERS: Provider[] = [
+  openRouterProvider,
+  groqProvider,
+  nvidiaProvider,
+  fireworksProvider,
+  ollamaCloudProvider,
+  opencodeZenProvider,
+  aihubmixProvider,
+  blueclawProvider,
+  requestyProvider,
+  unorouterProvider,
+  vercelAiGatewayProvider,
+  zenmuxProvider,
+  kiloCodeProvider,
+  chutesProvider,
+  cohereProvider,
+  mistralProvider,
+  cerebrasProvider,
+  sambanovaProvider,
+  huggingfaceProvider,
+  pollinationsProvider,
+  zaiProvider,
+  siliconflowProvider,
+  airforceProvider,
+  inceptionlabsProvider,
+  deepseekProvider,
+  routewayProvider,
+  opentyphoonProvider,
+  sarvamProvider,
+  sealionProvider,
+  openadapterProvider,
+];
+
 export function createProviderRegistry(): ProviderRegistry {
-  return new ProviderRegistry().registerAll([openRouterProvider, groqProvider, nvidiaProvider]);
+  return new ProviderRegistry().registerAll(ALL_PROVIDERS);
 }

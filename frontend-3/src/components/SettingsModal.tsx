@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { X, KeyRound, RefreshCw, Check } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { fetchModels, fetchProviders } from "@/lib/api";
+import { FALLBACK_PROVIDERS } from "@/lib/providers";
 import { cn } from "@/utils/cn";
 
 export function SettingsModal() {
@@ -27,7 +28,9 @@ export function SettingsModal() {
 
   if (!open) return null;
 
+  const providerList = providers.length > 0 ? providers : FALLBACK_PROVIDERS;
   const currentKey = settings.apiKeys[settings.provider] ?? "";
+  const currentProviderMeta = providerList.find((p) => p.id === settings.provider);
 
   const loadModels = async () => {
     if (!currentKey) {
@@ -82,14 +85,7 @@ export function SettingsModal() {
               }}
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
             >
-              {(providers.length > 0
-                ? providers
-                : [
-                    { id: "openrouter", label: "OpenRouter", defaultBaseUrl: "" },
-                    { id: "groq", label: "Groq", defaultBaseUrl: "" },
-                    { id: "nvidia", label: "NVIDIA NIM", defaultBaseUrl: "" },
-                  ]
-              ).map((p) => (
+              {providerList.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
                 </option>
@@ -113,7 +109,11 @@ export function SettingsModal() {
               type="text"
               value={settings.baseUrl}
               onChange={(e) => setSettings({ baseUrl: e.target.value })}
-              placeholder="Leave empty to use the provider default"
+              placeholder={
+                currentProviderMeta?.defaultBaseUrl
+                  ? `Default: ${currentProviderMeta.defaultBaseUrl}`
+                  : "Leave empty to use the provider default"
+              }
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
             />
           </Field>
