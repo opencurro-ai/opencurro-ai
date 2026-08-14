@@ -3,6 +3,6 @@ dist/
 .env
 .env.local
 *.log
-workspace/
+workspace/*
 !workspace/.gitkeep
 .DS_Store
