@@ -55,6 +55,20 @@ export class ToolRegistry {
     return this.cachedSchemas;
   }
 
+  /**
+   * OpenAI `tools` array restricted to a subset of tool names (order follows the registry).
+   * Used to give a sub-agent only the tools its definition allows. Unknown names are ignored.
+   */
+  schemasFor(names: Iterable<string>): OpenAIToolSchema[] {
+    const allow = new Set(names);
+    return this.schemas.filter((schema) => allow.has(schema.function.name));
+  }
+
+  /** All registered tool names. */
+  names(): string[] {
+    return Array.from(this.tools.keys());
+  }
+
   /** Human friendly label for UI chips; tolerant of unparsed args. */
   label(name: string, args: Record<string, unknown>): string {
     const tool = this.tools.get(name);

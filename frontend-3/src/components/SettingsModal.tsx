@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, KeyRound, RefreshCw, Check, Globe } from "lucide-react";
+import { X, KeyRound, RefreshCw, Check, Globe, Bot, ChevronRight } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { fetchModels, fetchProviders } from "@/lib/api";
 import { FALLBACK_PROVIDERS } from "@/lib/providers";
@@ -20,6 +20,8 @@ export function SettingsModal() {
   const setApiKey = useStore((s) => s.setApiKey);
   const setSearchProvider = useStore((s) => s.setSearchProvider);
   const setSearchApiKey = useStore((s) => s.setSearchApiKey);
+  const setSubAgentsOpen = useStore((s) => s.setSubAgentsOpen);
+  const subAgentCount = useStore((s) => s.subAgents.length);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -224,6 +226,33 @@ export function SettingsModal() {
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
               />
             </Field>
+          </div>
+
+          <div className="border-t border-[var(--color-border)] pt-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Bot className="h-4 w-4 text-[var(--color-accent)]" />
+              <h3 className="text-sm font-semibold">Sub-Agents</h3>
+            </div>
+            <p className="mb-3 text-xs text-[var(--color-muted)]">
+              Create specialized sub-agents the main agent can delegate work to for more accurate
+              results. Stored only in this browser.
+            </p>
+            <button
+              onClick={() => {
+                setOpen(false);
+                setSubAgentsOpen(true);
+              }}
+              className="flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2.5 text-sm transition hover:border-[var(--color-accent)]/50"
+            >
+              <span className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-[var(--color-accent)]" />
+                Manage sub-agents
+                <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+                  {subAgentCount}
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-[var(--color-muted)]" />
+            </button>
           </div>
 
           {error && <p className="text-xs text-red-300">{error}</p>}

@@ -3,6 +3,7 @@ import type { AppConfig } from "../config.js";
 import { AgentRunner, type RunAgentRequest } from "../agents/agent.js";
 import { SessionEventBuffer } from "../services/eventBuffer.js";
 import type { SessionStore, StoredMessage } from "../services/sessionStore.js";
+import type { SubAgentDefinition } from "../agents/tools/types.js";
 import { initSSE, formatSSE } from "../utils/sse.js";
 
 interface StreamBody {
@@ -21,6 +22,36 @@ interface StreamBody {
   serpapi_api_key?: string;
   search_provider?: "tavily" | "exa" | "serpapi";
   firecrawl_api_key?: string;
+  sub_agents?: unknown;
+}
+
+/** Defensively coerce the client-provided sub-agent definitions into safe, well-typed values. */
+function normalizeSubAgents(raw: unknown): SubAgentDefinition[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SubAgentDefinition[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!name) continue;
+    const systemPrompt =
+      typeof record.system_prompt === "string"
+        ? record.system_prompt
+        : typeof record.systemPrompt === "string"
+          ? (record.systemPrompt as string)
+          : "";
+    const tools = Array.isArray(record.tools)
+      ? record.tools.filter((t): t is string => typeof t === "string")
+      : [];
+    out.push({
+      name,
+      description: typeof record.description === "string" ? record.description : "",
+      system_prompt: systemPrompt,
+      tools,
+      enabled: record.enabled !== false,
+    });
+  }
+  return out;
 }
 
 export function buildChatRouter(
@@ -83,6 +114,7 @@ export function buildChatRouter(
         serpapiApiKey: body.serpapi_api_key,
         searchProvider: body.search_provider,
         firecrawlApiKey: body.firecrawl_api_key,
+        subAgents: normalizeSubAgents(body.sub_agents),
       };
 
       // Fire-and-forget the autonomous agent loop; the response streams from the buffer.
