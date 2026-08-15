@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { X, KeyRound, RefreshCw, Check } from "lucide-react";
+import { X, KeyRound, RefreshCw, Check, Globe } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { fetchModels, fetchProviders } from "@/lib/api";
 import { FALLBACK_PROVIDERS } from "@/lib/providers";
+import type { SearchProvider } from "@/types";
 import { cn } from "@/utils/cn";
 
 export function SettingsModal() {
@@ -17,6 +18,8 @@ export function SettingsModal() {
   const settings = useStore((s) => s.settings);
   const setSettings = useStore((s) => s.setSettings);
   const setApiKey = useStore((s) => s.setApiKey);
+  const setSearchProvider = useStore((s) => s.setSearchProvider);
+  const setSearchApiKey = useStore((s) => s.setSearchApiKey);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -155,6 +158,73 @@ export function SettingsModal() {
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-xs text-[var(--color-muted)] outline-none focus:border-[var(--color-accent)]/50"
             />
           )}
+
+          <div className="border-t border-[var(--color-border)] pt-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Globe className="h-4 w-4 text-[var(--color-accent)]" />
+              <h3 className="text-sm font-semibold">Search & Fetch</h3>
+            </div>
+            <p className="mb-3 text-xs text-[var(--color-muted)]">
+              Keys for the agent's web tools — search the web and fetch page content at runtime.
+              The selected provider's key is used; if it has no key, any provider with a key is used.
+            </p>
+
+            <Field label="Search provider">
+              <select
+                value={settings.searchProvider ?? "tavily"}
+                onChange={(e) => setSearchProvider(e.target.value as SearchProvider)}
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+              >
+                <option value="tavily">Tavily — fast AI-native search</option>
+                <option value="exa">Exa — neural web search</option>
+                <option value="serpapi">SerpAPI — Google results</option>
+              </select>
+            </Field>
+
+            <Field label="Tavily API key (web search)">
+              <input
+                type="password"
+                value={settings.tavilyApiKey}
+                onChange={(e) => setSearchApiKey("tavily", e.target.value)}
+                placeholder="tvly-…"
+                autoComplete="off"
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+              />
+            </Field>
+
+            <Field label="Exa API key (web search)">
+              <input
+                type="password"
+                value={settings.exaApiKey}
+                onChange={(e) => setSearchApiKey("exa", e.target.value)}
+                placeholder="exa-…"
+                autoComplete="off"
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+              />
+            </Field>
+
+            <Field label="SerpAPI API key (web search)">
+              <input
+                type="password"
+                value={settings.serpapiApiKey}
+                onChange={(e) => setSearchApiKey("serpapi", e.target.value)}
+                placeholder="SerpAPI key"
+                autoComplete="off"
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+              />
+            </Field>
+
+            <Field label="Firecrawl API key (web fetch)">
+              <input
+                type="password"
+                value={settings.firecrawlApiKey}
+                onChange={(e) => setSearchApiKey("firecrawl", e.target.value)}
+                placeholder="fc-…"
+                autoComplete="off"
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+              />
+            </Field>
+          </div>
 
           {error && <p className="text-xs text-red-300">{error}</p>}
         </div>

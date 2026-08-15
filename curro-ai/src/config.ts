@@ -26,6 +26,12 @@ export interface AppConfig {
   maxIterations: number;
   corsOrigins: string[] | "*";
   shellTimeoutMs: number;
+  /** Fallback web tool keys/provider, overridden per-request by the frontend settings. */
+  searchProvider: "tavily" | "exa" | "serpapi";
+  tavilyApiKey: string;
+  exaApiKey: string;
+  serpapiApiKey: string;
+  firecrawlApiKey: string;
 }
 
 function parseCorsOrigins(raw: string | undefined): string[] | "*" {
@@ -36,12 +42,23 @@ function parseCorsOrigins(raw: string | undefined): string[] | "*" {
     .filter(Boolean);
 }
 
+function parseSearchProvider(raw: string | undefined): "tavily" | "exa" | "serpapi" {
+  const value = raw?.trim().toLowerCase();
+  if (value === "exa" || value === "serpapi") return value;
+  return "tavily";
+}
+
 export const config: AppConfig = {
   port: Number(process.env.PORT ?? 8787),
   workspaceRoot: resolveWorkspaceRoot(),
   maxIterations: Number(process.env.MAX_ITERATIONS ?? 1000),
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS),
   shellTimeoutMs: Number(process.env.SHELL_TIMEOUT_MS ?? 180_000),
+  searchProvider: parseSearchProvider(process.env.SEARCH_PROVIDER),
+  tavilyApiKey: process.env.TAVILY_API_KEY?.trim() ?? "",
+  exaApiKey: process.env.EXA_API_KEY?.trim() ?? "",
+  serpapiApiKey: process.env.SERPAPI_API_KEY?.trim() ?? "",
+  firecrawlApiKey: process.env.FIRECRAWL_API_KEY?.trim() ?? "",
 };
 
 /** Ensure the workspace directory exists so file tools never hit permission/ENOENT errors. */

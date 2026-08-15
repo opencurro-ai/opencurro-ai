@@ -5,6 +5,7 @@ import type {
   Conversation,
   ModelInfo,
   ProviderMeta,
+  SearchProvider,
   Settings,
   ToolActivity,
 } from "@/types";
@@ -42,6 +43,11 @@ interface AppState {
   // Actions — settings & UI
   setSettings: (patch: Partial<Settings>) => void;
   setApiKey: (provider: string, key: string) => void;
+  setSearchProvider: (provider: SearchProvider) => void;
+  setSearchApiKey: (
+    provider: "tavily" | "exa" | "serpapi" | "firecrawl",
+    key: string,
+  ) => void;
   setProviders: (p: ProviderMeta[]) => void;
   setModels: (m: ModelInfo[]) => void;
   setModelsLoading: (v: boolean) => void;
@@ -56,6 +62,11 @@ const defaultSettings: Settings = {
   model: "",
   apiKeys: {},
   baseUrl: "",
+  searchProvider: "tavily",
+  tavilyApiKey: "",
+  exaApiKey: "",
+  serpapiApiKey: "",
+  firecrawlApiKey: "",
 };
 
 function touch(conv: Conversation): Conversation {
@@ -181,6 +192,35 @@ export const useStore = create<AppState>()(
         set((s) => ({
           settings: { ...s.settings, apiKeys: { ...s.settings.apiKeys, [provider]: key } },
         })),
+      setSearchProvider: (searchProvider) => set((s) => ({ settings: { ...s.settings, searchProvider } })),
+      setSearchApiKey: (provider, key) =>
+        set((s) => {
+          const field =
+            provider === "tavily"
+              ? "tavilyApiKey"
+              : provider === "exa"
+                ? "exaApiKey"
+                : provider === "serpapi"
+                  ? "serpapiApiKey"
+                  : "firecrawlApiKey";
+          const patch: Partial<Settings> = { [field]: key };
+
+          // If a key is entered for a search provider while the currently selected
+          // provider has no key, auto-select the provider being configured so the
+          // agent never falls back to a provider without a key.
+          if (provider !== "firecrawl" && key.trim()) {
+            const selected = s.settings.searchProvider ?? "tavily";
+            const selectedHasKey =
+              selected === "tavily"
+                ? Boolean(s.settings.tavilyApiKey?.trim())
+                : selected === "exa"
+                  ? Boolean(s.settings.exaApiKey?.trim())
+                  : Boolean(s.settings.serpapiApiKey?.trim());
+            if (!selectedHasKey) patch.searchProvider = provider;
+          }
+
+          return { settings: { ...s.settings, ...patch } };
+        }),
       setProviders: (providers) => set({ providers }),
       setModels: (models) => set({ models }),
       setModelsLoading: (modelsLoading) => set({ modelsLoading }),
@@ -191,6 +231,17 @@ export const useStore = create<AppState>()(
     }),
     {
       name: "curro-ai-frontend",
+      // Deep-merge settings with defaults so settings persisted before the
+      // search/fetch fields were added still gain the new fields (searchProvider
+      // defaults to tavily, keys default to "").
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<AppState>;
+        return {
+          ...current,
+          ...p,
+          settings: { ...current.settings, ...(p.settings ?? {}) },
+        };
+      },
       partialize: (s) => ({
         conversations: s.conversations,
         currentId: s.currentId,

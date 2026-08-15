@@ -2,6 +2,7 @@ import type { AppConfig } from "../config.js";
 import { buildSystemPrompt } from "./systemprompt.js";
 import type { ProviderRegistry } from "./providers/registry.js";
 import type { ToolRegistry } from "./tools/index.js";
+import type { WebToolsConfig } from "./tools/types.js";
 import type { ToolCall, ToolCallDelta } from "./providers/types.js";
 import type { ChatSession, StoredMessage } from "../services/sessionStore.js";
 import type { SessionEventBuffer } from "../services/eventBuffer.js";
@@ -16,6 +17,12 @@ export interface RunAgentRequest {
   baseUrl?: string;
   maxIterations: number;
   temperature?: number;
+  /** Per-request web tool keys/provider (from frontend Settings); falls back to env config. */
+  tavilyApiKey?: string;
+  exaApiKey?: string;
+  serpapiApiKey?: string;
+  searchProvider?: "tavily" | "exa" | "serpapi";
+  firecrawlApiKey?: string;
 }
 
 export class AgentRunner {
@@ -51,6 +58,13 @@ export class AgentRunner {
       session.messages.push({ role: "user", content: request.userMessage });
       const systemPrompt = buildSystemPrompt(this.config.workspaceRoot);
       const maxIterations = clampIterations(request.maxIterations, this.config.maxIterations);
+      const web: WebToolsConfig = {
+        searchProvider: request.searchProvider ?? this.config.searchProvider,
+        tavilyApiKey: request.tavilyApiKey || this.config.tavilyApiKey || undefined,
+        exaApiKey: request.exaApiKey || this.config.exaApiKey || undefined,
+        serpapiApiKey: request.serpapiApiKey || this.config.serpapiApiKey || undefined,
+        firecrawlApiKey: request.firecrawlApiKey || this.config.firecrawlApiKey || undefined,
+      };
 
       const visibleAnswer: string[] = [];
       const visibleReasoning: string[] = [];
@@ -144,6 +158,7 @@ export class AgentRunner {
               workspaceRoot: this.config.workspaceRoot,
               shellTimeoutMs: this.config.shellTimeoutMs,
               signal,
+              web,
             });
 
             session.messages.push({

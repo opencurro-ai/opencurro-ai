@@ -48,11 +48,18 @@ export interface FileNode {
   children?: FileNode[];
 }
 
+export type SearchProvider = "tavily" | "exa" | "serpapi";
+
 export interface Settings {
   provider: string;
   model: string;
   apiKeys: Record<string, string>;
   baseUrl: string;
+  searchProvider: SearchProvider;
+  tavilyApiKey: string;
+  exaApiKey: string;
+  serpapiApiKey: string;
+  firecrawlApiKey: string;
 }
 
 /** Provider-format message sent to the backend to preserve history across turns. */
@@ -73,6 +80,11 @@ export interface StreamRequest {
   max_iterations?: number;
   temperature?: number;
   since_event_id?: number;
+  tavily_api_key?: string;
+  exa_api_key?: string;
+  serpapi_api_key?: string;
+  search_provider?: SearchProvider;
+  firecrawl_api_key?: string;
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */

@@ -110,6 +110,11 @@ export function useChatStream(onFilesChanged?: () => void) {
             api_key: apiKey,
             base_url: settings.baseUrl || undefined,
             max_iterations: 1000,
+            tavily_api_key: settings.tavilyApiKey || undefined,
+            exa_api_key: settings.exaApiKey || undefined,
+            serpapi_api_key: settings.serpapiApiKey || undefined,
+            search_provider: settings.searchProvider,
+            firecrawl_api_key: settings.firecrawlApiKey || undefined,
           },
           controller.signal,
         );

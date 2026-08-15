@@ -11,6 +11,19 @@ export interface ToolResult {
   };
 }
 
+/** Web search providers supported by the web_search tool. */
+export type SearchProvider = "tavily" | "exa" | "serpapi";
+
+/** API keys + provider selection for the web_search and fatch_web_urls tools. */
+export interface WebToolsConfig {
+  /** Active search provider; tavily is the default. */
+  searchProvider: SearchProvider;
+  tavilyApiKey?: string;
+  exaApiKey?: string;
+  serpapiApiKey?: string;
+  firecrawlApiKey?: string;
+}
+
 /** Runtime context handed to a tool on execution. */
 export interface ToolContext {
   /** Absolute path all file operations are sandboxed to. */
@@ -19,6 +32,8 @@ export interface ToolContext {
   shellTimeoutMs: number;
   /** Abort signal so long running tools stop when the turn is cancelled. */
   signal?: AbortSignal;
+  /** Optional keys/provider for the web search and fetch tools. */
+  web?: WebToolsConfig;
 }
 
 /**

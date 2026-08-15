@@ -16,6 +16,11 @@ interface StreamBody {
   max_iterations?: number;
   temperature?: number;
   since_event_id?: number;
+  tavily_api_key?: string;
+  exa_api_key?: string;
+  serpapi_api_key?: string;
+  search_provider?: "tavily" | "exa" | "serpapi";
+  firecrawl_api_key?: string;
 }
 
 export function buildChatRouter(
@@ -73,6 +78,11 @@ export function buildChatRouter(
         baseUrl: body.base_url,
         maxIterations: body.max_iterations ?? config.maxIterations,
         temperature: body.temperature,
+        tavilyApiKey: body.tavily_api_key,
+        exaApiKey: body.exa_api_key,
+        serpapiApiKey: body.serpapi_api_key,
+        searchProvider: body.search_provider,
+        firecrawlApiKey: body.firecrawl_api_key,
       };
 
       // Fire-and-forget the autonomous agent loop; the response streams from the buffer.
