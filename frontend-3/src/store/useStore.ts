@@ -7,6 +7,8 @@ import type {
   ProviderMeta,
   SearchProvider,
   Settings,
+  SubAgent,
+  SubAgentRun,
   ToolActivity,
 } from "@/types";
 import { uid } from "@/utils/id";
@@ -16,6 +18,7 @@ interface AppState {
   conversations: Conversation[];
   currentId: string | null;
   settings: Settings;
+  subAgents: SubAgent[];
 
   // Ephemeral UI
   providers: ProviderMeta[];
@@ -23,6 +26,7 @@ interface AppState {
   modelsLoading: boolean;
   sidebarOpen: boolean;
   settingsOpen: boolean;
+  subAgentsOpen: boolean;
   streaming: boolean;
   filesVersion: number;
 
@@ -40,6 +44,29 @@ interface AppState {
   appendReasoning: (convId: string, msgId: string, token: string) => void;
   upsertTool: (convId: string, msgId: string, tool: ToolActivity) => void;
 
+  // Actions — sub-agent live runs (attached to a call_sub_agent tool chip)
+  startSubAgent: (
+    convId: string,
+    msgId: string,
+    toolId: string,
+    run: Pick<SubAgentRun, "session" | "agent" | "task">,
+  ) => void;
+  appendSubAgentToken: (convId: string, msgId: string, toolId: string, token: string) => void;
+  appendSubAgentReasoning: (convId: string, msgId: string, toolId: string, token: string) => void;
+  upsertSubAgentTool: (convId: string, msgId: string, toolId: string, tool: ToolActivity) => void;
+  finishSubAgent: (
+    convId: string,
+    msgId: string,
+    toolId: string,
+    patch: { status: SubAgentRun["status"]; output?: string; error?: string },
+  ) => void;
+
+  // Actions — custom sub-agent management (persisted in the browser)
+  addSubAgent: (input: Omit<SubAgent, "id" | "createdAt" | "updatedAt">) => void;
+  updateSubAgent: (id: string, patch: Partial<Omit<SubAgent, "id" | "createdAt">>) => void;
+  deleteSubAgent: (id: string) => void;
+  toggleSubAgent: (id: string) => void;
+
   // Actions — settings & UI
   setSettings: (patch: Partial<Settings>) => void;
   setApiKey: (provider: string, key: string) => void;
@@ -53,6 +80,7 @@ interface AppState {
   setModelsLoading: (v: boolean) => void;
   toggleSidebar: () => void;
   setSettingsOpen: (v: boolean) => void;
+  setSubAgentsOpen: (v: boolean) => void;
   setStreaming: (v: boolean) => void;
   bumpFiles: () => void;
 }
@@ -73,18 +101,62 @@ function touch(conv: Conversation): Conversation {
   return { ...conv, updatedAt: Date.now() };
 }
 
+/** Immutably update a single tool (by id) inside a single message (by id) inside a conversation. */
+function patchTool(
+  conversations: Conversation[],
+  convId: string,
+  msgId: string,
+  toolId: string,
+  updater: (tool: ToolActivity) => ToolActivity,
+  createIfMissing?: () => ToolActivity,
+): Conversation[] {
+  return conversations.map((c) =>
+    c.id === convId
+      ? {
+          ...c,
+          messages: c.messages.map((m) => {
+            if (m.id !== msgId) return m;
+            const tools = m.tools ? [...m.tools] : [];
+            const idx = tools.findIndex((t) => t.id === toolId);
+            if (idx === -1) {
+              if (!createIfMissing) return m;
+              tools.push(updater(createIfMissing()));
+            } else {
+              tools[idx] = updater(tools[idx]);
+            }
+            return { ...m, tools };
+          }),
+        }
+      : c,
+  );
+}
+
+const emptyRun = (
+  run: Pick<SubAgentRun, "session" | "agent" | "task">,
+): SubAgentRun => ({
+  session: run.session,
+  agent: run.agent,
+  task: run.task,
+  reasoning: "",
+  output: "",
+  tools: [],
+  status: "running",
+});
+
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       conversations: [],
       currentId: null,
       settings: defaultSettings,
+      subAgents: [],
 
       providers: [],
       models: [],
       modelsLoading: false,
       sidebarOpen: true,
       settingsOpen: false,
+      subAgentsOpen: false,
       streaming: false,
       filesVersion: 0,
 
@@ -187,6 +259,96 @@ export const useStore = create<AppState>()(
           ),
         })),
 
+      startSubAgent: (convId, msgId, toolId, run) =>
+        set((s) => ({
+          conversations: patchTool(
+            s.conversations,
+            convId,
+            msgId,
+            toolId,
+            (tool) => ({
+              ...tool,
+              subAgent: tool.subAgent
+                ? { ...tool.subAgent, session: run.session, agent: run.agent, task: run.task }
+                : emptyRun(run),
+            }),
+            () => ({
+              id: toolId,
+              name: "call_sub_agent",
+              label: `Sub-Agent: ${run.agent}${run.session ? ` (${run.session})` : ""}`,
+              status: "running",
+              subAgent: emptyRun(run),
+            }),
+          ),
+        })),
+
+      appendSubAgentToken: (convId, msgId, toolId, token) =>
+        set((s) => ({
+          conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) => {
+            const run = tool.subAgent ?? emptyRun({ session: "", agent: "", task: "" });
+            return { ...tool, subAgent: { ...run, output: run.output + token } };
+          }),
+        })),
+
+      appendSubAgentReasoning: (convId, msgId, toolId, token) =>
+        set((s) => ({
+          conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) => {
+            const run = tool.subAgent ?? emptyRun({ session: "", agent: "", task: "" });
+            return { ...tool, subAgent: { ...run, reasoning: run.reasoning + token } };
+          }),
+        })),
+
+      upsertSubAgentTool: (convId, msgId, toolId, subTool) =>
+        set((s) => ({
+          conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) => {
+            const run = tool.subAgent ?? emptyRun({ session: "", agent: "", task: "" });
+            const tools = [...run.tools];
+            const idx = tools.findIndex((t) => t.id === subTool.id);
+            if (idx === -1) tools.push(subTool);
+            else tools[idx] = { ...tools[idx], ...subTool };
+            return { ...tool, subAgent: { ...run, tools } };
+          }),
+        })),
+
+      finishSubAgent: (convId, msgId, toolId, patch) =>
+        set((s) => ({
+          conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) => {
+            const run = tool.subAgent ?? emptyRun({ session: "", agent: "", task: "" });
+            return {
+              ...tool,
+              subAgent: {
+                ...run,
+                status: patch.status,
+                output: patch.output != null && patch.output.length > 0 ? patch.output : run.output,
+                error: patch.error,
+              },
+            };
+          }),
+        })),
+
+      addSubAgent: (input) =>
+        set((s) => {
+          const now = Date.now();
+          const agent: SubAgent = { id: uid("sa"), createdAt: now, updatedAt: now, ...input };
+          return { subAgents: [agent, ...s.subAgents] };
+        }),
+
+      updateSubAgent: (id, patch) =>
+        set((s) => ({
+          subAgents: s.subAgents.map((a) =>
+            a.id === id ? { ...a, ...patch, updatedAt: Date.now() } : a,
+          ),
+        })),
+
+      deleteSubAgent: (id) => set((s) => ({ subAgents: s.subAgents.filter((a) => a.id !== id) })),
+
+      toggleSubAgent: (id) =>
+        set((s) => ({
+          subAgents: s.subAgents.map((a) =>
+            a.id === id ? { ...a, enabled: !a.enabled, updatedAt: Date.now() } : a,
+          ),
+        })),
+
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       setApiKey: (provider, key) =>
         set((s) => ({
@@ -226,6 +388,7 @@ export const useStore = create<AppState>()(
       setModelsLoading: (modelsLoading) => set({ modelsLoading }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+      setSubAgentsOpen: (subAgentsOpen) => set({ subAgentsOpen }),
       setStreaming: (streaming) => set({ streaming }),
       bumpFiles: () => set((s) => ({ filesVersion: s.filesVersion + 1 })),
     }),
@@ -240,12 +403,14 @@ export const useStore = create<AppState>()(
           ...current,
           ...p,
           settings: { ...current.settings, ...(p.settings ?? {}) },
+          subAgents: Array.isArray(p.subAgents) ? p.subAgents : current.subAgents,
         };
       },
       partialize: (s) => ({
         conversations: s.conversations,
         currentId: s.currentId,
         settings: s.settings,
+        subAgents: s.subAgents,
       }),
     },
   ),

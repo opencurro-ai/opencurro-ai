@@ -22,6 +22,41 @@ export interface ToolActivity {
   filePath?: string;
   /** Full structured tool result (e.g. web_search results) streamed from the backend. */
   result?: unknown;
+  /** Live sub-agent run attached to a call_sub_agent tool chip (streamed token by token). */
+  subAgent?: SubAgentRun;
+}
+
+/** Live state of a sub-agent invocation, rendered inside the call_sub_agent chip popup. */
+export interface SubAgentRun {
+  session: string;
+  agent: string;
+  task: string;
+  reasoning: string;
+  output: string;
+  tools: ToolActivity[];
+  status: ToolActivityStatus;
+  error?: string;
+}
+
+/** A user-defined sub-agent, stored in the browser (localStorage) — never on the server. */
+export interface SubAgent {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  tools: string[];
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Sub-agent definition in the backend/wire format sent with each turn. */
+export interface BackendSubAgent {
+  name: string;
+  description: string;
+  system_prompt: string;
+  tools: string[];
+  enabled: boolean;
 }
 
 export interface ChatMessage {
@@ -87,6 +122,7 @@ export interface StreamRequest {
   serpapi_api_key?: string;
   search_provider?: SearchProvider;
   firecrawl_api_key?: string;
+  sub_agents?: BackendSubAgent[];
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */
@@ -108,4 +144,12 @@ export interface SSEEventData {
   reasoning?: string | null;
   iteration_count?: number;
   aborted?: boolean;
+  // Sub-agent side-channel fields
+  session?: string;
+  agent?: string;
+  task?: string;
+  tool_id?: string;
+  output?: string;
+  error?: string;
+  new_session?: boolean;
 }

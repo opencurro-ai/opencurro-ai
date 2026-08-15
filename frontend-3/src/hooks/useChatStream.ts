@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 import { abortChat, streamChat } from "@/lib/api";
 import { useStore } from "@/store/useStore";
-import type { BackendMessage, ChatMessage, SSEEventData } from "@/types";
+import type { BackendMessage, BackendSubAgent, ChatMessage, SSEEventData } from "@/types";
 import { uid } from "@/utils/id";
 
 interface SSEHandlers {
@@ -67,6 +67,15 @@ export function useChatStream(onFilesChanged?: () => void) {
         .filter((m) => m.content.trim().length > 0)
         .map((m) => ({ role: m.role, content: m.content }));
 
+      // Sub-agent definitions live in the browser (localStorage) and travel with each turn.
+      const subAgents: BackendSubAgent[] = store.subAgents.map((a) => ({
+        name: a.name,
+        description: a.description,
+        system_prompt: a.systemPrompt,
+        tools: a.tools,
+        enabled: a.enabled,
+      }));
+
       const userMsg: ChatMessage = {
         id: uid("msg"),
         role: "user",
@@ -115,6 +124,7 @@ export function useChatStream(onFilesChanged?: () => void) {
             serpapi_api_key: settings.serpapiApiKey || undefined,
             search_provider: settings.searchProvider,
             firecrawl_api_key: settings.firecrawlApiKey || undefined,
+            sub_agents: subAgents,
           },
           controller.signal,
         );
@@ -164,6 +174,57 @@ export function useChatStream(onFilesChanged?: () => void) {
                   onFilesChanged?.();
                   break;
                 }
+                case "sub_agent_start":
+                  s.startSubAgent(convId, assistantId, String(data.id ?? ""), {
+                    session: String(data.session ?? ""),
+                    agent: String(data.agent ?? ""),
+                    task: String(data.task ?? ""),
+                  });
+                  break;
+                case "sub_agent_reasoning":
+                  s.appendSubAgentReasoning(
+                    convId,
+                    assistantId,
+                    String(data.id ?? ""),
+                    String(data.value ?? ""),
+                  );
+                  break;
+                case "sub_agent_token":
+                  s.appendSubAgentToken(
+                    convId,
+                    assistantId,
+                    String(data.id ?? ""),
+                    String(data.value ?? ""),
+                  );
+                  break;
+                case "sub_agent_tool_call":
+                  s.upsertSubAgentTool(convId, assistantId, String(data.id ?? ""), {
+                    id: String(data.tool_id ?? uid("subtool")),
+                    name: String(data.name ?? "tool"),
+                    label: String(data.label ?? data.name ?? "tool"),
+                    status: "running",
+                    filePath: (data.args as Record<string, unknown> | undefined)?.file_path as
+                      | string
+                      | undefined,
+                  });
+                  break;
+                case "sub_agent_tool_result":
+                  s.upsertSubAgentTool(convId, assistantId, String(data.id ?? ""), {
+                    id: String(data.tool_id ?? uid("subtool")),
+                    name: String(data.name ?? "tool"),
+                    label: String(data.label ?? data.name ?? "tool"),
+                    status: data.ok ? "ok" : "error",
+                    result: data.result,
+                  });
+                  onFilesChanged?.();
+                  break;
+                case "sub_agent_done":
+                  s.finishSubAgent(convId, assistantId, String(data.id ?? ""), {
+                    status: data.ok ? "ok" : "error",
+                    output: data.output != null ? String(data.output) : undefined,
+                    error: data.error != null ? String(data.error) : undefined,
+                  });
+                  break;
                 case "error":
                   s.appendToken(convId, assistantId, `\n\n⚠️ ${String(data.message ?? "Agent error")}`);
                   break;

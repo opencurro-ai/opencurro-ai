@@ -5,6 +5,7 @@ import { TopBar } from "@/components/TopBar";
 import { ChatPanel } from "@/components/ChatPanel";
 import { FileExplorer } from "@/components/FileExplorer";
 import { SettingsModal } from "@/components/SettingsModal";
+import { SubAgentsManager } from "@/components/SubAgentsManager";
 import { useStore } from "@/store/useStore";
 import { fetchProviders } from "@/lib/api";
 import { cn } from "@/utils/cn";
@@ -68,6 +69,7 @@ export function App() {
       </div>
 
       <SettingsModal />
+      <SubAgentsManager />
     </div>
   );
 }
