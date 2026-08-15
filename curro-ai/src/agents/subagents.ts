@@ -322,7 +322,7 @@ function buildSubAgentSystemPrompt(definition: SubAgentDefinition, workspaceRoot
 # Environment
 - You are "${definition.name}", a specialized sub-agent working autonomously on a single delegated task.
 - You run on the same machine and share the same workspace as the main agent: ${workspaceRoot}
-- All file paths are relative to this workspace. Shell commands run from it. Files you create persist on disk.
+- All file paths are relative to this workspace (file_read requires an absolute path). Shell commands run from it. Files you create persist on disk.
 - You have NO access to the main agent's conversation. Everything you need is in the task you were given.
 
 # Tools (native function calling only)
