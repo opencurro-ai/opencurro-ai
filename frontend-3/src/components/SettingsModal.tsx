@@ -10,6 +10,7 @@ import {
   Plus,
   Trash2,
   Plug,
+  Pencil,
 } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { fetchModels, fetchProviders } from "@/lib/api";
@@ -41,6 +42,17 @@ export function SettingsModal() {
 
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  // Which provider the editor is editing. null = adding a brand-new provider.
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+
+  const openAddEditor = () => {
+    setEditingProviderId(null);
+    setEditorOpen(true);
+  };
+  const openEditEditor = (id: string) => {
+    setEditingProviderId(id);
+    setEditorOpen(true);
+  };
 
   useEffect(() => {
     if (open && providers.length === 0) {
@@ -53,6 +65,10 @@ export function SettingsModal() {
   const builtInProviderList = providers.length > 0 ? providers : FALLBACK_PROVIDERS;
   const isCustom = isCustomProviderId(settings.provider);
   const selectedCustom = customProviders.find((p) => p.id === settings.provider);
+  // The provider being edited in the editor (undefined when adding a new one).
+  const editingProvider = editingProviderId
+    ? (customProviders.find((p) => p.id === editingProviderId) ?? undefined)
+    : undefined;
   const currentKey = isCustom ? (selectedCustom?.apiKey ?? "") : (settings.apiKeys[settings.provider] ?? "");
   const currentProviderMeta = isCustom
     ? { defaultBaseUrl: selectedCustom?.baseUrl ?? "" }
@@ -155,7 +171,7 @@ export function SettingsModal() {
                     </div>
                   )}
                   <button
-                    onClick={() => setEditorOpen(true)}
+                    onClick={() => openEditEditor(selectedCustom.id)}
                     className="mt-2 flex items-center gap-1 text-[var(--color-accent)] hover:underline"
                   >
                     <Plug className="h-3 w-3" /> Edit or add models
@@ -272,6 +288,13 @@ export function SettingsModal() {
                         <Plug className="h-3.5 w-3.5" />
                       </button>
                       <button
+                        onClick={() => openEditEditor(p.id)}
+                        className="px-1 py-1 text-[var(--color-muted)] transition hover:text-[var(--color-fg)]"
+                        title="Edit provider"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
                         onClick={() => deleteCustomProvider(p.id)}
                         className="px-1 py-1 text-[var(--color-muted)] transition hover:text-red-300"
                         title="Delete provider"
@@ -285,7 +308,7 @@ export function SettingsModal() {
             )}
 
             <button
-              onClick={() => setEditorOpen(true)}
+              onClick={openAddEditor}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-muted)] transition hover:border-[var(--color-accent)]/50 hover:text-[var(--color-fg)]"
             >
               <Plus className="h-4 w-4" />
@@ -295,7 +318,7 @@ export function SettingsModal() {
 
           {editorOpen && (
             <CustomProviderEditor
-              existing={selectedCustom}
+              existing={editingProvider}
               onSaved={(created) => {
                 selectCustomProvider(created.id);
                 setEditorOpen(false);
