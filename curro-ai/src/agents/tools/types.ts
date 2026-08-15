@@ -24,6 +24,46 @@ export interface WebToolsConfig {
   firecrawlApiKey?: string;
 }
 
+/**
+ * A user-defined sub-agent. Definitions are authored in the frontend and stored in the
+ * user's browser (localStorage); they are sent to the backend with each turn. A sub-agent
+ * is a completely separate LLM call — its own system prompt, its own allowed tools, and its
+ * own conversation memory keyed by session name — with no access to the main agent history.
+ */
+export interface SubAgentDefinition {
+  /** Short unique name the main agent uses to target this sub-agent (e.g. "deepexplorer"). */
+  name: string;
+  /** Short human description shown by list_sub_agents. */
+  description: string;
+  /** System prompt that specialises this sub-agent. */
+  system_prompt: string;
+  /** Tool names (from the main tool registry) this sub-agent is allowed to use. */
+  tools: string[];
+  /** When false the sub-agent is hidden from list_sub_agents and cannot be called. */
+  enabled?: boolean;
+}
+
+/**
+ * Runtime bridge injected into the ToolContext for the main agent's turn so the
+ * call_sub_agent / list_sub_agents tools can enumerate and execute sub-agents. It is
+ * intentionally absent from the context handed to a sub-agent's own tool calls, which
+ * prevents recursive sub-agent invocation.
+ */
+export interface SubAgentRuntime {
+  /** All definitions provided by the user for this turn (enabled + disabled). */
+  readonly definitions: SubAgentDefinition[];
+  /** Names + descriptions of the sub-agents that can currently be called (enabled only). */
+  available(): Array<{ name: string; description: string }>;
+  /**
+   * Execute a sub-agent for the given task and return ONLY its final output.
+   * Streams live progress (tokens, reasoning, nested tool calls) via SSE side-channel events.
+   */
+  run(
+    params: { session: string; agent: string; task: string },
+    ctx: ToolContext,
+  ): Promise<ToolResult>;
+}
+
 /** Runtime context handed to a tool on execution. */
 export interface ToolContext {
   /** Absolute path all file operations are sandboxed to. */
@@ -34,6 +74,10 @@ export interface ToolContext {
   signal?: AbortSignal;
   /** Optional keys/provider for the web search and fetch tools. */
   web?: WebToolsConfig;
+  /** Sub-agent runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  subAgents?: SubAgentRuntime;
+  /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
+  toolCallId?: string;
 }
 
 /**

@@ -2,11 +2,12 @@ import type { AppConfig } from "../config.js";
 import { buildSystemPrompt } from "./systemprompt.js";
 import type { ProviderRegistry } from "./providers/registry.js";
 import type { ToolRegistry } from "./tools/index.js";
-import type { WebToolsConfig } from "./tools/types.js";
+import type { SubAgentDefinition, WebToolsConfig } from "./tools/types.js";
 import type { ToolCall, ToolCallDelta } from "./providers/types.js";
 import type { ChatSession, StoredMessage } from "../services/sessionStore.js";
 import type { SessionEventBuffer } from "../services/eventBuffer.js";
 import { safeJsonParse } from "../utils/json.js";
+import { SubAgentSessionStore, createSubAgentRuntime } from "./subagents.js";
 
 export interface RunAgentRequest {
   chatId: string;
@@ -23,9 +24,14 @@ export interface RunAgentRequest {
   serpapiApiKey?: string;
   searchProvider?: "tavily" | "exa" | "serpapi";
   firecrawlApiKey?: string;
+  /** User-defined sub-agents (from the frontend, stored in the browser) available this turn. */
+  subAgents?: SubAgentDefinition[];
 }
 
 export class AgentRunner {
+  /** Process-lifetime memory for sub-agent sessions, shared across turns of every chat. */
+  private readonly subAgentSessions = new SubAgentSessionStore();
+
   constructor(
     private readonly providers: ProviderRegistry,
     private readonly tools: ToolRegistry,
@@ -65,6 +71,24 @@ export class AgentRunner {
         serpapiApiKey: request.serpapiApiKey || this.config.serpapiApiKey || undefined,
         firecrawlApiKey: request.firecrawlApiKey || this.config.firecrawlApiKey || undefined,
       };
+
+      // Sub-agent runtime for this turn — a separate LLM call per sub-agent, using the same
+      // provider/model/credentials the user chose for the main agent. Streams `sub_agent_*`
+      // side-channel events onto the same buffer so the UI can show live progress.
+      const subAgentRuntime = createSubAgentRuntime({
+        providers: this.providers,
+        tools: this.tools,
+        config: this.config,
+        sessions: this.subAgentSessions,
+        chatId: request.chatId,
+        definitions: request.subAgents ?? [],
+        provider: request.provider,
+        model: request.model,
+        apiKey: request.apiKey,
+        baseUrl: request.baseUrl,
+        temperature: request.temperature,
+        send,
+      });
 
       const visibleAnswer: string[] = [];
       const visibleReasoning: string[] = [];
@@ -159,6 +183,8 @@ export class AgentRunner {
               shellTimeoutMs: this.config.shellTimeoutMs,
               signal,
               web,
+              subAgents: subAgentRuntime,
+              toolCallId: toolCall.id ?? undefined,
             });
 
             session.messages.push({
