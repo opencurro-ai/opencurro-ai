@@ -3,7 +3,7 @@ import { defineTool, type SearchProvider, type ToolContext, type ToolResult } fr
 
 const MAX_SEARCH_RESULTS = 15;
 const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_DESCRIPTION_WORDS = 150;
+const MAX_DESCRIPTION_WORDS = 30;
 const TRUNCATION_MARKER = "........";
 
 export const SEARCH_PROVIDER_TAVILY = "tavily";
