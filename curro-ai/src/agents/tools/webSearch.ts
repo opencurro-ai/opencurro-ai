@@ -3,6 +3,8 @@ import { defineTool, type SearchProvider, type ToolContext, type ToolResult } fr
 
 const MAX_SEARCH_RESULTS = 15;
 const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_DESCRIPTION_WORDS = 30;
+const TRUNCATION_MARKER = "........";
 
 export const SEARCH_PROVIDER_TAVILY = "tavily";
 export const SEARCH_PROVIDER_EXA = "exa";
@@ -21,6 +23,19 @@ interface SearchResult {
   title: string;
   url: string;
   Description: string;
+}
+
+/**
+ * Clean excessive whitespace, then enforce a hard word limit on result text.
+ * Returns text of up to `maxWords` words; longer text is cut to the first
+ * `maxWords` words followed by the truncation marker. Empty/null-safe.
+ */
+function truncateDescription(text: string, maxWords = MAX_DESCRIPTION_WORDS): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return cleaned;
+  const words = cleaned.split(" ");
+  if (words.length <= maxWords) return cleaned;
+  return `${words.slice(0, maxWords).join(" ")} ${TRUNCATION_MARKER}`;
 }
 
 function timeoutSignal(ctx: ToolContext): { signal: AbortSignal; cleanup: () => void } {
@@ -71,7 +86,7 @@ async function searchTavily(query: string, apiKey: string, ctx: ToolContext): Pr
   return (data.results ?? []).slice(0, MAX_SEARCH_RESULTS).map((item) => ({
     title: item.title ?? "",
     url: item.url ?? "",
-    Description: item.content ?? item.description ?? "",
+    Description: truncateDescription(item.content ?? item.description ?? ""),
   }));
 }
 
@@ -103,10 +118,11 @@ async function searchExa(query: string, apiKey: string, ctx: ToolContext): Promi
   return (data.results ?? []).slice(0, MAX_SEARCH_RESULTS).map((item) => ({
     title: item.title ?? "",
     url: item.url ?? "",
-    Description:
+    Description: truncateDescription(
       item.highlights && item.highlights.length > 0
         ? item.highlights.join(" ")
         : item.text ?? "",
+    ),
   }));
 }
 
@@ -124,7 +140,7 @@ async function searchSerpApi(query: string, apiKey: string, ctx: ToolContext): P
   return (data.organic_results ?? []).slice(0, MAX_SEARCH_RESULTS).map((item) => ({
     title: item.title ?? "",
     url: item.link ?? "",
-    Description: item.snippet ?? "",
+    Description: truncateDescription(item.snippet ?? ""),
   }));
 }
 

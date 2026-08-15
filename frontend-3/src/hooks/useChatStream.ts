@@ -159,6 +159,7 @@ export function useChatStream(onFilesChanged?: () => void) {
                     name: String(data.name ?? "tool"),
                     label: String(data.label ?? data.name ?? "tool"),
                     status: ok ? "ok" : "error",
+                    result: data.result,
                   });
                   onFilesChanged?.();
                   break;
