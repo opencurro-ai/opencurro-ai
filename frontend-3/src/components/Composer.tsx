@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { ArrowUp, Square } from "lucide-react";
 import { useStore } from "@/store/useStore";
+import { isCustomProviderId } from "@/lib/providers";
 import { cn } from "@/utils/cn";
 
 export function Composer({
@@ -13,11 +14,18 @@ export function Composer({
   const [value, setValue] = useState("");
   const streaming = useStore((s) => s.streaming);
   const settings = useStore((s) => s.settings);
+  const customProviders = useStore((s) => s.customProviders);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const apiKey = settings.apiKeys[settings.provider];
-  const ready = Boolean(apiKey && settings.model);
+  const isCustom = isCustomProviderId(settings.provider);
+  const customProvider = customProviders.find((p) => p.id === settings.provider);
+
+  // For a custom provider, "ready" only needs a configured model; its API key is
+  // optional. For built-in providers, both a key and a model are required.
+  const ready = isCustom
+    ? Boolean(customProvider && settings.model)
+    : Boolean(settings.apiKeys[settings.provider] && settings.model);
 
   const submit = () => {
     const text = value.trim();
