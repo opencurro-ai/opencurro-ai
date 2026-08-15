@@ -62,8 +62,6 @@ interface FileReadToolResult {
     total_lines?: number;
     first_line?: number | null;
     last_line?: number | null;
-    offset?: number;
-    limit?: number;
     truncated?: boolean;
     truncated_lines?: number;
   };
@@ -214,6 +212,8 @@ function FileReadChip({ tool }: { tool: ToolActivity }) {
   const hasResult = tool.status !== "running" && Boolean(result);
   const data = result?.ok ? result.data : undefined;
   const error = !result?.ok ? result?.error : undefined;
+  const inputOffset = tool.args?.offset as number | undefined;
+  const inputLimit = tool.args?.limit as number | undefined;
 
   const chip = (
     <button
@@ -256,14 +256,22 @@ function FileReadChip({ tool }: { tool: ToolActivity }) {
                   <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
                   <span className="truncate font-mono">{data?.file_path}</span>
                 </span>
-                {data?.offset !== undefined && (
+                {inputOffset !== undefined ? (
                   <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
-                    offset {data.offset}
+                    offset: {inputOffset}
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-dashed border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+                    offset: not set
                   </span>
                 )}
-                {data?.limit !== undefined && (
+                {inputLimit !== undefined ? (
                   <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
-                    limit {data.limit}
+                    limit: {inputLimit}
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-dashed border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+                    limit: not set
                   </span>
                 )}
                 {data?.truncated && (
