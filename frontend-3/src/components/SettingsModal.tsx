@@ -10,6 +10,7 @@ import {
   Plus,
   Trash2,
   Plug,
+  Pencil,
 } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { fetchModels, fetchProviders } from "@/lib/api";
@@ -41,6 +42,17 @@ export function SettingsModal() {
 
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  // Which provider the editor is editing. null = adding a brand-new provider.
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+
+  const openAddEditor = () => {
+    setEditingProviderId(null);
+    setEditorOpen(true);
+  };
+  const openEditEditor = (id: string) => {
+    setEditingProviderId(id);
+    setEditorOpen(true);
+  };
 
   useEffect(() => {
     if (open && providers.length === 0) {
@@ -53,6 +65,10 @@ export function SettingsModal() {
   const builtInProviderList = providers.length > 0 ? providers : FALLBACK_PROVIDERS;
   const isCustom = isCustomProviderId(settings.provider);
   const selectedCustom = customProviders.find((p) => p.id === settings.provider);
+  // The provider being edited in the editor (undefined when adding a new one).
+  const editingProvider = editingProviderId
+    ? (customProviders.find((p) => p.id === editingProviderId) ?? undefined)
+    : undefined;
   const currentKey = isCustom ? (selectedCustom?.apiKey ?? "") : (settings.apiKeys[settings.provider] ?? "");
   const currentProviderMeta = isCustom
     ? { defaultBaseUrl: selectedCustom?.baseUrl ?? "" }
@@ -92,6 +108,11 @@ export function SettingsModal() {
   const modelOptions = isCustom
     ? (selectedCustom?.models.filter((m) => m.trim().length > 0) ?? [])
     : models.map((m) => m.id);
+
+  // Non-empty models of the active custom provider, used for the model selector.
+  const customModelOptions = isCustom
+    ? (selectedCustom?.models.filter((m) => m.trim().length > 0) ?? [])
+    : [];
 
   return (
     <div
@@ -144,19 +165,61 @@ export function SettingsModal() {
           {isCustom ? (
             <>
               {selectedCustom && (
-                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-3 text-xs text-[var(--color-muted)]">
-                  Connected to <span className="font-medium text-[var(--color-fg)]">{selectedCustom.baseUrl || "no base URL"}</span>
-                  {selectedCustom.models.filter((m) => m.trim()).length > 0 && (
-                    <div className="mt-1.5">
-                      Models:{" "}
-                      <span className="text-[var(--color-fg)]">
-                        {selectedCustom.models.filter((m) => m.trim()).join(", ")}
-                      </span>
-                    </div>
-                  )}
+                <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-3 text-xs text-[var(--color-muted)]">
+                  <div>
+                    Connected to{" "}
+                    <span className="font-medium text-[var(--color-fg)]">
+                      {selectedCustom.baseUrl || "no base URL"}
+                    </span>
+                  </div>
+
+                  <Field label="Model">
+                    {customModelOptions.length > 0 ? (
+                      <select
+                        value={settings.model || customModelOptions[0]}
+                        onChange={(e) => setSettings({ model: e.target.value })}
+                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+                      >
+                        <option value="" disabled>
+                          Select a model…
+                        </option>
+                        {customModelOptions.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={settings.model}
+                        onChange={(e) => setSettings({ model: e.target.value })}
+                        placeholder="No models yet — add one below"
+                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+                      />
+                    )}
+                  </Field>
+
+                  <div className="flex flex-wrap gap-1">
+                    {customModelOptions.map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setSettings({ model: m })}
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[11px] transition",
+                          settings.model === m
+                            ? "border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                            : "border-[var(--color-border)] hover:border-[var(--color-accent)]/50",
+                        )}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+
                   <button
-                    onClick={() => setEditorOpen(true)}
-                    className="mt-2 flex items-center gap-1 text-[var(--color-accent)] hover:underline"
+                    onClick={() => openEditEditor(selectedCustom.id)}
+                    className="mt-1 flex items-center gap-1 text-[var(--color-accent)] hover:underline"
                   >
                     <Plug className="h-3 w-3" /> Edit or add models
                   </button>
@@ -272,6 +335,13 @@ export function SettingsModal() {
                         <Plug className="h-3.5 w-3.5" />
                       </button>
                       <button
+                        onClick={() => openEditEditor(p.id)}
+                        className="px-1 py-1 text-[var(--color-muted)] transition hover:text-[var(--color-fg)]"
+                        title="Edit provider"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
                         onClick={() => deleteCustomProvider(p.id)}
                         className="px-1 py-1 text-[var(--color-muted)] transition hover:text-red-300"
                         title="Delete provider"
@@ -285,7 +355,7 @@ export function SettingsModal() {
             )}
 
             <button
-              onClick={() => setEditorOpen(true)}
+              onClick={openAddEditor}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-muted)] transition hover:border-[var(--color-accent)]/50 hover:text-[var(--color-fg)]"
             >
               <Plus className="h-4 w-4" />
@@ -295,7 +365,7 @@ export function SettingsModal() {
 
           {editorOpen && (
             <CustomProviderEditor
-              existing={selectedCustom}
+              existing={editingProvider}
               onSaved={(created) => {
                 selectCustomProvider(created.id);
                 setEditorOpen(false);
