@@ -109,6 +109,11 @@ export function SettingsModal() {
     ? (selectedCustom?.models.filter((m) => m.trim().length > 0) ?? [])
     : models.map((m) => m.id);
 
+  // Non-empty models of the active custom provider, used for the model selector.
+  const customModelOptions = isCustom
+    ? (selectedCustom?.models.filter((m) => m.trim().length > 0) ?? [])
+    : [];
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-20 backdrop-blur-sm"
@@ -160,19 +165,61 @@ export function SettingsModal() {
           {isCustom ? (
             <>
               {selectedCustom && (
-                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-3 text-xs text-[var(--color-muted)]">
-                  Connected to <span className="font-medium text-[var(--color-fg)]">{selectedCustom.baseUrl || "no base URL"}</span>
-                  {selectedCustom.models.filter((m) => m.trim()).length > 0 && (
-                    <div className="mt-1.5">
-                      Models:{" "}
-                      <span className="text-[var(--color-fg)]">
-                        {selectedCustom.models.filter((m) => m.trim()).join(", ")}
-                      </span>
-                    </div>
-                  )}
+                <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-3 text-xs text-[var(--color-muted)]">
+                  <div>
+                    Connected to{" "}
+                    <span className="font-medium text-[var(--color-fg)]">
+                      {selectedCustom.baseUrl || "no base URL"}
+                    </span>
+                  </div>
+
+                  <Field label="Model">
+                    {customModelOptions.length > 0 ? (
+                      <select
+                        value={settings.model || customModelOptions[0]}
+                        onChange={(e) => setSettings({ model: e.target.value })}
+                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+                      >
+                        <option value="" disabled>
+                          Select a model…
+                        </option>
+                        {customModelOptions.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={settings.model}
+                        onChange={(e) => setSettings({ model: e.target.value })}
+                        placeholder="No models yet — add one below"
+                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+                      />
+                    )}
+                  </Field>
+
+                  <div className="flex flex-wrap gap-1">
+                    {customModelOptions.map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setSettings({ model: m })}
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[11px] transition",
+                          settings.model === m
+                            ? "border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                            : "border-[var(--color-border)] hover:border-[var(--color-accent)]/50",
+                        )}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+
                   <button
                     onClick={() => openEditEditor(selectedCustom.id)}
-                    className="mt-2 flex items-center gap-1 text-[var(--color-accent)] hover:underline"
+                    className="mt-1 flex items-center gap-1 text-[var(--color-accent)] hover:underline"
                   >
                     <Plug className="h-3 w-3" /> Edit or add models
                   </button>
