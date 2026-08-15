@@ -53,6 +53,21 @@ interface ListToolResult {
   data?: { available_sub_agents?: Array<{ name?: string; description?: string }> };
 }
 
+interface FileReadToolResult {
+  ok?: boolean;
+  data?: {
+    file_path?: string;
+    content?: string;
+    line_count?: number;
+    total_lines?: number;
+    first_line?: number | null;
+    last_line?: number | null;
+    truncated?: boolean;
+    truncated_lines?: number;
+  };
+  error?: { code?: string; message?: string };
+}
+
 const PROVIDER_LABELS: Record<string, string> = {
   tavily: "Tavily",
   exa: "Exa",
@@ -86,6 +101,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "list_sub_agents") {
     return <ListSubAgentsChip tool={tool} />;
+  }
+  if (tool.name === "file_read") {
+    return <FileReadChip tool={tool} />;
   }
   return <RegularChip tool={tool} />;
 }
@@ -180,6 +198,110 @@ function RegularChip({ tool }: { tool: ToolActivity }) {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FileReadChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as FileReadToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = !result?.ok ? result?.error : undefined;
+  const inputOffset = tool.args?.offset as number | undefined;
+  const inputLimit = tool.args?.limit as number | undefined;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <FileText className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="text-red-300">
+              Read failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex min-w-0 items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  <span className="truncate font-mono">{data?.file_path}</span>
+                </span>
+                {inputOffset !== undefined ? (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    offset: {inputOffset}
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-dashed border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+                    offset: not set
+                  </span>
+                )}
+                {inputLimit !== undefined ? (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    limit: {inputLimit}
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-dashed border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+                    limit: not set
+                  </span>
+                )}
+                {data?.truncated && (
+                  <span
+                    className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300"
+                    title="Output was cut at the line limit"
+                  >
+                    ⚠ truncated
+                  </span>
+                )}
+                {data?.truncated_lines ? (
+                  <span
+                    className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]"
+                    title="Lines cut at the maximum line length"
+                  >
+                    {data.truncated_lines} long line{data.truncated_lines === 1 ? "" : "s"} cut
+                  </span>
+                ) : null}
+              </div>
+
+              <pre className="max-h-80 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                {data?.content || "(empty file)"}
+              </pre>
+
+              <p className="text-[10px] text-[var(--color-muted)]">
+                {data?.line_count ?? 0} of {data?.total_lines ?? 0} lines
+                {data?.first_line != null && data?.last_line != null
+                  ? ` · lines ${data.first_line}–${data.last_line}`
+                  : ""}
+              </p>
             </div>
           )}
         </div>

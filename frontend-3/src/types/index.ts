@@ -20,6 +20,8 @@ export interface ToolActivity {
   label: string;
   status: ToolActivityStatus;
   filePath?: string;
+  /** Raw arguments the model passed in the tool call (e.g. file_read offset/limit). */
+  args?: Record<string, unknown>;
   /** Full structured tool result (e.g. web_search results) streamed from the backend. */
   result?: unknown;
   /** Live sub-agent run attached to a call_sub_agent tool chip (streamed token by token). */

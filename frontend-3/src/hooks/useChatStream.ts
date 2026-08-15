@@ -156,6 +156,7 @@ export function useChatStream(onFilesChanged?: () => void) {
                     name: String(data.name ?? "tool"),
                     label: String(data.label ?? data.name ?? "tool"),
                     status: "running",
+                    args: (data.args as Record<string, unknown> | undefined) ?? undefined,
                     filePath:
                       (data.args as Record<string, unknown> | undefined)?.file_path as
                         | string
@@ -203,6 +204,7 @@ export function useChatStream(onFilesChanged?: () => void) {
                     name: String(data.name ?? "tool"),
                     label: String(data.label ?? data.name ?? "tool"),
                     status: "running",
+                    args: (data.args as Record<string, unknown> | undefined) ?? undefined,
                     filePath: (data.args as Record<string, unknown> | undefined)?.file_path as
                       | string
                       | undefined,

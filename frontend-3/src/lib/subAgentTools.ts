@@ -13,7 +13,8 @@ export const SUB_AGENT_TOOLS: readonly SubAgentToolMeta[] = [
   {
     name: "file_read",
     label: "Read file",
-    description: "Read the full contents of a file in the workspace.",
+    description:
+      "Read a file from the local filesystem. file_path must be an absolute path; use offset/limit to read sections of large files.",
   },
   {
     name: "file_write",
