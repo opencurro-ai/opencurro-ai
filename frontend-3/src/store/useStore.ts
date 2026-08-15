@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type {
   ChatMessage,
   Conversation,
+  CustomProvider,
   ModelInfo,
   ProviderMeta,
   SearchProvider,
@@ -12,6 +13,7 @@ import type {
   ToolActivity,
 } from "@/types";
 import { uid } from "@/utils/id";
+import { CUSTOM_PROVIDER_PREFIX } from "@/lib/providers";
 
 interface AppState {
   // Persisted
@@ -19,6 +21,7 @@ interface AppState {
   currentId: string | null;
   settings: Settings;
   subAgents: SubAgent[];
+  customProviders: CustomProvider[];
 
   // Ephemeral UI
   providers: ProviderMeta[];
@@ -66,6 +69,12 @@ interface AppState {
   updateSubAgent: (id: string, patch: Partial<Omit<SubAgent, "id" | "createdAt">>) => void;
   deleteSubAgent: (id: string) => void;
   toggleSubAgent: (id: string) => void;
+
+  // Actions — custom OpenAI-compatible providers (persisted in the browser)
+  addCustomProvider: (input: Omit<CustomProvider, "id" | "createdAt" | "updatedAt">) => CustomProvider;
+  updateCustomProvider: (id: string, patch: Partial<Omit<CustomProvider, "id" | "createdAt">>) => void;
+  deleteCustomProvider: (id: string) => void;
+  selectCustomProvider: (id: string) => void;
 
   // Actions — settings & UI
   setSettings: (patch: Partial<Settings>) => void;
@@ -150,6 +159,7 @@ export const useStore = create<AppState>()(
       currentId: null,
       settings: defaultSettings,
       subAgents: [],
+      customProviders: [],
 
       providers: [],
       models: [],
@@ -349,6 +359,45 @@ export const useStore = create<AppState>()(
           ),
         })),
 
+      addCustomProvider: (input) => {
+        const now = Date.now();
+        const provider: CustomProvider = {
+          id: uid(CUSTOM_PROVIDER_PREFIX),
+          createdAt: now,
+          updatedAt: now,
+          ...input,
+          models: (input.models.length > 0 ? input.models : [""]),
+        };
+        set((s) => ({ customProviders: [provider, ...s.customProviders] }));
+        return provider;
+      },
+
+      updateCustomProvider: (id, patch) =>
+        set((s) => ({
+          customProviders: s.customProviders.map((p) =>
+            p.id === id ? { ...p, ...patch, updatedAt: Date.now() } : p,
+          ),
+        })),
+
+      deleteCustomProvider: (id) =>
+        set((s) => {
+          const customProviders = s.customProviders.filter((p) => p.id !== id);
+          // If the deleted provider was selected, fall back to a built-in provider.
+          let settings = s.settings;
+          if (s.settings.provider === id) {
+            settings = { ...s.settings, provider: "openrouter", model: "", baseUrl: "" };
+          }
+          return { customProviders, settings };
+        }),
+
+      selectCustomProvider: (id) =>
+        set((s) => {
+          const provider = s.customProviders.find((p) => p.id === id);
+          if (!provider) return {};
+          const model = provider.models.find((m) => m.trim().length > 0) ?? "";
+          return { settings: { ...s.settings, provider: id, model, baseUrl: "" } };
+        }),
+
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       setApiKey: (provider, key) =>
         set((s) => ({
@@ -404,6 +453,7 @@ export const useStore = create<AppState>()(
           ...p,
           settings: { ...current.settings, ...(p.settings ?? {}) },
           subAgents: Array.isArray(p.subAgents) ? p.subAgents : current.subAgents,
+          customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,
         };
       },
       partialize: (s) => ({
@@ -411,6 +461,7 @@ export const useStore = create<AppState>()(
         currentId: s.currentId,
         settings: s.settings,
         subAgents: s.subAgents,
+        customProviders: s.customProviders,
       }),
     },
   ),

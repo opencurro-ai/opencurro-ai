@@ -12,6 +12,41 @@ export interface ModelInfo {
   context_window?: number | null;
 }
 
+/** Custom HTTP header pair the user configures for a custom provider. */
+export interface CustomHeader {
+  key: string;
+  value: string;
+}
+
+/**
+ * A user-defined OpenAI-compatible provider, persisted in the browser (localStorage).
+ * Multiple providers coexist; each can carry one or more model ids.
+ */
+export interface CustomProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  headers: CustomHeader[];
+  models: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Flat config sent to the backend on the wire for the currently selected custom
+ * provider. Mirrors the requested Provider object: { id, name, model, baseUrl,
+ * apiKey?, headers? }.
+ */
+export interface CustomProviderConfig {
+  id: string;
+  name: string;
+  model: string;
+  baseUrl: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+}
+
 export type ToolActivityStatus = "running" | "ok" | "error";
 
 export interface ToolActivity {
@@ -116,6 +151,7 @@ export interface StreamRequest {
   model?: string;
   api_key?: string;
   base_url?: string;
+  custom_provider?: CustomProviderConfig;
   max_iterations?: number;
   temperature?: number;
   since_event_id?: number;

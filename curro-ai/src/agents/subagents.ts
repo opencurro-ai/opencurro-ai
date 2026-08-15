@@ -1,6 +1,6 @@
 import type { AppConfig } from "../config.js";
-import type { ProviderRegistry } from "./providers/registry.js";
 import type { ToolRegistry } from "./tools/registry.js";
+import type { Provider } from "./providers/types.js";
 import type { ToolCall, ToolCallDelta } from "./providers/types.js";
 import type { StoredMessage } from "../services/sessionStore.js";
 import type {
@@ -49,14 +49,14 @@ export class SubAgentSessionStore {
 }
 
 export interface SubAgentRuntimeDeps {
-  providers: ProviderRegistry;
+  /** The resolved provider serving this turn (built-in or custom). */
+  provider: Provider;
   tools: ToolRegistry;
   config: AppConfig;
   sessions: SubAgentSessionStore;
   chatId: string;
   definitions: SubAgentDefinition[];
   /** Provider/model/credentials — identical to the main agent's, but a separate API call. */
-  provider: string;
   model: string;
   apiKey: string;
   baseUrl?: string;
@@ -104,7 +104,7 @@ class SubAgentRunner {
     params: { session: string; agent: string; task: string },
     ctx: ToolContext,
   ): Promise<ToolResult> {
-    const { send, providers, tools, config, sessions, chatId } = this.deps;
+    const { send, provider, tools, config, sessions, chatId } = this.deps;
     const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
     const session = (params.session ?? "").trim() || "default";
     const task = (params.task ?? "").trim();
@@ -129,16 +129,6 @@ class SubAgentRunner {
       return {
         ok: false,
         error: { code: "missing_task", message: "A non-empty task is required for the sub-agent." },
-      };
-    }
-
-    let provider;
-    try {
-      provider = providers.get(this.deps.provider);
-    } catch (error) {
-      return {
-        ok: false,
-        error: { code: "provider_error", message: messageOf(error) },
       };
     }
 

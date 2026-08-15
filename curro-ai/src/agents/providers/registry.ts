@@ -1,4 +1,5 @@
 import type { Provider, ProviderMetadata } from "./types.js";
+import { buildCustomProvider, isCustomProviderId } from "./custom.js";
 import { openRouterProvider } from "./openrouter.js";
 import { groqProvider } from "./groq.js";
 import { nvidiaProvider } from "./nvidia.js";
@@ -101,4 +102,26 @@ export const ALL_PROVIDERS: Provider[] = [
 
 export function createProviderRegistry(): ProviderRegistry {
   return new ProviderRegistry().registerAll(ALL_PROVIDERS);
+}
+
+/**
+ * Resolve the Provider that should serve a request. Built-in providers come from the
+ * registry; a `custom_`-prefixed id is materialized on the fly from the config the
+ * frontend sent with the request.
+ */
+export function resolveProvider(
+  providers: ProviderRegistry,
+  providerId: string,
+  customConfig?: unknown,
+): Provider {
+  if (isCustomProviderId(providerId)) {
+    return buildCustomProvider(customConfig);
+  }
+  if (customConfig) {
+    const record = customConfig as Record<string, unknown>;
+    if (typeof record.id === "string" && record.id && record.id === providerId) {
+      return buildCustomProvider(customConfig);
+    }
+  }
+  return providers.get(providerId);
 }

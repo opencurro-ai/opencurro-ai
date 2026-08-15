@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { abortChat, streamChat } from "@/lib/api";
 import { useStore } from "@/store/useStore";
+import { CUSTOM_PROVIDER_PREFIX, toCustomProviderConfig } from "@/lib/providers";
 import type { BackendMessage, BackendSubAgent, ChatMessage, SSEEventData } from "@/types";
 import { uid } from "@/utils/id";
 
@@ -56,8 +57,12 @@ export function useChatStream(onFilesChanged?: () => void) {
   const send = useCallback(
     async (text: string) => {
       const store = useStore.getState();
-      const { settings } = store;
-      const apiKey = settings.apiKeys[settings.provider] ?? "";
+      const { settings, customProviders } = store;
+      const isCustom = settings.provider.startsWith(CUSTOM_PROVIDER_PREFIX);
+      const customProvider = customProviders.find((p) => p.id === settings.provider);
+      const apiKey = isCustom
+        ? (customProvider?.apiKey ?? "")
+        : (settings.apiKeys[settings.provider] ?? "");
 
       const convId = store.ensureConversation();
       const conv = useStore.getState().conversations.find((c) => c.id === convId)!;
@@ -118,6 +123,9 @@ export function useChatStream(onFilesChanged?: () => void) {
             model: settings.model,
             api_key: apiKey,
             base_url: settings.baseUrl || undefined,
+            custom_provider: isCustom && customProvider
+              ? toCustomProviderConfig(customProvider, settings.model)
+              : undefined,
             max_iterations: 1000,
             tavily_api_key: settings.tavilyApiKey || undefined,
             exa_api_key: settings.exaApiKey || undefined,
