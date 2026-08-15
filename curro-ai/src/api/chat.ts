@@ -6,6 +6,22 @@ import type { SessionStore, StoredMessage } from "../services/sessionStore.js";
 import type { SubAgentDefinition } from "../agents/tools/types.js";
 import { initSSE, formatSSE } from "../utils/sse.js";
 
+/** Extract a string field from an untrusted object (used on the custom_provider payload). */
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/** Derive the API key used for provider auth: prefer the top-level key, else custom provider's. */
+function effectiveApiKey(body: StreamBody): string {
+  const top = (body.api_key ?? "").trim();
+  if (top) return top;
+  if (body.custom_provider && typeof body.custom_provider === "object") {
+    const custom = body.custom_provider as Record<string, unknown>;
+    return str(custom.apiKey);
+  }
+  return "";
+}
+
 interface StreamBody {
   chat_id?: string;
   user_message?: string;
@@ -14,6 +30,7 @@ interface StreamBody {
   model?: string;
   api_key?: string;
   base_url?: string;
+  custom_provider?: unknown;
   max_iterations?: number;
   temperature?: number;
   since_event_id?: number;
@@ -82,7 +99,10 @@ export function buildChatRouter(
     }
 
     const startNew = Boolean(
-      body.user_message && body.provider && body.model && body.api_key,
+      body.user_message &&
+        body.provider &&
+        body.model &&
+        (body.api_key || Boolean(body.custom_provider)),
     );
 
     if (startNew) {
@@ -105,8 +125,9 @@ export function buildChatRouter(
         userMessage: body.user_message!,
         provider: body.provider!,
         model: body.model!,
-        apiKey: body.api_key!,
+        apiKey: effectiveApiKey(body),
         baseUrl: body.base_url,
+        customProvider: body.custom_provider,
         maxIterations: body.max_iterations ?? config.maxIterations,
         temperature: body.temperature,
         tavilyApiKey: body.tavily_api_key,

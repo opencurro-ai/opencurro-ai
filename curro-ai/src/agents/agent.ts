@@ -1,6 +1,8 @@
 import type { AppConfig } from "../config.js";
 import { buildSystemPrompt } from "./systemprompt.js";
 import type { ProviderRegistry } from "./providers/registry.js";
+import { resolveProvider } from "./providers/registry.js";
+import type { Provider } from "./providers/types.js";
 import type { ToolRegistry } from "./tools/index.js";
 import type { SubAgentDefinition, WebToolsConfig } from "./tools/types.js";
 import type { ToolCall, ToolCallDelta } from "./providers/types.js";
@@ -16,6 +18,8 @@ export interface RunAgentRequest {
   model: string;
   apiKey: string;
   baseUrl?: string;
+  /** Full user-defined provider config, present when a `custom_` provider is selected. */
+  customProvider?: unknown;
   maxIterations: number;
   temperature?: number;
   /** Per-request web tool keys/provider (from frontend Settings); falls back to env config. */
@@ -52,9 +56,9 @@ export class AgentRunner {
     const send = (event: string, data: Record<string, unknown>) => buffer.append(event, data);
 
     try {
-      let provider;
+      let provider: Provider;
       try {
-        provider = this.providers.get(request.provider);
+        provider = resolveProvider(this.providers, request.provider, request.customProvider);
       } catch (error) {
         send("error", { code: "provider_error", message: messageOf(error) });
         send("done", { ok: false });
@@ -76,13 +80,12 @@ export class AgentRunner {
       // provider/model/credentials the user chose for the main agent. Streams `sub_agent_*`
       // side-channel events onto the same buffer so the UI can show live progress.
       const subAgentRuntime = createSubAgentRuntime({
-        providers: this.providers,
+        provider,
         tools: this.tools,
         config: this.config,
         sessions: this.subAgentSessions,
         chatId: request.chatId,
         definitions: request.subAgents ?? [],
-        provider: request.provider,
         model: request.model,
         apiKey: request.apiKey,
         baseUrl: request.baseUrl,

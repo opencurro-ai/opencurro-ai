@@ -1,4 +1,35 @@
-import type { ProviderMeta } from "@/types";
+import type { CustomProvider, CustomProviderConfig, ProviderMeta } from "@/types";
+
+/** Marker prefix shared with the backend for dynamically-defined providers. */
+export const CUSTOM_PROVIDER_PREFIX = "custom_";
+
+/** Whether a provider id refers to a user-defined custom provider. */
+export function isCustomProviderId(id: string | undefined): boolean {
+  return Boolean(id && id.startsWith(CUSTOM_PROVIDER_PREFIX));
+}
+
+/**
+ * Build the flat wire-format config sent to the backend for a given custom provider
+ * and one of its models. Custom headers collapse from key/value pairs into a record.
+ */
+export function toCustomProviderConfig(
+  provider: CustomProvider,
+  model: string,
+): CustomProviderConfig {
+  const headers: Record<string, string> = {};
+  for (const pair of provider.headers ?? []) {
+    const key = (pair.key ?? "").trim();
+    if (key && !key.toLowerCase().startsWith("content-type")) headers[key] = pair.value;
+  }
+  return {
+    id: provider.id,
+    name: provider.name,
+    model: model || (provider.models[0] as string | undefined) || "",
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey || undefined,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
+  };
+}
 
 /**
  * Static fallback list of every provider the curro-ai backend supports, mirroring
