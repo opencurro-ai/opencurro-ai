@@ -20,6 +20,8 @@ export interface ToolActivity {
   label: string;
   status: ToolActivityStatus;
   filePath?: string;
+  /** Full structured tool result (e.g. web_search results) streamed from the backend. */
+  result?: unknown;
 }
 
 export interface ChatMessage {
