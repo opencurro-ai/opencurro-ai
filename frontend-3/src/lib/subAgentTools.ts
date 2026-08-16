@@ -49,6 +49,12 @@ export const SUB_AGENT_TOOLS: readonly SubAgentToolMeta[] = [
       "View the live buffered output of background commands started with shall_tool (wait_for_output=false), keyed by session_name.",
   },
   {
+    name: "bash_write_to_process",
+    label: "Write to process",
+    description:
+      "Write input to the stdin of a process running in a background shell session (started with shall_tool wait_for_output=false). Use for prompts, interactive CLIs, REPLs and dev servers.",
+  },
+  {
     name: "web_search",
     label: "Web search",
     description: "Search the web for up-to-date information.",

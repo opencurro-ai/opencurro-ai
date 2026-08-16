@@ -6,6 +6,7 @@ import { strReplaceTool } from "./strReplace.js";
 import { applyMultipleEditsTool } from "./applyMultipleEdits.js";
 import { shellTool } from "./shell.js";
 import { shellViewTool } from "./shellView.js";
+import { bashWriteToProcessTool } from "./bashWriteToProcess.js";
 import { webSearchTool } from "./webSearch.js";
 import { fetchWebUrlsTool } from "./fetchWebUrls.js";
 import { readImageTool } from "./readImage.js";
@@ -30,12 +31,14 @@ export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";
 export { callSubAgentTool } from "./call_sub_agent.js";
 export { listSubAgentsTool } from "./list_sub_agents.js";
 export { shellViewTool } from "./shellView.js";
+export { bashWriteToProcessTool } from "./bashWriteToProcess.js";
 export {
   shellSessionStore,
   ShellSessionStore,
   MAX_SESSION_BUFFER_CHARS,
 } from "./shellSessions.js";
 export type { ShellSessionSnapshot, ShellSessionStatus } from "./shellSessions.js";
+export type { ProcessWriteResult } from "./shellSessions.js";
 
 /** Build the default registry with the agent's file/web/shell tools plus the sub-agent tools. */
 export function createToolRegistry(): ToolRegistry {
@@ -47,6 +50,7 @@ export function createToolRegistry(): ToolRegistry {
     applyMultipleEditsTool,
     shellTool,
     shellViewTool,
+    bashWriteToProcessTool,
     webSearchTool,
     fetchWebUrlsTool,
     readImageTool,
@@ -63,6 +67,7 @@ export const tools = {
   applyMultipleEditsTool,
   shellTool,
   shellViewTool,
+  bashWriteToProcessTool,
   webSearchTool,
   fetchWebUrlsTool,
   readImageTool,

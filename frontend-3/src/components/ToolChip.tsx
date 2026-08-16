@@ -20,6 +20,7 @@ import {
   Image as ImageIcon,
   Link2,
   Eye,
+  CornerDownLeft,
 } from "lucide-react";
 import type { ReadImageToolResult, SubAgentRun, ToolActivity } from "@/types";
 import { cn } from "@/utils/cn";
@@ -32,6 +33,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   apply_multiple_edits: PencilLine,
   shall_tool: Terminal,
   shell_view: Eye,
+  bash_write_to_process: CornerDownLeft,
   web_search: Globe,
   fatch_web_urls: Globe,
   read_image: ImageIcon,
@@ -113,6 +115,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "shell_view") {
     return <ShellViewChip tool={tool} />;
+  }
+  if (tool.name === "bash_write_to_process") {
+    return <BashWriteToProcessChip tool={tool} />;
   }
   if (tool.name === "list_sub_agents") {
     return <ListSubAgentsChip tool={tool} />;
@@ -675,6 +680,137 @@ function ShellViewChip({ tool }: { tool: ToolActivity }) {
               );
             })
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface BashWriteToProcessToolResult {
+  ok?: boolean;
+  data?: {
+    session_name?: string;
+    input?: string;
+    press_enter?: boolean;
+    written?: string;
+    bytes_written?: number;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    session_name?: string;
+    status?: string;
+    exit_code?: number | null;
+    detail?: string;
+  };
+}
+
+function BashWriteToProcessChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const result = tool.result as BashWriteToProcessToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <CornerDownLeft className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  const sessionName = data?.session_name ?? String(tool.args?.session_name ?? "");
+  const pressEnter = data?.press_enter ?? tool.args?.press_enter;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <>
+              <p className="whitespace-pre-wrap text-red-300">
+                Write failed: {error.message ?? error.code ?? "unknown error"}
+              </p>
+              {error.code === "process_exited" && (
+                <p className="text-[var(--color-muted)]">
+                  Process status: {error.status ?? "unknown"}
+                  {error.exit_code != null ? ` · exit: ${error.exit_code}` : ""}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex min-w-0 items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  <span className="truncate font-mono">{sessionName}</span>
+                </span>
+                <span
+                  className={
+                    pressEnter
+                      ? "rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]"
+                      : "rounded-full border border-dashed border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]"
+                  }
+                >
+                  press_enter: {pressEnter ? "true" : "false"}
+                </span>
+                {data?.bytes_written != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    {data.bytes_written} bytes
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                  Written to stdin
+                </div>
+                <pre className="max-h-48 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                  {data?.written ?? ""}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60">
+            <button
+              type="button"
+              onClick={() => setShowRaw((v) => !v)}
+              aria-expanded={showRaw}
+              className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+            >
+              <Braces className="h-3 w-3" />
+              Raw arguments
+              <ChevronRight
+                className={cn("h-3.5 w-3.5 transition-transform", showRaw && "rotate-90")}
+              />
+            </button>
+            {showRaw && (
+              <pre className="max-h-64 overflow-auto whitespace-pre rounded-b-lg border-t border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                {JSON.stringify(tool.args ?? {}, null, 2)}
+              </pre>
+            )}
+          </div>
         </div>
       )}
     </div>

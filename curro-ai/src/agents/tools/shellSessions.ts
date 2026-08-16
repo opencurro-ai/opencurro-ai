@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import type { Writable } from "node:stream";
 
 /** Maximum characters of stdout and of stderr buffered per session (each). */
 export const MAX_SESSION_BUFFER_CHARS = 1_000_000;
@@ -29,6 +30,24 @@ export interface ShellSessionSnapshot {
   truncated: boolean;
 }
 
+/**
+ * Result of a writeToProcess attempt. `ok` mirrors the tool result contract so the
+ * caller can translate each failure code into a clear tool error without re-probing.
+ */
+export type ProcessWriteResult =
+  | { ok: true; session_name: string; bytes_written: number }
+  | { ok: false; code: "session_not_found" }
+  | { ok: false; code: "not_writable_session" }
+  | {
+      ok: false;
+      code: "process_exited";
+      status: ShellSessionStatus;
+      exit_code: number | null;
+      signal: string | null;
+    }
+  | { ok: false; code: "stdin_unavailable" }
+  | { ok: false; code: "write_failed"; message: string };
+
 interface InternalShellSession {
   session_name: string;
   kind: "background" | "foreground";
@@ -42,6 +61,10 @@ interface InternalShellSession {
   stdout: string;
   stderr: string;
   truncated: boolean;
+  /** The live process (background sessions only). Kept after exit so snapshot keeps pid/exit_code. */
+  child: ChildProcess | null;
+  /** Serializes concurrent stdin writes to this session: each write awaits its predecessor. */
+  writeChain: Promise<void>;
 }
 
 function createEntry(
@@ -62,6 +85,8 @@ function createEntry(
     stdout: "",
     stderr: "",
     truncated: false,
+    child: null,
+    writeChain: Promise.resolve(),
   };
 }
 
@@ -113,10 +138,18 @@ export class ShellSessionStore {
   attach(session_name: string, child: ChildProcess, command: string): void {
     const entry = createEntry(session_name, command, "background");
     entry.pid = child.pid ?? null;
+    entry.child = child;
     this.sessions.set(session_name, entry);
 
     const onStdout = (chunk: Buffer) => appendTo(entry, "stdout", chunk.toString("utf8"));
     const onStderr = (chunk: Buffer) => appendTo(entry, "stderr", chunk.toString("utf8"));
+    // Permanent stdin error listener: writes against a closed pipe (e.g. the process
+    // exited or closed its stdin) surface as an 'error' event on child.stdin. Without a
+    // listener this would crash the server; writeToProcess still reports the failure to
+    // the caller through the write callback. The note is also visible via shell_view.
+    child.stdin?.on("error", (error: Error) => {
+      appendTo(entry, "stderr", `[stdin error] ${error.message}\n`);
+    });
     const onError = (error: Error) => {
       if (entry.status !== "running") return;
       entry.status = "errored";
@@ -166,6 +199,92 @@ export class ShellSessionStore {
       stderr: entry.stderr,
     };
   }
+
+  /**
+   * Write raw bytes to the stdin of the process running in a background session.
+   * Never starts a new command and never terminates the process: the data goes
+   * directly to the already-running process's stdin, exactly as provided.
+   *
+   * Concurrent calls targeting the same session are serialized through the entry's
+   * writeChain so their bytes can never interleave; ordering matches call order.
+   */
+  async writeToProcess(session_name: string, data: string): Promise<ProcessWriteResult> {
+    const entry = this.sessions.get(session_name);
+    if (!entry) return { ok: false, code: "session_not_found" };
+    if (entry.kind !== "background") return { ok: false, code: "not_writable_session" };
+    if (entry.status !== "running") {
+      return {
+        ok: false,
+        code: "process_exited",
+        status: entry.status,
+        exit_code: entry.exit_code,
+        signal: entry.signal,
+      };
+    }
+
+    const stdin = entry.child?.stdin;
+    if (!entry.child || !stdin || !isWritable(stdin)) {
+      return { ok: false, code: "stdin_unavailable" };
+    }
+
+    // Queue behind any in-flight write so concurrent calls write in call order.
+    const prior = entry.writeChain;
+    let release!: () => void;
+    entry.writeChain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await prior.catch(() => undefined);
+
+    try {
+      // Re-check after the queue drains: the process may have exited meanwhile.
+      if (entry.status !== "running") {
+        return {
+          ok: false,
+          code: "process_exited",
+          status: entry.status,
+          exit_code: entry.exit_code,
+          signal: entry.signal,
+        };
+      }
+      if (!isWritable(stdin)) return { ok: false, code: "stdin_unavailable" };
+
+      try {
+        await writeToStream(stdin, data);
+        return { ok: true, session_name, bytes_written: Buffer.byteLength(data, "utf8") };
+      } catch (error) {
+        return {
+          ok: false,
+          code: "write_failed",
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
+    } finally {
+      release();
+    }
+  }
+}
+
+function isWritable(stream: Writable): boolean {
+  return !stream.destroyed && !stream.writableEnded && stream.writable;
+}
+
+/**
+ * Write a single chunk to a stream, resolving once the chunk is flushed and rejecting
+ * on any write failure (e.g. EPIPE when the process exited or closed its stdin). The
+ * stream-level 'error' event is already handled by the permanent listener attached in
+ * attach(); this promise only observes the per-write callback and sync-throw paths.
+ */
+function writeToStream(stream: Writable, chunk: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      stream.write(chunk, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
 }
 
 /** Process-lifetime singleton used by shall_tool and shell_view. */

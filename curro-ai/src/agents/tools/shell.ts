@@ -159,7 +159,9 @@ function runBackground(command: string, sessionName: string, ctx: ToolContext): 
       cwd: ctx.workspaceRoot,
       env: process.env,
       detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      // stdin stays open as a pipe so bash_write_to_process can feed the running
+      // process input (prompts, interactive CLIs, REPLs, dev servers).
+      stdio: ["pipe", "pipe", "pipe"],
     });
     // Track the process under its session name: the shell_view tool reads the
     // buffered stdout/stderr and status from this session at any moment.
