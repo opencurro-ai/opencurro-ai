@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-PORT=8000
+PORT=8787
 FRONTEND_PORT=5173
 
 echo "Stopping backend (port $PORT)…"

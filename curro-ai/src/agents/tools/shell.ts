@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { defineTool, type ToolContext, type ToolResult } from "./types.js";
+import { shellSessionStore } from "./shellSessions.js";
 
 /** Default timeout (seconds) applied when the model does not specify one. */
 export const DEFAULT_TIMEOUT = 60;
@@ -18,7 +19,10 @@ const schema = z.object({
   session_name: z
     .string()
     .default("default")
-    .describe("Logical session/label for grouping related commands (informational)."),
+    .describe(
+      "Logical session/label for grouping related commands. For background commands " +
+        "(wait_for_output=false) this is the key used by shell_view to inspect the live output.",
+    ),
   timeout: z
     .number()
     .int()
@@ -39,7 +43,7 @@ const DESCRIPTION = `Executes a bash command in a persistent shell session
 
 Usage notes:
 - To run multiple commands, join them with ';' or '&&'. Do not use newlines
-- For long-running tasks (e.g., deployments), set \`wait_for_output\` to False and monitor progress with the \`BashView\` tool
+- For long-running tasks (e.g., deployments), set \`wait_for_output\` to False and monitor progress with the \`shell_view\` tool using the same session_name
 - You can specify an optional timeout in seconds (up to ${MAX_TIMEOUT} seconds). If not specified, commands will timeout after ${DEFAULT_TIMEOUT} seconds`;
 
 function truncate(text: string): { text: string; truncated: boolean } {
@@ -54,9 +58,14 @@ function truncate(text: string): { text: string; truncated: boolean } {
 
 function runForeground(
   command: string,
+  sessionName: string,
   timeoutSeconds: number,
   ctx: ToolContext,
 ): Promise<ToolResult> {
+  // Record the session name as a foreground session so shell_view rejects it
+  // with a clear "not a background session" error instead of "session not found".
+  shellSessionStore.markForeground(sessionName);
+
   return new Promise((resolve) => {
     const child = spawn("bash", ["-lc", command], {
       cwd: ctx.workspaceRoot,
@@ -144,22 +153,26 @@ function runForeground(
   });
 }
 
-function runBackground(command: string, ctx: ToolContext): ToolResult {
+function runBackground(command: string, sessionName: string, ctx: ToolContext): ToolResult {
   try {
     const child = spawn("bash", ["-lc", command], {
       cwd: ctx.workspaceRoot,
       env: process.env,
       detached: true,
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
     });
+    // Track the process under its session name: the shell_view tool reads the
+    // buffered stdout/stderr and status from this session at any moment.
+    shellSessionStore.attach(sessionName, child, command);
     child.unref();
     return {
       ok: true,
       data: {
         command,
+        session_name: sessionName,
         pid: child.pid,
         background: true,
-        message: `Started command in background with PID ${child.pid}.`,
+        message: `Started command in background with PID ${child.pid}. Inspect its live output with the shell_view tool using session name "${sessionName}".`,
       },
     };
   } catch (error) {
@@ -184,8 +197,8 @@ export const shellTool = defineTool({
       return { ok: false, error: { code: "missing_command", message: "No command provided." } };
     }
     if (args.wait_for_output) {
-      return runForeground(args.command, args.timeout, ctx);
+      return runForeground(args.command, args.session_name, args.timeout, ctx);
     }
-    return runBackground(args.command, ctx);
+    return runBackground(args.command, args.session_name, ctx);
   },
 });

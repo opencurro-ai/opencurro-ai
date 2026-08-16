@@ -43,6 +43,12 @@ export const SUB_AGENT_TOOLS: readonly SubAgentToolMeta[] = [
     description: "Run a shell command from the workspace directory.",
   },
   {
+    name: "shell_view",
+    label: "View shell output",
+    description:
+      "View the live buffered output of background commands started with shall_tool (wait_for_output=false), keyed by session_name.",
+  },
+  {
     name: "web_search",
     label: "Web search",
     description: "Search the web for up-to-date information.",

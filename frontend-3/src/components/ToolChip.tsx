@@ -19,6 +19,7 @@ import {
   ListTree,
   Image as ImageIcon,
   Link2,
+  Eye,
 } from "lucide-react";
 import type { ReadImageToolResult, SubAgentRun, ToolActivity } from "@/types";
 import { cn } from "@/utils/cn";
@@ -30,6 +31,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   str_replace: Pencil,
   apply_multiple_edits: PencilLine,
   shall_tool: Terminal,
+  shell_view: Eye,
   web_search: Globe,
   fatch_web_urls: Globe,
   read_image: ImageIcon,
@@ -108,6 +110,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "shall_tool") {
     return <ShellChip tool={tool} />;
+  }
+  if (tool.name === "shell_view") {
+    return <ShellViewChip tool={tool} />;
   }
   if (tool.name === "list_sub_agents") {
     return <ListSubAgentsChip tool={tool} />;
@@ -517,6 +522,159 @@ function ShellChip({ tool }: { tool: ToolActivity }) {
           ) : !error ? (
             <p className="text-[var(--color-muted)]">No output.</p>
           ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ShellViewSession {
+  session_name?: string;
+  status?: string;
+  output?: string;
+  stdout?: string;
+  stderr?: string;
+  command?: string;
+  pid?: number | null;
+  exit_code?: number | null;
+  truncated?: boolean;
+}
+
+interface ShellViewToolResult {
+  ok?: boolean;
+  data?: { sessions?: ShellViewSession[] };
+  error?: { code?: string; message?: string; sessions?: ShellViewSession[] };
+}
+
+const SHELL_VIEW_STATUS_STYLES: Record<string, string> = {
+  running: "border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 text-[var(--color-accent)]",
+  completed: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+  errored: "border-red-500/40 bg-red-500/10 text-red-300",
+};
+
+function statusBadge(session: ShellViewSession) {
+  const status = session.status ?? "unknown";
+  const style =
+    SHELL_VIEW_STATUS_STYLES[status] ??
+    "border-dashed border-[var(--color-border)] text-[var(--color-muted)]";
+  return (
+    <span
+      className={cn(
+        "rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize",
+        style,
+      )}
+    >
+      {status}
+    </span>
+  );
+}
+
+function ShellViewChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as ShellViewToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  // The backend includes the session entries in the error payload too, so the
+  // drop-down can still show the output that IS available when some are missing.
+  const sessions = result?.ok
+    ? result.data?.sessions
+    : result?.error?.sessions ?? result?.data?.sessions;
+  const errorMessage = result && !result.ok ? result.error?.message : undefined;
+  const count = sessions?.length ?? 0;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Eye className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {count > 0 && (
+        <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+          {count}
+        </span>
+      )}
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {errorMessage && (
+            <p className="whitespace-pre-wrap text-red-300">{errorMessage}</p>
+          )}
+          {!sessions || sessions.length === 0 ? (
+            <p className="text-[var(--color-muted)]">No output.</p>
+          ) : (
+            sessions.map((session, i) => {
+              const output = session.output ?? "";
+              const hasOutput = output.trim().length > 0;
+              const command = session.command ?? session.session_name ?? "";
+              return (
+                <div
+                  key={`${session.session_name ?? "session"}-${i}`}
+                  className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                    <span className="flex min-w-0 items-center gap-1 font-medium text-[var(--color-fg)]">
+                      <Eye className="h-3 w-3 shrink-0 text-[var(--color-accent)]" />
+                      <span className="truncate font-mono">{session.session_name}</span>
+                    </span>
+                    {statusBadge(session)}
+                    {command && (
+                      <span className="min-w-0 truncate text-[10px]" title={command}>
+                        {command}
+                      </span>
+                    )}
+                    {session.pid != null && (
+                      <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                        pid: {session.pid}
+                      </span>
+                    )}
+                    {session.exit_code != null && (
+                      <span
+                        className={cn(
+                          "rounded-full border px-1.5 py-0.5 text-[10px]",
+                          session.exit_code === 0
+                            ? "border-[var(--color-border)]"
+                            : "border-red-500/40 bg-red-500/10 text-red-300",
+                        )}
+                      >
+                        exit: {session.exit_code}
+                      </span>
+                    )}
+                    {session.truncated && (
+                      <span
+                        className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300"
+                        title="Buffered output was capped at the character limit"
+                      >
+                        ⚠ truncated
+                      </span>
+                    )}
+                  </div>
+                  <pre className="mt-2 max-h-80 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                    {hasOutput ? output : "(no output yet)"}
+                  </pre>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
     </div>
