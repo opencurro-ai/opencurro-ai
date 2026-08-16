@@ -2,6 +2,11 @@ import type { AppConfig } from "../config.js";
 import type { ToolRegistry } from "./tools/registry.js";
 import type { Provider } from "./providers/types.js";
 import type { ToolCall, ToolCallDelta } from "./providers/types.js";
+import {
+  buildImageMessage,
+  extractImageAttachment,
+  withoutImageAttachment,
+} from "./tools/readImage.js";
 import type { StoredMessage } from "../services/sessionStore.js";
 import type {
   SubAgentDefinition,
@@ -162,6 +167,8 @@ class SubAgentRunner {
       shellTimeoutMs: ctx.shellTimeoutMs,
       signal: ctx.signal,
       web: ctx.web,
+      model: this.deps.model,
+      visionCapable: ctx.visionCapable,
     };
 
     const answerAcrossTurns: string[] = [];
@@ -235,6 +242,8 @@ class SubAgentRunner {
           history.push(assistantMessage);
           if (answerParts.length > 0) answerAcrossTurns.push(answerParts.join(""));
 
+          const imageMessages: StoredMessage[] = [];
+
           for (const toolCall of namedCalls) {
             const name = toolCall.function.name;
             const args = safeJsonParse(toolCall.function.arguments);
@@ -258,21 +267,33 @@ class SubAgentRunner {
                   },
                 };
 
+            // Mirror the main agent: strip any read_image attachment from the model-visible
+            // tool message and inject the image as a vision content part afterwards.
+            const resultForModel = withoutImageAttachment(result);
+            const imageAttachment = extractImageAttachment(result);
+
             history.push({
               role: "tool",
               tool_call_id: toolCall.id ?? undefined,
               name,
-              content: JSON.stringify(result),
+              content: JSON.stringify(resultForModel),
             });
+
+            if (imageAttachment) imageMessages.push(buildImageMessage(imageAttachment));
 
             send("sub_agent_tool_result", {
               id: parentId,
               tool_id: toolCall.id,
               name,
               ok: result.ok,
-              result,
+              result: resultForModel,
               label,
             });
+          }
+
+          // Append vision inputs after all tool responses for contiguous tool messages.
+          for (const imageMessage of imageMessages) {
+            history.push(imageMessage);
           }
 
           // Observation delivered — loop so the sub-agent can reason about the results.

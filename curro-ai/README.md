@@ -9,7 +9,7 @@ calling and true token-by-token SSE streaming.
 
 ## Features
 
-- **5 focused tools** (extensible registry): `file_read`, `file_write`, `file_list`, `str_replace`, `shall_tool`.
+- **6 focused file/vision tools** (extensible registry): `file_read`, `file_write`, `file_list`, `str_replace`, `shall_tool`, `read_image` — plus web and sub-agent tools.
 - **3 OpenAI-compatible providers** (extensible registry): OpenRouter, Groq, NVIDIA NIM.
 - **Native function calling** only — tools are defined with zod schemas that are converted to JSON Schema
   and passed to the model in the `tools` parameter. Tool calls come from the model's `tool_calls`, never
@@ -31,7 +31,7 @@ curro-ai/
     ├── agents/
     │   ├── agent.ts           # the ReAct main loop / harness
     │   ├── systemprompt.ts    # professional coding-agent system prompt
-    │   ├── tools/             # file_read, file_write, file_list, str_replace, shall_tool + registry
+    │   ├── tools/             # file_read, file_write, file_list, str_replace, shall_tool, read_image + registry
     │   └── providers/         # openrouter.ts, groq.ts, nvidia.ts + base + registry
     ├── api/                   # chat (SSE), providers, files
     ├── services/             # session store + event buffer
@@ -59,6 +59,8 @@ npm run typecheck         # TypeScript 7 type check
 | `MAX_ITERATIONS`  | `1000`                 | Max ReAct iterations per turn                      |
 | `CORS_ORIGINS`    | `*`                    | Comma-separated allowed origins, or `*`            |
 | `SHELL_TIMEOUT_MS`| `180000`               | Timeout for `shall_tool` foreground commands       |
+| `VISION_MODEL_PATTERNS` | *(empty)*       | Extra model-id substrings treated as vision capable (read_image) |
+| `TEXT_ONLY_MODEL_PATTERNS` | *(empty)*   | Extra model-id substrings treated as text-only (read_image) |
 
 ## HTTP API
 
