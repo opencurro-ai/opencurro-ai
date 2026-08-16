@@ -278,6 +278,10 @@ export class AgentRunner {
       if (message.tool_calls) entry.tool_calls = message.tool_calls;
       if (message.tool_call_id) entry.tool_call_id = message.tool_call_id;
       if (message.name) entry.name = message.name;
+      // Reasoning-capable models (e.g. OpenCode Zen thinking mode, DeepSeek) require the
+      // reasoning_content of a prior assistant message to be passed back unchanged on the
+      // next request; omitting it triggers a 400 invalid_request_error.
+      if (message.reasoning_content) entry.reasoning_content = message.reasoning_content;
       built.push(entry);
     }
     return built;
