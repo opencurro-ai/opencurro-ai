@@ -3,6 +3,7 @@ import { fileReadTool } from "./fileRead.js";
 import { fileWriteTool } from "./fileWrite.js";
 import { fileListTool } from "./fileList.js";
 import { strReplaceTool } from "./strReplace.js";
+import { applyMultipleEditsTool } from "./applyMultipleEdits.js";
 import { shellTool } from "./shell.js";
 import { webSearchTool } from "./webSearch.js";
 import { fetchWebUrlsTool } from "./fetchWebUrls.js";
@@ -23,6 +24,7 @@ export type {
 export { defineTool } from "./types.js";
 export { webSearchTool, SEARCH_PROVIDERS } from "./webSearch.js";
 export { fetchWebUrlsTool } from "./fetchWebUrls.js";
+export { applyMultipleEditsTool } from "./applyMultipleEdits.js";
 export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";
 export { callSubAgentTool } from "./call_sub_agent.js";
 export { listSubAgentsTool } from "./list_sub_agents.js";
@@ -34,6 +36,7 @@ export function createToolRegistry(): ToolRegistry {
     fileWriteTool,
     fileListTool,
     strReplaceTool,
+    applyMultipleEditsTool,
     shellTool,
     webSearchTool,
     fetchWebUrlsTool,
@@ -48,6 +51,7 @@ export const tools = {
   fileWriteTool,
   fileListTool,
   strReplaceTool,
+  applyMultipleEditsTool,
   shellTool,
   webSearchTool,
   fetchWebUrlsTool,

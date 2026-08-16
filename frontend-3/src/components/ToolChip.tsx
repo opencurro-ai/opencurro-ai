@@ -4,6 +4,8 @@ import {
   FileText,
   FolderTree,
   Pencil,
+  PencilLine,
+  Braces,
   Terminal,
   Loader2,
   Check,
@@ -25,6 +27,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   file_read: FileText,
   file_list: FolderTree,
   str_replace: Pencil,
+  apply_multiple_edits: PencilLine,
   shall_tool: Terminal,
   web_search: Globe,
   fatch_web_urls: Globe,
@@ -113,6 +116,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "str_replace") {
     return <StrReplaceChip tool={tool} />;
+  }
+  if (tool.name === "apply_multiple_edits") {
+    return <ApplyMultipleEditsChip tool={tool} />;
   }
   return <RegularChip tool={tool} />;
 }
@@ -213,6 +219,137 @@ function StrReplaceChip({ tool }: { tool: ToolActivity }) {
                 <pre className="max-h-48 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
                   {newString && newString.length > 0 ? newString : "(empty)"}
                 </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ApplyMultipleEditsToolResult {
+  ok?: boolean;
+  data?: {
+    file_path?: string;
+    edits_applied?: number;
+    line_count?: number;
+  };
+  error?: { code?: string; message?: string };
+}
+
+function ApplyMultipleEditsChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const result = tool.result as ApplyMultipleEditsToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+
+  const edits = Array.isArray(tool.args?.edits)
+    ? (tool.args?.edits as Array<{ old_text?: string; new_text?: string }>)
+    : [];
+  const canExpand = edits.length > 0 || hasResult;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!canExpand}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={canExpand ? open : undefined}
+      className={chipClasses(tool.status, canExpand)}
+      title={tool.label}
+    >
+      <PencilLine className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {canExpand && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!canExpand) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              Edit failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex min-w-0 items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  <span className="truncate font-mono">
+                    {data?.file_path ?? tool.filePath ?? String(tool.args?.file_path ?? "")}
+                  </span>
+                </span>
+                <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                  edits: {edits.length}
+                </span>
+                {data?.edits_applied != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    applied: {data.edits_applied}
+                  </span>
+                )}
+              </div>
+
+              {edits.length > 0 && (
+                <div className="space-y-2">
+                  {edits.map((edit, i) => (
+                    <div
+                      key={i}
+                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+                    >
+                      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                        <PencilLine className="h-3 w-3" />
+                        Edit #{i + 1}
+                      </div>
+                      <div className="mb-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+                        Old text
+                      </div>
+                      <pre className="max-h-48 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                        {edit.old_text && edit.old_text.length > 0 ? edit.old_text : "(empty)"}
+                      </pre>
+                      <div className="mb-1 mt-2 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+                        New text
+                      </div>
+                      <pre className="max-h-48 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                        {edit.new_text && edit.new_text.length > 0 ? edit.new_text : "(empty — deletes matched text)"}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60">
+                <button
+                  type="button"
+                  onClick={() => setShowRaw((v) => !v)}
+                  aria-expanded={showRaw}
+                  className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                >
+                  <Braces className="h-3 w-3" />
+                  Raw arguments
+                  <ChevronRight
+                    className={cn("h-3.5 w-3.5 transition-transform", showRaw && "rotate-90")}
+                  />
+                </button>
+                {showRaw && (
+                  <pre className="max-h-64 overflow-auto whitespace-pre rounded-b-lg border-t border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                    {JSON.stringify(tool.args ?? {}, null, 2)}
+                  </pre>
+                )}
               </div>
             </div>
           )}

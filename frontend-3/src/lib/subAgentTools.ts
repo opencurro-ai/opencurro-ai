@@ -32,6 +32,12 @@ export const SUB_AGENT_TOOLS: readonly SubAgentToolMeta[] = [
     description: "Exact string replacement inside an existing file.",
   },
   {
+    name: "apply_multiple_edits",
+    label: "Apply multiple edits",
+    description:
+      "Apply multiple exact string replacements to one file in a single call; fails without writing if any match is missing or duplicated.",
+  },
+  {
     name: "shall_tool",
     label: "Terminal",
     description: "Run a shell command from the workspace directory.",
