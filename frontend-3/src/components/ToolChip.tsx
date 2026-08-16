@@ -111,7 +111,115 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   if (tool.name === "read_image") {
     return <ReadImageChip tool={tool} />;
   }
+  if (tool.name === "str_replace") {
+    return <StrReplaceChip tool={tool} />;
+  }
   return <RegularChip tool={tool} />;
+}
+
+interface StrReplaceToolResult {
+  ok?: boolean;
+  data?: {
+    file_path?: string;
+    replaced?: number;
+    replace_all?: boolean;
+    line_count?: number;
+  };
+  error?: { code?: string; message?: string };
+}
+
+function StrReplaceChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as StrReplaceToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+
+  const oldString = tool.args?.old_string as string | undefined;
+  const newString = tool.args?.new_string as string | undefined;
+  const replaceAll = tool.args?.replace_all as boolean | undefined;
+  const canExpand = oldString !== undefined || hasResult;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!canExpand}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={canExpand ? open : undefined}
+      className={chipClasses(tool.status, canExpand)}
+      title={tool.label}
+    >
+      <Pencil className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {canExpand && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!canExpand) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="text-red-300">
+              Edit failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex min-w-0 items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  <span className="truncate font-mono">{data?.file_path ?? tool.filePath}</span>
+                </span>
+                <span
+                  className={
+                    replaceAll
+                      ? "rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]"
+                      : "rounded-full border border-dashed border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]"
+                  }
+                >
+                  replace_all: {replaceAll ? "true" : "false"}
+                </span>
+                {data?.replaced != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    replaced: {data.replaced}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                  Old string
+                </div>
+                <pre className="max-h-48 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                  {oldString && oldString.length > 0 ? oldString : "(empty)"}
+                </pre>
+              </div>
+
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                  New string
+                </div>
+                <pre className="max-h-48 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                  {newString && newString.length > 0 ? newString : "(empty)"}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function RegularChip({ tool }: { tool: ToolActivity }) {
