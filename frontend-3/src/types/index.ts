@@ -63,6 +63,18 @@ export interface ToolActivity {
   subAgent?: SubAgentRun;
 }
 
+/** Structured result streamed back for the read_image tool (no image payload — metadata only). */
+export interface ReadImageToolResult {
+  ok?: boolean;
+  data?: {
+    file_path?: string;
+    source?: "workspace" | "url";
+    content_type?: string;
+    size_bytes?: number;
+  };
+  error?: { code?: string; message?: string };
+}
+
 /** Live state of a sub-agent invocation, rendered inside the call_sub_agent chip popup. */
 export interface SubAgentRun {
   session: string;

@@ -78,6 +78,10 @@ export interface ToolContext {
   subAgents?: SubAgentRuntime;
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
+  /** The model id currently serving the agent (used by the read_image tool for error reporting). */
+  model?: string;
+  /** Whether the selected model accepts image inputs; false blocks the read_image tool. */
+  visionCapable?: boolean;
 }
 
 /**

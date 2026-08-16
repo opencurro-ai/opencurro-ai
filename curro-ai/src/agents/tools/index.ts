@@ -6,6 +6,7 @@ import { strReplaceTool } from "./strReplace.js";
 import { shellTool } from "./shell.js";
 import { webSearchTool } from "./webSearch.js";
 import { fetchWebUrlsTool } from "./fetchWebUrls.js";
+import { readImageTool } from "./readImage.js";
 import { callSubAgentTool } from "./call_sub_agent.js";
 import { listSubAgentsTool } from "./list_sub_agents.js";
 
@@ -22,6 +23,7 @@ export type {
 export { defineTool } from "./types.js";
 export { webSearchTool, SEARCH_PROVIDERS } from "./webSearch.js";
 export { fetchWebUrlsTool } from "./fetchWebUrls.js";
+export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";
 export { callSubAgentTool } from "./call_sub_agent.js";
 export { listSubAgentsTool } from "./list_sub_agents.js";
 
@@ -35,6 +37,7 @@ export function createToolRegistry(): ToolRegistry {
     shellTool,
     webSearchTool,
     fetchWebUrlsTool,
+    readImageTool,
     callSubAgentTool,
     listSubAgentsTool,
   ]);
@@ -48,6 +51,7 @@ export const tools = {
   shellTool,
   webSearchTool,
   fetchWebUrlsTool,
+  readImageTool,
   callSubAgentTool,
   listSubAgentsTool,
 };

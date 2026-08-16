@@ -14,8 +14,10 @@ import {
   ExternalLink,
   Bot,
   ListTree,
+  Image as ImageIcon,
+  Link2,
 } from "lucide-react";
-import type { SubAgentRun, ToolActivity } from "@/types";
+import type { ReadImageToolResult, SubAgentRun, ToolActivity } from "@/types";
 import { cn } from "@/utils/cn";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -26,6 +28,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   shall_tool: Terminal,
   web_search: Globe,
   fatch_web_urls: Globe,
+  read_image: ImageIcon,
   call_sub_agent: Bot,
   list_sub_agents: ListTree,
 };
@@ -104,6 +107,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "file_read") {
     return <FileReadChip tool={tool} />;
+  }
+  if (tool.name === "read_image") {
+    return <ReadImageChip tool={tool} />;
   }
   return <RegularChip tool={tool} />;
 }
@@ -301,6 +307,86 @@ function FileReadChip({ tool }: { tool: ToolActivity }) {
                 {data?.first_line != null && data?.last_line != null
                   ? ` · lines ${data.first_line}–${data.last_line}`
                   : ""}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReadImageChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as ReadImageToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const isUrl = data?.source === "url" || /^https?:\/\//i.test(data?.file_path ?? "");
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <ImageIcon className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  const sourceLabel = isUrl ? "URL" : "workspace";
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="text-red-300">
+              Read failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex min-w-0 items-center gap-1 font-medium text-[var(--color-fg)]">
+                  {isUrl ? (
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  ) : (
+                    <ImageIcon className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  )}
+                  <span className="truncate font-mono">{data?.file_path}</span>
+                </span>
+                <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                  source: {sourceLabel}
+                </span>
+                {data?.content_type && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    {data.content_type}
+                  </span>
+                )}
+                {data?.size_bytes != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    {(data.size_bytes / 1024).toFixed(data.size_bytes < 1024 ? 0 : 1)} KB
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] leading-relaxed text-[var(--color-muted)]">
+                The image was attached to the model's vision input for analysis.
               </p>
             </div>
           )}

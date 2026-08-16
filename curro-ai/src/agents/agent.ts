@@ -4,6 +4,12 @@ import type { ProviderRegistry } from "./providers/registry.js";
 import { resolveProvider } from "./providers/registry.js";
 import type { Provider } from "./providers/types.js";
 import type { ToolRegistry } from "./tools/index.js";
+import {
+  buildImageMessage,
+  extractImageAttachment,
+  withoutImageAttachment,
+} from "./tools/readImage.js";
+import { isVisionCapableModel } from "../utils/vision.js";
 import type { SubAgentDefinition, WebToolsConfig } from "./tools/types.js";
 import type { ToolCall, ToolCallDelta } from "./providers/types.js";
 import type { ChatSession, StoredMessage } from "../services/sessionStore.js";
@@ -68,6 +74,7 @@ export class AgentRunner {
       session.messages.push({ role: "user", content: request.userMessage });
       const systemPrompt = buildSystemPrompt(this.config.workspaceRoot);
       const maxIterations = clampIterations(request.maxIterations, this.config.maxIterations);
+      const visionCapable = isVisionCapableModel(request.model, this.config);
       const web: WebToolsConfig = {
         searchProvider: request.searchProvider ?? this.config.searchProvider,
         tavilyApiKey: request.tavilyApiKey || this.config.tavilyApiKey || undefined,
@@ -170,6 +177,8 @@ export class AgentRunner {
           if (reasoningParts.length > 0) assistantMessage.reasoning_content = reasoningParts.join("");
           session.messages.push(assistantMessage);
 
+          const imageMessages: StoredMessage[] = [];
+
           for (const toolCall of toolCalls) {
             if (!toolCall.function.name) continue;
             const args = safeJsonParse(toolCall.function.arguments);
@@ -188,22 +197,39 @@ export class AgentRunner {
               web,
               subAgents: subAgentRuntime,
               toolCallId: toolCall.id ?? undefined,
+              model: request.model,
+              visionCapable,
             });
+
+            // read_image attaches the loaded image to its result. The base64 payload
+            // is stripped from the model-visible tool message (it is useless as text
+            // and would bloat every follow-up request); the image is instead injected
+            // as a vision content part after all tool responses so the model can see it.
+            const resultForModel = withoutImageAttachment(result);
+            const imageAttachment = extractImageAttachment(result);
 
             session.messages.push({
               role: "tool",
               tool_call_id: toolCall.id ?? undefined,
               name: toolCall.function.name,
-              content: JSON.stringify(result),
+              content: JSON.stringify(resultForModel),
             });
+
+            if (imageAttachment) imageMessages.push(buildImageMessage(imageAttachment));
 
             send("tool_result", {
               id: toolCall.id,
               name: toolCall.function.name,
               ok: result.ok,
-              result,
+              result: resultForModel,
               label: this.tools.label(toolCall.function.name, args),
             });
+          }
+
+          // Append any vision inputs after all tool responses so providers see
+          // contiguous tool messages immediately following the assistant tool_calls.
+          for (const imageMessage of imageMessages) {
+            session.messages.push(imageMessage);
           }
 
           // Observation delivered — loop again so the model can reason about the results.

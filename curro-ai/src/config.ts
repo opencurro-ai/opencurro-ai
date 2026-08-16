@@ -32,6 +32,10 @@ export interface AppConfig {
   exaApiKey: string;
   serpapiApiKey: string;
   firecrawlApiKey: string;
+  /** Model-id substrings that are always treated as vision capable (read_image tool). */
+  visionModelPatterns: string[];
+  /** Model-id substrings that are always treated as text-only (read_image tool). */
+  textOnlyModelPatterns: string[];
 }
 
 function parseCorsOrigins(raw: string | undefined): string[] | "*" {
@@ -48,6 +52,14 @@ function parseSearchProvider(raw: string | undefined): "tavily" | "exa" | "serpa
   return "tavily";
 }
 
+/** Parse a comma-separated list of model-id substrings from an env var. */
+function parsePatterns(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+}
+
 export const config: AppConfig = {
   port: Number(process.env.PORT ?? 8787),
   workspaceRoot: resolveWorkspaceRoot(),
@@ -59,6 +71,8 @@ export const config: AppConfig = {
   exaApiKey: process.env.EXA_API_KEY?.trim() ?? "",
   serpapiApiKey: process.env.SERPAPI_API_KEY?.trim() ?? "",
   firecrawlApiKey: process.env.FIRECRAWL_API_KEY?.trim() ?? "",
+  visionModelPatterns: parsePatterns(process.env.VISION_MODEL_PATTERNS),
+  textOnlyModelPatterns: parsePatterns(process.env.TEXT_ONLY_MODEL_PATTERNS),
 };
 
 /** Ensure the workspace directory exists so file tools never hit permission/ENOENT errors. */

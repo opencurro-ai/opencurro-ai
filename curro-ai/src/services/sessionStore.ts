@@ -1,9 +1,12 @@
 import { SessionEventBuffer } from "./eventBuffer.js";
 
+/** One multimodal content part (e.g. { type: "text" } or { type: "image_url" }). */
+export type StoredContentPart = Record<string, unknown>;
+
 /** Message shape kept in provider (OpenAI) format so it can be replayed directly to the model. */
 export interface StoredMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string | null;
+  content?: string | StoredContentPart[] | null;
   reasoning_content?: string;
   tool_calls?: Array<Record<string, unknown>>;
   tool_call_id?: string;
