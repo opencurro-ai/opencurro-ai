@@ -17,6 +17,20 @@ const LINE_NUMBER_WIDTH = 6;
 /** Suffix appended to lines that were truncated at MAX_LINE_LENGTH. */
 const TRUNCATED_SUFFIX = "...";
 
+/**
+ * Lenient boolean accepted by the file_read schema. Native tool calling normally passes a
+ * real JSON boolean, but some models emit the strings "true"/"false"; both are accepted.
+ */
+const returnLineNumberSchema = z
+  .preprocess(
+    (value) => (value === "true" ? true : value === "false" ? false : value),
+    z.boolean(),
+  )
+  .optional()
+  .describe(
+    `Optional flag controlling whether the returned content is prefixed with line numbers. When true, each line is rendered in \`cat -n\` style (right-aligned line number, two spaces, then the line content, e.g. "     1  import fs"). When false or omitted, the raw file content is returned with no line numbers. Default: false`,
+  );
+
 const schema = z.object({
   file_path: z
     .string()
@@ -41,6 +55,7 @@ const schema = z.object({
     .describe(
       "Optional line number to start reading from (1-based). Use with limit to read specific sections of large files. Must be 1 or greater. If omitted, starts from line 1",
     ),
+  return_line_number: returnLineNumberSchema,
 });
 
 const descriptionParameters = {
@@ -59,6 +74,11 @@ const descriptionParameters = {
       description:
         "Optional line number to start reading from (1-based). Use with limit to read specific sections of large files. Must be 1 or greater. If omitted, starts from line 1",
     },
+    return_line_number: {
+      type: "boolean",
+      description:
+        "Optional. When true, each returned line is prefixed with its line number in `cat -n` style. When false or omitted, the raw file content is returned with no line numbers. Default: false.",
+    },
   },
   required: ["file_path"],
 };
@@ -70,7 +90,8 @@ Usage:
 - reads up to ${MAX_FILE_READ_LINES} lines with optional offset/limit
   - Use offset and limit parameters for large files to read specific sections
   - Lines longer than ${MAX_LINE_LENGTH} chars are truncated
-  - Text results are returned in \`cat -n\` format (line numbers start at 1)
+  - Returns the raw file content with no line numbers by default; set return_line_number=true to have each line prefixed with its line number in \`cat -n\` style
+  - The first_line/last_line metadata fields always report which lines were returned
 
 ${JSON.stringify(descriptionParameters, null, 2)}`;
 
@@ -97,7 +118,7 @@ class BinaryFileError extends FileReadError {
 }
 
 interface ReadSection {
-  /** Rendered `cat -n` style lines that were requested. */
+  /** Lines that were requested; raw content, or `cat -n` style with line numbers when requested. */
   lines: string[];
   /** Original line number of the first returned line, or null when nothing matched. */
   firstLine: number | null;
@@ -133,14 +154,16 @@ function resolveForRead(workspaceRoot: string, input: string): string {
 
 /**
  * Stream a file in chunks (bounded memory) and extract the requested line range, rendered
- * in `cat -n` style. Always scans the whole file so `totalLines` and truncation metadata are
- * accurate; only the requested lines are ever held in memory. Detects binary content by
- * scanning raw bytes for NUL characters.
+ * either as raw content or in `cat -n` style depending on `includeLineNumbers`. Always
+ * scans the whole file so `totalLines` and truncation metadata are accurate; only the
+ * requested lines are ever held in memory. Detects binary content by scanning raw bytes
+ * for NUL characters.
  */
 async function readSection(
   filePath: string,
   offset: number,
   limit: number,
+  includeLineNumbers: boolean,
   signal?: AbortSignal,
 ): Promise<ReadSection> {
   const handle = await fs.promises.open(filePath, "r");
@@ -167,7 +190,11 @@ async function readSection(
       }
       if (firstLine === null) firstLine = lineNumber;
       lastLine = lineNumber;
-      lines.push(`${String(lineNumber).padStart(LINE_NUMBER_WIDTH)}  ${line}`);
+      lines.push(
+        includeLineNumbers
+          ? `${String(lineNumber).padStart(LINE_NUMBER_WIDTH)}  ${line}`
+          : line,
+      );
     };
 
     while (!eof) {
@@ -207,12 +234,23 @@ export const fileReadTool = defineTool({
     const filePath = args.file_path.trim();
     const offset = args.offset ?? 1;
     const limit = args.limit ?? MAX_FILE_READ_LINES;
+    const returnLineNumber = args.return_line_number ?? false;
 
     // Defense in depth: the schema already enforces these, but keep the tool safe standalone.
     if (filePath.length === 0) {
       return {
         ok: false,
         error: { code: "invalid_file_path", message: "file_path must be a non-empty string.", file_path: args.file_path },
+      };
+    }
+    if (typeof returnLineNumber !== "boolean") {
+      return {
+        ok: false,
+        error: {
+          code: "invalid_return_line_number",
+          message: "return_line_number must be a boolean.",
+          return_line_number: args.return_line_number,
+        },
       };
     }
     if (!Number.isInteger(offset) || offset < 1) {
@@ -293,7 +331,7 @@ export const fileReadTool = defineTool({
 
     let section: ReadSection;
     try {
-      section = await readSection(absolute, offset, limit, ctx.signal);
+      section = await readSection(absolute, offset, limit, returnLineNumber, ctx.signal);
     } catch (error) {
       if (error instanceof FileReadError) {
         return { ok: false, error: { code: error.code, message: error.message, file_path: relative } };
@@ -319,6 +357,7 @@ export const fileReadTool = defineTool({
         last_line: section.lastLine,
         offset,
         limit,
+        return_line_number: returnLineNumber,
         truncated: section.lastLine !== null && section.lastLine < section.totalLines,
         truncated_lines: section.truncatedLines,
         binary: false,
