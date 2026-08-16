@@ -14,6 +14,7 @@ import type { SubAgentDefinition, WebToolsConfig } from "./tools/types.js";
 import type { ToolCall, ToolCallDelta } from "./providers/types.js";
 import type { ChatSession, StoredMessage } from "../services/sessionStore.js";
 import type { SessionEventBuffer } from "../services/eventBuffer.js";
+import type { PlanApprovalStore } from "../services/planApprovalStore.js";
 import { safeJsonParse } from "../utils/json.js";
 import { SubAgentSessionStore, createSubAgentRuntime } from "./subagents.js";
 
@@ -46,6 +47,7 @@ export class AgentRunner {
     private readonly providers: ProviderRegistry,
     private readonly tools: ToolRegistry,
     private readonly config: AppConfig,
+    private readonly planApprovals: PlanApprovalStore,
   ) {}
 
   /**
@@ -197,6 +199,10 @@ export class AgentRunner {
               web,
               subAgents: subAgentRuntime,
               toolCallId: toolCall.id ?? undefined,
+              chatId: request.chatId,
+              emit: send,
+              planApprovals: this.planApprovals,
+              planApprovalTimeoutMs: this.config.planApprovalTimeoutMs,
               model: request.model,
               visionCapable,
             });

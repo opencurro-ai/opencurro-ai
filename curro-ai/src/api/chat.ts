@@ -3,6 +3,7 @@ import type { AppConfig } from "../config.js";
 import { AgentRunner, type RunAgentRequest } from "../agents/agent.js";
 import { SessionEventBuffer } from "../services/eventBuffer.js";
 import type { SessionStore, StoredMessage } from "../services/sessionStore.js";
+import type { PlanApprovalStore } from "../services/planApprovalStore.js";
 import type { SubAgentDefinition } from "../agents/tools/types.js";
 import { initSSE, formatSSE } from "../utils/sse.js";
 
@@ -75,6 +76,7 @@ export function buildChatRouter(
   agent: AgentRunner,
   store: SessionStore,
   config: AppConfig,
+  planApprovals: PlanApprovalStore,
 ): Router {
   const router = Router();
 
@@ -88,6 +90,33 @@ export function buildChatRouter(
     session.eventBuffer?.setDone();
     session.running = false;
     res.json({ ok: true });
+  });
+
+  /**
+   * Supply the user's decision for a pending submit_plan review.
+   *   body: { decision: "approved" | "canceled" | "edited", plan?: string }
+   * `plan` is required (and enforced) when decision is "edited". A no-op (ok:false) is returned
+   * when no matching pending plan exists (already decided, timed out, or aborted).
+   */
+  router.post("/plan/:chatId/:toolCallId", (req: Request, res: Response) => {
+    const chatId = String(req.params.chatId);
+    const toolCallId = String(req.params.toolCallId);
+    const body = (req.body ?? {}) as { decision?: unknown; plan?: unknown };
+
+    const decision = String(body.decision ?? "");
+    if (decision !== "approved" && decision !== "canceled" && decision !== "edited") {
+      res.status(400).json({ error: "decision must be one of approved, canceled, edited." });
+      return;
+    }
+
+    const plan = typeof body.plan === "string" ? body.plan : "";
+    if (decision === "edited" && plan.trim().length === 0) {
+      res.status(400).json({ error: "A non-empty plan is required when decision is edited." });
+      return;
+    }
+
+    const supplied = planApprovals.decide(chatId, toolCallId, decision, decision === "edited" ? plan : undefined);
+    res.json({ ok: supplied });
   });
 
   router.post("/stream", async (req: Request, res: Response) => {

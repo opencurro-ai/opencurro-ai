@@ -26,6 +26,8 @@ export interface AppConfig {
   maxIterations: number;
   corsOrigins: string[] | "*";
   shellTimeoutMs: number;
+  /** How long a submitted plan waits for human approval before the agent continues on its own. */
+  planApprovalTimeoutMs: number;
   /** Fallback web tool keys/provider, overridden per-request by the frontend settings. */
   searchProvider: "tavily" | "exa" | "serpapi";
   tavilyApiKey: string;
@@ -66,6 +68,7 @@ export const config: AppConfig = {
   maxIterations: Number(process.env.MAX_ITERATIONS ?? 1000),
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS),
   shellTimeoutMs: Number(process.env.SHELL_TIMEOUT_MS ?? 180_000),
+  planApprovalTimeoutMs: Number(process.env.PLAN_APPROVAL_TIMEOUT_MS ?? 60_000),
   searchProvider: parseSearchProvider(process.env.SEARCH_PROVIDER),
   tavilyApiKey: process.env.TAVILY_API_KEY?.trim() ?? "",
   exaApiKey: process.env.EXA_API_KEY?.trim() ?? "",

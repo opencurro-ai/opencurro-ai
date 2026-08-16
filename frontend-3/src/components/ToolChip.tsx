@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { ReadImageToolResult, SubAgentRun, ToolActivity } from "@/types";
 import { cn } from "@/utils/cn";
+import { SubmitPlanBlock } from "./SubmitPlanBlock";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   file_write: FilePlus2,
@@ -106,6 +107,10 @@ function chipClasses(status: ToolActivity["status"], clickable: boolean): string
 }
 
 export function ToolChip({ tool }: { tool: ToolActivity }) {
+  // A submit_plan tool renders the big inline review block (not the compact chip).
+  if (tool.name === "submit_plan") {
+    return <SubmitPlanBlock tool={tool} />;
+  }
   // A call_sub_agent chip renders the live sub-agent block once its run has started.
   if (tool.name === "call_sub_agent" && tool.subAgent) {
     return <SubAgentChip tool={tool} run={tool.subAgent} />;

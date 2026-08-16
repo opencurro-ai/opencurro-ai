@@ -68,6 +68,14 @@ export interface SubAgentRuntime {
 export interface ToolContext {
   /** Absolute path all file operations are sandboxed to. */
   workspaceRoot: string;
+  /** Id of the chat session the tool is running within (used by human-in-the-loop tools). */
+  chatId?: string;
+  /** Push an SSE event onto the session buffer so the frontend can react before the tool returns. */
+  emit?: (event: string, data: Record<string, unknown>) => void;
+  /** Human-in-the-loop plan approval runtime — present only for main-agent tool calls. */
+  planApprovals?: import("../../services/planApprovalStore.js").PlanApprovalStore;
+  /** How long a submitted plan waits for a user decision before auto-continuing. */
+  planApprovalTimeoutMs?: number;
   /** Timeout (ms) applied to shell commands. */
   shellTimeoutMs: number;
   /** Abort signal so long running tools stop when the turn is cancelled. */

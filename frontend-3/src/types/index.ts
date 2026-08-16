@@ -49,6 +49,20 @@ export interface CustomProviderConfig {
 
 export type ToolActivityStatus = "running" | "ok" | "error";
 
+/** Outcome of a human review of a submitted plan (mirrors the backend decision). */
+export type PlanApprovalStatus = "pending" | "approved" | "canceled" | "edited" | "timeout";
+
+/** Plan review state attached to the submit_plan tool so the chat renders the big review block. */
+export interface PlanApprovalInfo {
+  /** The backend tool-call id — used to post the user's decision. */
+  id: string;
+  /** Chat session the plan belongs to. */
+  chatId: string;
+  /** The plan text the user is reviewing / editing. */
+  plan: string;
+  status: PlanApprovalStatus;
+}
+
 export interface ToolActivity {
   id: string;
   name: string;
@@ -61,6 +75,8 @@ export interface ToolActivity {
   result?: unknown;
   /** Live sub-agent run attached to a call_sub_agent tool chip (streamed token by token). */
   subAgent?: SubAgentRun;
+  /** Human-in-the-loop plan review rendered as the big chat block for submit_plan. */
+  plan?: PlanApprovalInfo;
 }
 
 /** Structured result streamed back for the read_image tool (no image payload — metadata only). */
@@ -202,4 +218,7 @@ export interface SSEEventData {
   output?: string;
   error?: string;
   new_session?: boolean;
+  // submit_plan review fields
+  chat_id?: string;
+  plan?: string;
 }
