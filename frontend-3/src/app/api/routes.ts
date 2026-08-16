@@ -44,6 +44,12 @@ export const API_ROUTES = {
     path: "/api/chat/abort/:chatId",
     description: "Cancel the running turn for a chat session.",
   },
+  chatPlanDecision: {
+    name: "chat.plan.decision",
+    method: "POST",
+    path: "/api/chat/plan/:chatId/:toolCallId",
+    description: "Submit the user's decision (approve / cancel / edited) for a submitted plan.",
+  },
   filesTree: {
     name: "files.tree",
     method: "GET",

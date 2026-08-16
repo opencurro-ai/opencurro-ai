@@ -61,6 +61,37 @@ export async function abortChat(chatId: string): Promise<void> {
   );
 }
 
+export type PlanDecision = "approved" | "canceled" | "edited";
+
+/**
+ * Submit the user's decision for a submitted plan. Returns false when the backend reports the
+ * plan is no longer pending (already decided, timed out, or unknown) — the UI treats that as a
+ * no-op instead of an error.
+ */
+export async function decidePlan(
+  chatId: string,
+  toolCallId: string,
+  decision: PlanDecision,
+  plan?: string,
+): Promise<boolean> {
+  try {
+    const data = await requestJson<{ ok?: boolean }>(
+      routeUrl(API_ROUTES.chatPlanDecision, { params: { chatId, toolCallId } }),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decision,
+          plan: decision === "edited" ? plan : undefined,
+        }),
+      },
+    );
+    return data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function streamChat(body: StreamRequest, signal?: AbortSignal): Promise<Response> {
   return fetch(routeUrl(API_ROUTES.chatStream), {
     method: "POST",

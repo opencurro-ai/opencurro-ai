@@ -5,6 +5,7 @@ import type {
   Conversation,
   CustomProvider,
   ModelInfo,
+  PlanApprovalStatus,
   ProviderMeta,
   SearchProvider,
   Settings,
@@ -46,6 +47,22 @@ interface AppState {
   appendToken: (convId: string, msgId: string, token: string) => void;
   appendReasoning: (convId: string, msgId: string, token: string) => void;
   upsertTool: (convId: string, msgId: string, tool: ToolActivity) => void;
+
+  // Actions — submit_plan human-in-the-loop review
+  setPlanPending: (
+    convId: string,
+    msgId: string,
+    toolId: string,
+    info: { id: string; chatId: string; plan: string },
+  ) => void;
+  setPlanStatus: (
+    convId: string,
+    msgId: string,
+    toolId: string,
+    status: PlanApprovalStatus,
+  ) => void;
+  setPlanText: (convId: string, msgId: string, toolId: string, plan: string) => void;
+  updatePlanForTool: (toolId: string, patch: { status?: PlanApprovalStatus; plan?: string }) => void;
 
   // Actions — sub-agent live runs (attached to a call_sub_agent tool chip)
   startSubAgent: (
@@ -267,6 +284,63 @@ export const useStore = create<AppState>()(
                 }
               : c,
           ),
+        })),
+
+      setPlanPending: (convId, msgId, toolId, info) =>
+        set((s) => ({
+          conversations: patchTool(
+            s.conversations,
+            convId,
+            msgId,
+            toolId,
+            (tool) => ({ ...tool, plan: { ...info, status: "pending" as const } }),
+            () => ({
+              id: toolId,
+              name: "submit_plan",
+              label: "Submit Plan",
+              status: "running",
+              plan: { ...info, status: "pending" as const },
+            }),
+          ),
+        })),
+
+      setPlanStatus: (convId, msgId, toolId, status) =>
+        set((s) => ({
+          conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) =>
+            tool.plan ? { ...tool, plan: { ...tool.plan, status } } : tool,
+          ),
+        })),
+
+      setPlanText: (convId, msgId, toolId, plan) =>
+        set((s) => ({
+          conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) =>
+            tool.plan ? { ...tool, plan: { ...tool.plan, plan } } : tool,
+          ),
+        })),
+
+      // Locate the plan tool by its unique id across every conversation/message. Used by the
+      // review block, which does not know the enclosing convId/msgId.
+      updatePlanForTool: (toolId, patch) =>
+        set((s) => ({
+          conversations: s.conversations.map((c) => ({
+            ...c,
+            messages: c.messages.map((m) =>
+              m.tools?.some((t) => t.plan?.id === toolId)
+                ? {
+                    ...m,
+                    tools: m.tools.map((t) =>
+                      t.plan?.id === toolId
+                        ? {
+                            ...t,
+                            plan: { ...t.plan, ...patch },
+                            status: patch.status && patch.status !== "pending" ? "ok" : t.status,
+                          }
+                        : t,
+                    ),
+                  }
+                : m,
+            ),
+          })),
         })),
 
       startSubAgent: (convId, msgId, toolId, run) =>

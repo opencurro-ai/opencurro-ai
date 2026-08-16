@@ -171,15 +171,37 @@ export function useChatStream(onFilesChanged?: () => void) {
                         | undefined,
                   });
                   break;
+                case "plan_review": {
+                  const planId = String(data.id ?? uid("tool"));
+                  s.setPlanPending(convId, assistantId, planId, {
+                    id: planId,
+                    chatId: String(data.chat_id ?? convId),
+                    plan: String(data.plan ?? ""),
+                  });
+                  break;
+                }
                 case "tool_result": {
                   const ok = Boolean(data.ok);
+                  const id = String(data.id ?? uid("tool"));
+                  const name = String(data.name ?? "tool");
+                  const result = (data.result ?? {}) as { decision?: string } | undefined;
                   s.upsertTool(convId, assistantId, {
-                    id: String(data.id ?? uid("tool")),
-                    name: String(data.name ?? "tool"),
+                    id,
+                    name,
                     label: String(data.label ?? data.name ?? "tool"),
                     status: ok ? "ok" : "error",
                     result: data.result,
                   });
+                  if (name === "submit_plan" && result?.decision) {
+                    const statusMap: Record<string, "approved" | "canceled" | "edited" | "timeout"> = {
+                      approved: "approved",
+                      edited: "edited",
+                      canceled: "canceled",
+                      timeout: "timeout",
+                    };
+                    const planStatus = statusMap[result.decision];
+                    if (planStatus) s.setPlanStatus(convId, assistantId, id, planStatus);
+                  }
                   onFilesChanged?.();
                   break;
                 }

@@ -12,7 +12,7 @@
     "start": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test src/agents/tools/fileRead.test.ts src/agents/tools/readImage.test.ts src/agents/tools/applyMultipleEdits.test.ts src/agents/tools/shall.test.ts src/agents/tools/shellView.test.ts src/agents/tools/bashwritetoprocess.test.ts"
+    "test": "tsx --test src/agents/tools/fileRead.test.ts src/agents/tools/readImage.test.ts src/agents/tools/applyMultipleEdits.test.ts src/agents/tools/shall.test.ts src/agents/tools/shellView.test.ts src/agents/tools/bashwritetoprocess.test.ts src/agents/tools/submitplan.test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
