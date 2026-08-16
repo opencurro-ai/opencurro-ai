@@ -358,6 +358,8 @@ function buildProviderMessages(
     if (message.tool_calls) entry.tool_calls = message.tool_calls;
     if (message.tool_call_id) entry.tool_call_id = message.tool_call_id;
     if (message.name) entry.name = message.name;
+    // Reasoning-capable models require prior reasoning_content to be passed back unchanged.
+    if (message.reasoning_content) entry.reasoning_content = message.reasoning_content;
     built.push(entry);
   }
   return built;
