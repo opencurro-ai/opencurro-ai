@@ -2,6 +2,15 @@ import { spawn } from "node:child_process";
 import { z } from "zod";
 import { defineTool, type ToolContext, type ToolResult } from "./types.js";
 
+/** Default timeout (seconds) applied when the model does not specify one. */
+export const DEFAULT_TIMEOUT = 60;
+/** Hard upper bound (seconds) for a model-requested command timeout. */
+export const MAX_TIMEOUT = 180;
+/** Maximum number of characters of command output returned to the model. */
+export const MAX_LLM_CONTENT_CHARS = 20_000;
+
+const TIMEOUT_ERROR_SUFFIX = "retry with longer time out";
+
 const schema = z.object({
   command: z
     .string()
@@ -10,6 +19,13 @@ const schema = z.object({
     .string()
     .default("default")
     .describe("Logical session/label for grouping related commands (informational)."),
+  timeout: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_TIMEOUT)
+    .default(DEFAULT_TIMEOUT)
+    .describe(`The timeout for the command in seconds. Maximum is ${MAX_TIMEOUT} seconds.`),
   wait_for_output: z
     .boolean()
     .default(true)
@@ -19,17 +35,28 @@ const schema = z.object({
     ),
 });
 
-const MAX_OUTPUT_CHARS = 200_000;
+const DESCRIPTION = `Executes a bash command in a persistent shell session
+
+Usage notes:
+- To run multiple commands, join them with ';' or '&&'. Do not use newlines
+- For long-running tasks (e.g., deployments), set \`wait_for_output\` to False and monitor progress with the \`BashView\` tool
+- You can specify an optional timeout in seconds (up to ${MAX_TIMEOUT} seconds). If not specified, commands will timeout after ${DEFAULT_TIMEOUT} seconds`;
 
 function truncate(text: string): { text: string; truncated: boolean } {
-  if (text.length <= MAX_OUTPUT_CHARS) return { text, truncated: false };
+  if (text.length <= MAX_LLM_CONTENT_CHARS) return { text, truncated: false };
   return {
-    text: text.slice(0, MAX_OUTPUT_CHARS) + `\n... [truncated ${text.length - MAX_OUTPUT_CHARS} chars]`,
+    text:
+      text.slice(0, MAX_LLM_CONTENT_CHARS) +
+      `\n... [truncated ${text.length - MAX_LLM_CONTENT_CHARS} chars]`,
     truncated: true,
   };
 }
 
-function runForeground(command: string, ctx: ToolContext): Promise<ToolResult> {
+function runForeground(
+  command: string,
+  timeoutSeconds: number,
+  ctx: ToolContext,
+): Promise<ToolResult> {
   return new Promise((resolve) => {
     const child = spawn("bash", ["-lc", command], {
       cwd: ctx.workspaceRoot,
@@ -40,16 +67,40 @@ function runForeground(command: string, ctx: ToolContext): Promise<ToolResult> {
     let stderr = "";
     let settled = false;
 
-    const timer = setTimeout(() => {
-      if (settled) return;
-      child.kill("SIGKILL");
-    }, ctx.shellTimeoutMs);
+    // The server-side hard cap (ctx.shellTimeoutMs) is a safety net over the
+    // model-requested timeout: the command never outlives the smaller of the two.
+    const fallbackMs = Number.isFinite(ctx.shellTimeoutMs) && ctx.shellTimeoutMs > 0
+      ? ctx.shellTimeoutMs
+      : timeoutSeconds * 1000;
+    const effectiveTimeoutMs = Math.min(timeoutSeconds * 1000, fallbackMs);
 
     const onAbort = () => {
       if (settled) return;
       child.kill("SIGKILL");
     };
     ctx.signal?.addEventListener("abort", onAbort, { once: true });
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      ctx.signal?.removeEventListener("abort", onAbort);
+      child.kill("SIGKILL");
+      const out = truncate(stdout);
+      const err = truncate(stderr);
+      resolve({
+        ok: false,
+        error: {
+          code: "shell_timeout",
+          message: `Command timed out after ${Math.round(effectiveTimeoutMs / 1000)}s. ${TIMEOUT_ERROR_SUFFIX}`,
+          command,
+          timeout_seconds: Math.round(effectiveTimeoutMs / 1000),
+          stdout: out.text,
+          stderr: err.text,
+          truncated: out.truncated || err.truncated,
+        },
+      });
+    }, effectiveTimeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");
@@ -125,10 +176,7 @@ function runBackground(command: string, ctx: ToolContext): ToolResult {
 
 export const shellTool = defineTool({
   name: "shall_tool",
-  description:
-    "Execute a shell (terminal) command on the machine where the agent runs, from the workspace directory. " +
-    "Use it to install packages, run builds, execute scripts, inspect the environment, etc. " +
-    "State such as created files persists on disk between commands.",
+  description: DESCRIPTION,
   schema,
   label: (args) => `Terminal: ${args.command}`,
   async execute(args, ctx): Promise<ToolResult> {
@@ -136,7 +184,7 @@ export const shellTool = defineTool({
       return { ok: false, error: { code: "missing_command", message: "No command provided." } };
     }
     if (args.wait_for_output) {
-      return runForeground(args.command, ctx);
+      return runForeground(args.command, args.timeout, ctx);
     }
     return runBackground(args.command, ctx);
   },

@@ -7,6 +7,7 @@ import {
   PencilLine,
   Braces,
   Terminal,
+  Timer,
   Loader2,
   Check,
   X,
@@ -104,6 +105,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   // A call_sub_agent chip renders the live sub-agent block once its run has started.
   if (tool.name === "call_sub_agent" && tool.subAgent) {
     return <SubAgentChip tool={tool} run={tool.subAgent} />;
+  }
+  if (tool.name === "shall_tool") {
+    return <ShellChip tool={tool} />;
   }
   if (tool.name === "list_sub_agents") {
     return <ListSubAgentsChip tool={tool} />;
@@ -353,6 +357,166 @@ function ApplyMultipleEditsChip({ tool }: { tool: ToolActivity }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ShellToolResult {
+  ok?: boolean;
+  data?: {
+    command?: string;
+    exit_code?: number | null;
+    signal?: string | null;
+    stdout?: string;
+    stderr?: string;
+    truncated?: boolean;
+    timed_out?: boolean;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    timeout_seconds?: number;
+    stdout?: string;
+    stderr?: string;
+    truncated?: boolean;
+  };
+}
+
+const DEFAULT_SHELL_TIMEOUT = 60;
+
+function ShellChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as ShellToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+
+  const command = data?.command ?? String(tool.args?.command ?? tool.label);
+  const timeoutArg = tool.args?.timeout as number | undefined;
+  const timeout = timeoutArg ?? DEFAULT_SHELL_TIMEOUT;
+  const effectiveTimeout = error?.timeout_seconds ?? timeout;
+  const stdout = data?.stdout ?? error?.stdout;
+  const stderr = data?.stderr ?? error?.stderr;
+  const truncated = data?.truncated ?? error?.truncated;
+  const timedOut = data?.timed_out ?? error?.code === "shell_timeout";
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Terminal className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      <span
+        className="flex items-center gap-1 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]"
+        title={`Command timeout (default ${DEFAULT_SHELL_TIMEOUT}s, max 180s)`}
+      >
+        <Timer className="h-2.5 w-2.5" />
+        {effectiveTimeout}s
+      </span>
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  const hasOutput =
+    (stdout !== undefined && stdout.length > 0) || (stderr !== undefined && stderr.length > 0);
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+            <span className="flex items-center gap-1 font-medium text-[var(--color-fg)]">
+              <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+              <span className="truncate font-mono">{command}</span>
+            </span>
+            <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+              timeout: {effectiveTimeout}s
+            </span>
+            {data?.exit_code != null && (
+              <span
+                className={cn(
+                  "rounded-full border px-1.5 py-0.5 text-[10px]",
+                  data.exit_code === 0
+                    ? "border-[var(--color-border)]"
+                    : "border-red-500/40 bg-red-500/10 text-red-300",
+                )}
+              >
+                exit: {data.exit_code}
+              </span>
+            )}
+            {data?.signal && (
+              <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                signal: {data.signal}
+              </span>
+            )}
+            {timedOut && (
+              <span
+                className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300"
+                title="The command was killed because it exceeded the timeout"
+              >
+                ⚠ timed out
+              </span>
+            )}
+            {truncated && (
+              <span
+                className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300"
+                title="Output was cut at the character limit"
+              >
+                ⚠ truncated
+              </span>
+            )}
+          </div>
+
+          {error && (
+            <p className="whitespace-pre-wrap text-red-300">
+              Command failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          )}
+
+          {hasOutput ? (
+            <>
+              {stdout !== undefined && stdout.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                    stdout
+                  </div>
+                  <pre className="max-h-80 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                    {stdout}
+                  </pre>
+                </div>
+              )}
+              {stderr !== undefined && stderr.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                    stderr
+                  </div>
+                  <pre className="max-h-80 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-red-300">
+                    {stderr}
+                  </pre>
+                </div>
+              )}
+            </>
+          ) : !error ? (
+            <p className="text-[var(--color-muted)]">No output.</p>
+          ) : null}
         </div>
       )}
     </div>
