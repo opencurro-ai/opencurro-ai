@@ -46,6 +46,12 @@ export const SUB_AGENT_TOOLS: readonly SubAgentToolMeta[] = [
     label: "Fetch URL",
     description: "Fetch and extract clean content from a single URL.",
   },
+  {
+    name: "read_image",
+    label: "Read image",
+    description:
+      "Read an image from the local workspace or a live hosted image URL and visually analyze it. Requires a vision-capable model.",
+  },
 ] as const;
 
 export const SUB_AGENT_TOOL_NAMES: readonly string[] = SUB_AGENT_TOOLS.map((t) => t.name);
