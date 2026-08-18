@@ -19,6 +19,9 @@ import { cn } from "@/utils/cn";
 /** Skill folder names must be lowercase alphanumeric segments joined by single hyphens. */
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/** Maximum length of the short description the agent uses to pick the right skill. */
+const SKILL_DESC_MAX_CHARS = 300;
+
 interface DraftFile extends SkillFile {
   /** Stable key for React list rendering (not persisted). */
   key: string;
@@ -89,6 +92,7 @@ export function SkillsManager() {
   const save = () => {
     if (!draft) return;
     const name = draft.name.trim();
+    const description = draft.description.trim();
     const skillFile = draft.skillFile.trim() || "SKILL.md";
 
     if (!name) return setError("Skill name is required.");
@@ -96,6 +100,9 @@ export function SkillsManager() {
       return setError(
         "Skill name must be lowercase letters, numbers and single hyphens (e.g. git-workflow).",
       );
+    if (!description) return setError("Short description is required.");
+    if (description.length > SKILL_DESC_MAX_CHARS)
+      return setError(`Short description must be ${SKILL_DESC_MAX_CHARS} characters or fewer.`);
 
     // Names are the folder name and the identifier the agent uses — they must be unique.
     const clash = skills.some(
@@ -117,7 +124,7 @@ export function SkillsManager() {
 
     const payload = {
       name,
-      description: draft.description.trim(),
+      description,
       skillFile,
       skillContent: draft.skillContent,
       files: cleanedFiles,
@@ -296,6 +303,7 @@ function SkillEditor({
 }) {
   const patch = (p: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...p } : d));
   const entryInputRef = useRef<HTMLInputElement>(null);
+  const descChars = draft.description.length;
 
   const addFile = () => {
     patch({ files: [...draft.files, { key: nextFileKey(), path: "", content: "" }] });
@@ -355,12 +363,17 @@ function SkillEditor({
           </span>
         </Field>
 
-        <Field label="Short description" hint="optional">
+        <Field
+          label="Short description"
+          hint={`${descChars}/${SKILL_DESC_MAX_CHARS} chars`}
+          hintError={descChars > SKILL_DESC_MAX_CHARS}
+        >
           <textarea
             value={draft.description}
             onChange={(e) => patch({ description: e.target.value })}
             placeholder="What this skill teaches the agent to do — shown when it lists skills."
             rows={2}
+            maxLength={SKILL_DESC_MAX_CHARS}
             className="w-full resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
           />
         </Field>
@@ -545,17 +558,23 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
 function Field({
   label,
   hint,
+  hintError,
   children,
 }: {
   label: string;
   hint?: string;
+  hintError?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <label className="block">
       <span className="mb-1.5 flex items-center justify-between">
         <span className="text-xs font-medium text-[var(--color-muted)]">{label}</span>
-        {hint && <span className="text-[10px] text-[var(--color-muted)]">{hint}</span>}
+        {hint && (
+          <span className={cn("text-[10px]", hintError ? "text-red-300" : "text-[var(--color-muted)]")}>
+            {hint}
+          </span>
+        )}
       </span>
       {children}
     </label>
