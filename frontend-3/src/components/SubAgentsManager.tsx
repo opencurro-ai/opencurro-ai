@@ -15,6 +15,7 @@ import { SUB_AGENT_TOOLS } from "@/lib/subAgentTools";
 import type { SubAgent } from "@/types";
 import { cn } from "@/utils/cn";
 
+const NAME_MAX_CHARS = 70;
 const DESC_MAX_CHARS = 300;
 
 interface Draft {
@@ -77,6 +78,8 @@ export function SubAgentsManager() {
     const description = draft.description.trim();
 
     if (!name) return setError("Name is required.");
+    if (name.length > NAME_MAX_CHARS)
+      return setError(`Name must be ${NAME_MAX_CHARS} characters or fewer.`);
     if (description.length > DESC_MAX_CHARS)
       return setError(`Short description must be ${DESC_MAX_CHARS} characters or fewer.`);
     if (!draft.systemPrompt.trim()) return setError("System prompt is required.");
@@ -262,6 +265,7 @@ function SubAgentEditor({
   onSave: () => void;
 }) {
   const patch = (p: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...p } : d));
+  const nameChars = draft.name.length;
   const descChars = draft.description.length;
 
   return (
@@ -269,12 +273,15 @@ function SubAgentEditor({
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
         <Field
           label="Sub-agent name"
+          hint={`${nameChars}/${NAME_MAX_CHARS} chars`}
+          hintError={nameChars > NAME_MAX_CHARS}
         >
           <input
             type="text"
             value={draft.name}
             onChange={(e) => patch({ name: e.target.value })}
             placeholder="e.g. deepexplorer"
+            maxLength={NAME_MAX_CHARS}
             className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
           />
         </Field>

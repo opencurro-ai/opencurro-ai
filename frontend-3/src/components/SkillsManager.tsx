@@ -22,6 +22,9 @@ const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /** Maximum length of the short description the agent uses to pick the right skill. */
 const SKILL_DESC_MAX_CHARS = 300;
 
+/** Maximum length of the skill name (its folder name / identifier). */
+const SKILL_NAME_MAX_CHARS = 70;
+
 interface DraftFile extends SkillFile {
   /** Stable key for React list rendering (not persisted). */
   key: string;
@@ -100,6 +103,8 @@ export function SkillsManager() {
       return setError(
         "Skill name must be lowercase letters, numbers and single hyphens (e.g. git-workflow).",
       );
+    if (name.length > SKILL_NAME_MAX_CHARS)
+      return setError(`Skill name must be ${SKILL_NAME_MAX_CHARS} characters or fewer.`);
     if (!description) return setError("Short description is required.");
     if (description.length > SKILL_DESC_MAX_CHARS)
       return setError(`Short description must be ${SKILL_DESC_MAX_CHARS} characters or fewer.`);
@@ -304,6 +309,7 @@ function SkillEditor({
   const patch = (p: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...p } : d));
   const entryInputRef = useRef<HTMLInputElement>(null);
   const descChars = draft.description.length;
+  const nameChars = draft.name.length;
 
   const addFile = () => {
     patch({ files: [...draft.files, { key: nextFileKey(), path: "", content: "" }] });
@@ -350,12 +356,17 @@ function SkillEditor({
   return (
     <>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-        <Field label="Skill name" hint="lowercase-hyphenated">
+        <Field
+          label="Skill name"
+          hint={`${nameChars}/${SKILL_NAME_MAX_CHARS} chars`}
+          hintError={nameChars > SKILL_NAME_MAX_CHARS}
+        >
           <input
             type="text"
             value={draft.name}
             onChange={(e) => patch({ name: e.target.value })}
             placeholder="e.g. git-workflow"
+            maxLength={SKILL_NAME_MAX_CHARS}
             className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-accent)]/50"
           />
           <span className="mt-1 block text-[10px] text-[var(--color-muted)]">
