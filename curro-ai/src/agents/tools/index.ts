@@ -39,7 +39,13 @@ export type {
 } from "./types.js";
 export { defineTool } from "./types.js";
 export { webSearchTool, SEARCH_PROVIDERS } from "./webSearch.js";
-export { imageSearchTool, IMAGE_SEARCH_PROVIDER_SERPAPI } from "./imagesearch.js";
+export {
+  imageSearchTool,
+  IMAGE_SEARCH_PROVIDERS,
+  IMAGE_SEARCH_PROVIDER_TAVILY,
+  IMAGE_SEARCH_PROVIDER_EXA,
+  IMAGE_SEARCH_PROVIDER_SERPAPI,
+} from "./imagesearch.js";
 export { fetchWebUrlsTool } from "./fetchWebUrls.js";
 export { applyMultipleEditsTool } from "./applyMultipleEdits.js";
 export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";

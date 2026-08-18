@@ -2,16 +2,30 @@ import { z } from "zod";
 import { defineTool, type ToolContext, type ToolResult } from "./types.js";
 
 /**
- * Live image search implemented on top of the existing SerpAPI integration (Google Images
- * engine). It reuses the project's existing search provider configuration (ctx.web.serpapiApiKey)
- * and returns each result's real, direct image URL plus the source page when available.
- * See https://serpapi.com/google-images-results for the response shape.
+ * Live image search that reuses the project's existing web-search providers: Tavily, Exa and
+ * SerpAPI. The provider is chosen from ctx.web.searchProvider (falling back to the first
+ * configured provider), mirroring the web_search tool's provider selection. Every image URL
+ * returned is a real, live URL supplied by the provider — nothing is fabricated.
+ *
+ * Provider support:
+ *  - Tavily  : POST /search with include_images=true -> query-level `images` array plus
+ *              source-linked `results[].images`.
+ *  - Exa     : POST /search results carry an `image` (hero) URL; requesting
+ *              `contents.extras.imageLinks` also extracts page images per result.
+ *  - SerpAPI : GET /search.json?engine=google_images -> images_results with direct `original`.
  */
 
 const MAX_IMAGE_RESULTS = 20;
 const REQUEST_TIMEOUT_MS = 30_000;
 
+export const IMAGE_SEARCH_PROVIDER_TAVILY = "tavily";
+export const IMAGE_SEARCH_PROVIDER_EXA = "exa";
 export const IMAGE_SEARCH_PROVIDER_SERPAPI = "serpapi";
+export const IMAGE_SEARCH_PROVIDERS: readonly string[] = [
+  IMAGE_SEARCH_PROVIDER_TAVILY,
+  IMAGE_SEARCH_PROVIDER_EXA,
+  IMAGE_SEARCH_PROVIDER_SERPAPI,
+] as const;
 
 const schema = z
   .object({
@@ -39,6 +53,139 @@ function timeoutSignal(ctx: ToolContext): { signal: AbortSignal; cleanup: () => 
   };
 }
 
+/** POST a JSON body and return the parsed JSON on a 2xx response; throws otherwise. */
+async function postJson(
+  url: string,
+  headers: Record<string, string>,
+  body: unknown,
+  ctx: ToolContext,
+): Promise<unknown> {
+  const { signal, cleanup } = timeoutSignal(ctx);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+    const text = await response.text();
+    let parsed: unknown = {};
+    try {
+      parsed = text ? JSON.parse(text) : {};
+    } catch {
+      parsed = { raw: text.slice(0, 500) };
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}: ${text.slice(0, 500)}`);
+    }
+    return parsed;
+  } finally {
+    cleanup();
+  }
+}
+
+interface TavilyResult {
+  title?: string;
+  url?: string;
+  images?: Array<{ url?: string; description?: string }>;
+}
+
+/** Tavily Search with include_images -> top-level query images plus per-result source-linked images. */
+async function searchTavilyImages(
+  query: string,
+  apiKey: string,
+  ctx: ToolContext,
+): Promise<ImageSearchResult[]> {
+  const data = (await postJson(
+    "https://api.tavily.com/search",
+    { "Content-Type": "application/json" },
+    {
+      api_key: apiKey,
+      query,
+      search_depth: "basic",
+      max_results: MAX_IMAGE_RESULTS,
+      include_images: true,
+      include_image_descriptions: true,
+    },
+    ctx,
+  )) as {
+    images?: Array<{ url?: string; description?: string }>;
+    results?: TavilyResult[];
+  };
+
+  const results: ImageSearchResult[] = [];
+
+  // Source-linked images: each page's own images, keyed to the result URL.
+  for (const result of data.results ?? []) {
+    for (const image of result.images ?? []) {
+      if (!image.url) continue;
+      results.push({
+        title: image.description ?? result.title ?? undefined,
+        image_url: image.url,
+        source_url: result.url ?? undefined,
+      });
+    }
+  }
+
+  // Query-level images (no attached source page).
+  for (const image of data.images ?? []) {
+    if (!image.url) continue;
+    results.push({
+      title: image.description ?? undefined,
+      image_url: image.url,
+    });
+  }
+
+  return results.slice(0, MAX_IMAGE_RESULTS);
+}
+
+interface ExaResult {
+  title?: string;
+  url?: string;
+  image?: string;
+  extras?: { imageLinks?: string[] | string };
+}
+
+/** Exa search returning each result's hero image plus any extracted page image links. */
+async function searchExaImages(
+  query: string,
+  apiKey: string,
+  ctx: ToolContext,
+): Promise<ImageSearchResult[]> {
+  const data = (await postJson(
+    "https://api.exa.ai/search",
+    { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    {
+      query,
+      numResults: MAX_IMAGE_RESULTS,
+      contents: { extras: { imageLinks: 1 } },
+    },
+    ctx,
+  )) as { results?: ExaResult[] };
+
+  const seen = new Set<string>();
+  const results: ImageSearchResult[] = [];
+
+  const push = (imageUrl: string, result: ExaResult) => {
+    if (!imageUrl || seen.has(imageUrl)) return;
+    seen.add(imageUrl);
+    results.push({
+      title: result.title ?? undefined,
+      image_url: imageUrl,
+      source_url: result.url ?? undefined,
+    });
+  };
+
+  for (const result of data.results ?? []) {
+    if (result.image) push(result.image, result);
+    const links = result.extras?.imageLinks;
+    const imageLinks = Array.isArray(links) ? links : links ? [links] : [];
+    for (const link of imageLinks) push(link, result);
+  }
+
+  return results.slice(0, MAX_IMAGE_RESULTS);
+}
+
 interface SerpApiImageItem {
   title?: string;
   link?: string;
@@ -47,10 +194,7 @@ interface SerpApiImageItem {
   thumbnails?: Array<{ url?: string }>;
 }
 
-/**
- * Run a live Google Images search through SerpAPI and return up to MAX_IMAGE_RESULTS images.
- * Only results that expose a usable direct image URL are kept.
- */
+/** Run a live Google Images search through SerpAPI and return up to MAX_IMAGE_RESULTS images. */
 async function searchSerpApiImages(
   query: string,
   apiKey: string,
@@ -111,28 +255,46 @@ export const imageSearchTool = defineTool({
       };
     }
 
-    const apiKey = ctx.web?.serpapiApiKey;
+    const keys: Record<string, string | undefined> = {
+      [IMAGE_SEARCH_PROVIDER_TAVILY]: ctx.web?.tavilyApiKey,
+      [IMAGE_SEARCH_PROVIDER_EXA]: ctx.web?.exaApiKey,
+      [IMAGE_SEARCH_PROVIDER_SERPAPI]: ctx.web?.serpapiApiKey,
+    };
+
+    // Use the selected provider when its key is set; otherwise fall back to the first
+    // provider that has a key so a stale/missing selection never breaks image search.
+    const selected = ctx.web?.searchProvider;
+    const provider: string = keys[selected ?? ""]
+      ? (selected as string)
+      : (IMAGE_SEARCH_PROVIDERS.find((p) => keys[p]) ?? IMAGE_SEARCH_PROVIDER_TAVILY);
+    const apiKey = keys[provider];
+
     if (!apiKey) {
       return {
         ok: false,
         error: {
           code: "missing_api_key",
           message:
-            "No SerpAPI key configured for image search. " +
-            "This tool reuses the existing SerpAPI integration (Google Images engine); " +
-            "add a SerpAPI key in Settings.",
-          provider: IMAGE_SEARCH_PROVIDER_SERPAPI,
+            "No search API key configured for image search. " +
+            "Add a Tavily, Exa or SerpAPI key in Settings.",
+          provider,
         },
       };
     }
 
     try {
-      const results = await searchSerpApiImages(query, apiKey, ctx);
+      const results =
+        provider === IMAGE_SEARCH_PROVIDER_EXA
+          ? await searchExaImages(query, apiKey, ctx)
+          : provider === IMAGE_SEARCH_PROVIDER_SERPAPI
+            ? await searchSerpApiImages(query, apiKey, ctx)
+            : await searchTavilyImages(query, apiKey, ctx);
+
       return {
         ok: true,
         data: {
           query,
-          provider: IMAGE_SEARCH_PROVIDER_SERPAPI,
+          provider,
           result_count: results.length,
           results,
         },
@@ -142,7 +304,7 @@ export const imageSearchTool = defineTool({
         ok: false,
         error: {
           code: "image_search_failed",
-          provider: IMAGE_SEARCH_PROVIDER_SERPAPI,
+          provider,
           message: error instanceof Error ? error.message : String(error),
         },
       };

@@ -1788,6 +1788,7 @@ function ImageSearchChip({ tool }: { tool: ToolActivity }) {
   const error = result && !result.ok ? result.error : undefined;
   const results = data?.results ?? [];
   const query = data?.query;
+  const provider = data?.provider;
 
   const chip = (
     <button
@@ -1831,6 +1832,7 @@ function ImageSearchChip({ tool }: { tool: ToolActivity }) {
                 <span className="font-medium text-[var(--color-fg)]">
                   {results.length} image{results.length === 1 ? "" : "s"}
                 </span>
+                {provider && <span>· {PROVIDER_LABELS[provider] ?? provider}</span>}
                 {query && (
                   <span className="min-w-0 truncate" title={query}>
                     · “{query}”

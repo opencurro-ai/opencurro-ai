@@ -1,6 +1,10 @@
 import { describe, it, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
-import { IMAGE_SEARCH_PROVIDER_SERPAPI } from "./imagesearch.js";
+import {
+  IMAGE_SEARCH_PROVIDER_EXA,
+  IMAGE_SEARCH_PROVIDER_SERPAPI,
+  IMAGE_SEARCH_PROVIDER_TAVILY,
+} from "./imagesearch.js";
 import { createToolRegistry, webSearchTool } from "./index.js";
 import type { ToolContext } from "./types.js";
 
@@ -70,13 +74,14 @@ describe("image_search tool", () => {
     assert.equal((result.error as { code: string }).code, "invalid_arguments");
   });
 
-  it("returns a structured missing_api_key error when no SerpAPI key is configured", async () => {
+  it("returns a structured missing_api_key error when no search API key is configured", async () => {
     const ctx = baseCtx({ web: { searchProvider: "serpapi" } });
     const result = await registry.execute("image_search", { query: "dogs" }, ctx);
     assert.equal(result.ok, false);
     assert.equal((result.error as { code: string }).code, "missing_api_key");
+    // With no keys set, the tool reports the default provider (tavily).
     const err = result.error as { provider?: string };
-    assert.equal(err.provider, IMAGE_SEARCH_PROVIDER_SERPAPI);
+    assert.equal(err.provider, IMAGE_SEARCH_PROVIDER_TAVILY);
   });
 
   it("performs a live image search and returns real direct image URLs", async () => {
@@ -124,6 +129,146 @@ describe("image_search tool", () => {
     assert.equal(parsed.searchParams.get("q"), "cute cat images");
     assert.equal(parsed.searchParams.get("api_key"), "test-key");
 
+    mock.restoreAll();
+  });
+
+  it("searches through the Tavily provider and returns real image URLs", async () => {
+    const calls: CallLog[] = [];
+    mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      const body = JSON.stringify({
+        images: [{ url: "https://cdn.example.com/q1.jpg", description: "Query image" }],
+        results: [
+          {
+            title: "Cat Blog",
+            url: "https://example.com/cats",
+            images: [
+              { url: "https://cdn.example.com/s1.jpg", description: "Site kitten" },
+              { url: "https://cdn.example.com/s2.webp" },
+            ],
+          },
+          { title: "No Images Page", url: "https://example.com/none" },
+        ],
+      });
+      return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+
+    const ctx = baseCtx({ web: { searchProvider: "tavily", tavilyApiKey: "tv-key" } });
+    const result = await registry.execute("image_search", { query: "cute cats" }, ctx);
+
+    assert.equal(result.ok, true, JSON.stringify(result.error));
+    const data = result.data as {
+      provider: string;
+      result_count: number;
+      results: Array<{ image_url: string; source_url?: string; title?: string }>;
+    };
+    assert.equal(data.provider, IMAGE_SEARCH_PROVIDER_TAVILY);
+    assert.equal(data.result_count, 3);
+    assert.deepEqual(
+      data.results.map((r) => r.image_url),
+      [
+        "https://cdn.example.com/s1.jpg",
+        "https://cdn.example.com/s2.webp",
+        "https://cdn.example.com/q1.jpg",
+      ],
+    );
+    assert.equal(data.results[0].source_url, "https://example.com/cats");
+    assert.equal(data.results[0].title, "Site kitten");
+
+    assert.equal(calls.length, 1);
+    const init = calls[0]!.init;
+    const body = JSON.parse(String(init?.body)) as {
+      api_key: string;
+      query: string;
+      include_images: boolean;
+    };
+    assert.equal(body.api_key, "tv-key");
+    assert.equal(body.query, "cute cats");
+    assert.equal(body.include_images, true);
+
+    mock.restoreAll();
+  });
+
+  it("searches through the Exa provider using hero images and page image links", async () => {
+    const calls: CallLog[] = [];
+    mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      const body = JSON.stringify({
+        results: [
+          {
+            title: "Cute Cat Gallery",
+            url: "https://example.com/gallery",
+            image: "https://cdn.example.com/hero.jpg",
+            extras: { imageLinks: ["https://cdn.example.com/one.png"] },
+          },
+          {
+            title: "No Hero",
+            url: "https://example.com/plain",
+            extras: { imageLinks: ["https://cdn.example.com/two.gif"] },
+          },
+          { title: "No Images", url: "https://example.com/none" },
+        ],
+      });
+      return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+
+    const ctx = baseCtx({ web: { searchProvider: "exa", exaApiKey: "exa-key" } });
+    const result = await registry.execute("image_search", { query: "cat photos" }, ctx);
+
+    assert.equal(result.ok, true, JSON.stringify(result.error));
+    const data = result.data as {
+      provider: string;
+      result_count: number;
+      results: Array<{ image_url: string; source_url?: string; title?: string }>;
+    };
+    assert.equal(data.provider, IMAGE_SEARCH_PROVIDER_EXA);
+    assert.equal(data.result_count, 3);
+    assert.deepEqual(
+      data.results.map((r) => r.image_url),
+      [
+        "https://cdn.example.com/hero.jpg",
+        "https://cdn.example.com/one.png",
+        "https://cdn.example.com/two.gif",
+      ],
+    );
+    assert.equal(data.results[0].source_url, "https://example.com/gallery");
+    assert.equal(data.results[0].title, "Cute Cat Gallery");
+
+    assert.equal(calls.length, 1);
+    const init = calls[0]!.init;
+    const headers = init?.headers as Record<string, string> | undefined;
+    assert.equal(headers && headers["Authorization"], "Bearer exa-key");
+    const body = JSON.parse(String(init?.body)) as {
+      numResults: number;
+      contents: { extras: { imageLinks: number } };
+    };
+    assert.equal(body.numResults, 20);
+    assert.equal(body.contents.extras.imageLinks, 1);
+
+    mock.restoreAll();
+  });
+
+  it("falls back to the first configured provider when the selected one lacks a key", async () => {
+    const calls: CallLog[] = [];
+    mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return new Response(
+        JSON.stringify({
+          results: [{ title: "T", url: "https://example.com/x", image: "https://cdn.example.com/x.jpg" }],
+        }),
+        { status: 200 },
+      );
+    });
+
+    // Selected provider is serpapi but no serpapi key is set; only tavily and exa keys exist.
+    const ctx = baseCtx({
+      web: { searchProvider: "serpapi", tavilyApiKey: "tv", exaApiKey: "ex" },
+    });
+    const result = await registry.execute("image_search", { query: "test" }, ctx);
+    assert.equal(result.ok, true, JSON.stringify(result.error));
+    const data = result.data as { provider: string };
+    assert.equal(data.provider, IMAGE_SEARCH_PROVIDER_TAVILY); // tavily is the first configured
+    assert.equal(calls.length, 1);
     mock.restoreAll();
   });
 
