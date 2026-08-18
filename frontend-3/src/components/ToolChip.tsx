@@ -47,6 +47,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   web_search: Globe,
   fatch_web_urls: Globe,
   read_image: ImageIcon,
+  image_search: ImageIcon,
   call_sub_agent: Bot,
   list_sub_agents: ListTree,
   list_skills: Blocks,
@@ -193,6 +194,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "read_image") {
     return <ReadImageChip tool={tool} />;
+  }
+  if (tool.name === "image_search") {
+    return <ImageSearchChip tool={tool} />;
   }
   if (tool.name === "str_replace") {
     return <StrReplaceChip tool={tool} />;
@@ -1751,6 +1755,121 @@ function ReadImageChip({ tool }: { tool: ToolActivity }) {
               <p className="text-[10px] leading-relaxed text-[var(--color-muted)]">
                 The image was attached to the model's vision input for analysis.
               </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ImageSearchResultItem {
+  title?: string;
+  image_url?: string;
+  source_url?: string;
+}
+
+interface ImageSearchToolResult {
+  ok?: boolean;
+  data?: {
+    query?: string;
+    provider?: string;
+    result_count?: number;
+    results?: ImageSearchResultItem[];
+  };
+  error?: { code?: string; message?: string };
+}
+
+function ImageSearchChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as ImageSearchToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const results = data?.results ?? [];
+  const query = data?.query;
+  const provider = data?.provider;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <ImageIcon className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              Image search failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : results.length === 0 ? (
+            <p className="text-[var(--color-muted)]">No images found.</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="font-medium text-[var(--color-fg)]">
+                  {results.length} image{results.length === 1 ? "" : "s"}
+                </span>
+                {provider && <span>· {PROVIDER_LABELS[provider] ?? provider}</span>}
+                {query && (
+                  <span className="min-w-0 truncate" title={query}>
+                    · “{query}”
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {results.map((item, i) => (
+                  <a
+                    key={`${item.image_url ?? "image"}-${i}`}
+                    href={item.source_url ?? item.image_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 transition hover:border-[var(--color-accent)]/50"
+                  >
+                    <span className="relative block aspect-square w-full overflow-hidden bg-[var(--color-bg-elev)]">
+                      <img
+                        src={item.image_url}
+                        alt={item.title ?? query ?? "image"}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          el.style.opacity = "0.2";
+                        }}
+                        className="h-full w-full object-cover transition group-hover:opacity-80"
+                      />
+                    </span>
+                    <span className="flex min-w-0 flex-1 items-center gap-1 border-t border-[var(--color-border)] px-2 py-1.5">
+                      <ExternalLink className="h-3 w-3 shrink-0 text-[var(--color-muted)] group-hover:text-[var(--color-accent)]" />
+                      <span className="block truncate text-[10px] text-[var(--color-muted)]">
+                        {item.title || "Image result"}
+                      </span>
+                    </span>
+                  </a>
+                ))}
+              </div>
             </div>
           )}
         </div>
