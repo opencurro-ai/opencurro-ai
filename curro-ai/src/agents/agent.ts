@@ -10,7 +10,7 @@ import {
   withoutImageAttachment,
 } from "./tools/readImage.js";
 import { isVisionCapableModel } from "../utils/vision.js";
-import type { SubAgentDefinition, WebToolsConfig } from "./tools/types.js";
+import type { SkillDefinition, SubAgentDefinition, WebToolsConfig } from "./tools/types.js";
 import type { ToolCall, ToolCallDelta } from "./providers/types.js";
 import type { ChatSession, StoredMessage } from "../services/sessionStore.js";
 import type { SessionEventBuffer } from "../services/eventBuffer.js";
@@ -18,6 +18,7 @@ import type { PlanApprovalStore } from "../services/planApprovalStore.js";
 import type { QuestionStore } from "../services/questionStore.js";
 import { safeJsonParse } from "../utils/json.js";
 import { SubAgentSessionStore, createSubAgentRuntime } from "./subagents.js";
+import { createSkillRuntime } from "./skills.js";
 
 export interface RunAgentRequest {
   chatId: string;
@@ -38,6 +39,8 @@ export interface RunAgentRequest {
   firecrawlApiKey?: string;
   /** User-defined sub-agents (from the frontend, stored in the browser) available this turn. */
   subAgents?: SubAgentDefinition[];
+  /** User-defined skills (from the frontend, stored in the browser) available this turn. */
+  skills?: SkillDefinition[];
 }
 
 export class AgentRunner {
@@ -103,6 +106,11 @@ export class AgentRunner {
         temperature: request.temperature,
         send,
       });
+
+      // Skill runtime for this turn — enumerates the user's skills (list_skills) and materializes
+      // them onto disk inside the workspace's ".skills" directory (skill_initialize). Skills, like
+      // sub-agents, are authored in the frontend and travel with each turn.
+      const skillRuntime = createSkillRuntime(request.skills ?? []);
 
       const visibleAnswer: string[] = [];
       const visibleReasoning: string[] = [];
@@ -200,6 +208,7 @@ export class AgentRunner {
               signal,
               web,
               subAgents: subAgentRuntime,
+              skills: skillRuntime,
               toolCallId: toolCall.id ?? undefined,
               chatId: request.chatId,
               emit: send,

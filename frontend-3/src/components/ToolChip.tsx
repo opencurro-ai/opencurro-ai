@@ -21,6 +21,9 @@ import {
   Link2,
   Eye,
   CornerDownLeft,
+  Blocks,
+  FolderTree as FolderTreeIcon,
+  PackagePlus,
 } from "lucide-react";
 import type { ReadImageToolResult, SubAgentRun, ToolActivity } from "@/types";
 import { cn } from "@/utils/cn";
@@ -41,6 +44,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   read_image: ImageIcon,
   call_sub_agent: Bot,
   list_sub_agents: ListTree,
+  list_skills: Blocks,
+  skill_initialize: PackagePlus,
 };
 
 interface SearchResultItem {
@@ -64,6 +69,42 @@ interface SearchToolResult {
 interface ListToolResult {
   ok?: boolean;
   data?: { available_sub_agents?: Array<{ name?: string; description?: string }> };
+}
+
+interface SkillListItem {
+  name?: string;
+  description?: string;
+  skill_file?: string;
+  files?: string[];
+  tree?: string;
+}
+
+interface ListSkillsToolResult {
+  ok?: boolean;
+  data?: { count?: number; skills?: SkillListItem[] };
+  error?: { code?: string; message?: string };
+}
+
+interface InitializedSkillItem {
+  skill_name?: string;
+  path?: string;
+  skill_file?: string;
+  files?: string[];
+}
+
+interface FailedSkillItem {
+  skill_name?: string;
+  error?: string;
+}
+
+interface SkillInitializeToolResult {
+  ok?: boolean;
+  data?: {
+    success?: boolean;
+    initialized?: InitializedSkillItem[];
+    failed?: FailedSkillItem[];
+  };
+  error?: { code?: string; message?: string };
 }
 
 interface FileReadToolResult {
@@ -131,6 +172,12 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "list_sub_agents") {
     return <ListSubAgentsChip tool={tool} />;
+  }
+  if (tool.name === "list_skills") {
+    return <ListSkillsChip tool={tool} />;
+  }
+  if (tool.name === "skill_initialize") {
+    return <SkillInitializeChip tool={tool} />;
   }
   if (tool.name === "file_read") {
     return <FileReadChip tool={tool} />;
@@ -1166,6 +1213,235 @@ function ListSubAgentsChip({ tool }: { tool: ToolActivity }) {
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ListSkillsChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as ListSkillsToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const skills = result?.ok ? result.data?.skills ?? [] : [];
+  const error = result && !result.ok ? result.error : undefined;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Blocks className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {hasResult && skills.length > 0 && (
+        <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+          {skills.length}
+        </span>
+      )}
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="text-red-300">
+              List skills failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : skills.length === 0 ? (
+            <p className="text-[var(--color-muted)]">No skills available.</p>
+          ) : (
+            <ul className="space-y-2">
+              {skills.map((skill, i) => (
+                <li
+                  key={`${skill.name ?? "skill"}-${i}`}
+                  className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+                >
+                  <span className="flex items-center gap-1.5 font-mono font-medium text-[var(--color-accent)]">
+                    <Blocks className="h-3 w-3" />
+                    {skill.name}
+                  </span>
+                  {skill.description && (
+                    <span className="mt-0.5 block leading-relaxed text-[var(--color-muted)]">
+                      {skill.description}
+                    </span>
+                  )}
+                  {skill.tree ? (
+                    <pre className="mt-1.5 max-h-60 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                      {skill.tree}
+                    </pre>
+                  ) : (
+                    skill.files &&
+                    skill.files.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {skill.files.map((f) => (
+                          <span
+                            key={f}
+                            className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-muted)]"
+                          >
+                            <FileText className="h-2.5 w-2.5" />
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SkillInitializeChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as SkillInitializeToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const initialized = data?.initialized ?? [];
+  const failed = data?.failed ?? [];
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <PackagePlus className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {hasResult && initialized.length > 0 && (
+        <span className="rounded-full border border-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
+          {initialized.length} ok
+        </span>
+      )}
+      {hasResult && failed.length > 0 && (
+        <span className="rounded-full border border-red-500/40 px-1.5 py-0.5 text-[10px] text-red-300">
+          {failed.length} failed
+        </span>
+      )}
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              Initialize failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : (
+            <>
+              {initialized.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                    Initialized
+                  </div>
+                  <ul className="space-y-1.5">
+                    {initialized.map((skill, i) => (
+                      <li
+                        key={`${skill.skill_name ?? "skill"}-${i}`}
+                        className="rounded-lg border border-emerald-500/25 bg-[var(--color-bg-elev2)]/60 p-2"
+                      >
+                        <span className="flex items-center gap-1.5 font-mono font-medium text-[var(--color-fg)]">
+                          <FolderTreeIcon className="h-3 w-3 text-emerald-400" />
+                          {skill.skill_name}
+                        </span>
+                        {skill.path && (
+                          <span className="mt-0.5 block truncate font-mono text-[10px] text-[var(--color-muted)]">
+                            {skill.path}
+                          </span>
+                        )}
+                        {skill.files && skill.files.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {skill.files.map((f) => (
+                              <span
+                                key={f}
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-mono",
+                                  f === skill.skill_file
+                                    ? "border-[var(--color-accent)]/40 text-[var(--color-accent)]"
+                                    : "border-[var(--color-border)] text-[var(--color-muted)]",
+                                )}
+                              >
+                                <FileText className="h-2.5 w-2.5" />
+                                {f}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {failed.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                    Failed
+                  </div>
+                  <ul className="space-y-1.5">
+                    {failed.map((skill, i) => (
+                      <li
+                        key={`${skill.skill_name ?? "skill"}-${i}`}
+                        className="rounded-lg border border-red-500/30 bg-red-500/5 p-2"
+                      >
+                        <span className="font-mono font-medium text-red-300">
+                          {skill.skill_name}
+                        </span>
+                        {skill.error && (
+                          <span className="mt-0.5 block leading-relaxed text-[var(--color-muted)]">
+                            {skill.error}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {initialized.length === 0 && failed.length === 0 && (
+                <p className="text-[var(--color-muted)]">No skills initialized.</p>
+              )}
+            </>
           )}
         </div>
       )}

@@ -6,6 +6,7 @@ import {
   Check,
   Globe,
   Bot,
+  Blocks,
   ChevronRight,
   Plus,
   Trash2,
@@ -34,6 +35,8 @@ export function SettingsModal() {
   const setSearchApiKey = useStore((s) => s.setSearchApiKey);
   const setSubAgentsOpen = useStore((s) => s.setSubAgentsOpen);
   const subAgentCount = useStore((s) => s.subAgents.length);
+  const setSkillsOpen = useStore((s) => s.setSkillsOpen);
+  const skillCount = useStore((s) => s.skills.length);
 
   const customProviders = useStore((s) => s.customProviders);
   const updateCustomProvider = useStore((s) => s.updateCustomProvider);
@@ -463,6 +466,34 @@ export function SettingsModal() {
                     Manage sub-agents
                     <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
                       {subAgentCount}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-[var(--color-muted)]" />
+                </button>
+              </div>
+
+              <div className="border-t border-[var(--color-border)] pt-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Blocks className="h-4 w-4 text-[var(--color-accent)]" />
+                  <h3 className="text-sm font-semibold">Skills</h3>
+                </div>
+                <p className="mb-3 text-xs text-[var(--color-muted)]">
+                  Create reusable skills — packaged capabilities (a SKILL.md plus optional
+                  reference, example and script files) the agent can initialize and use on demand.
+                  Stored only in this browser.
+                </p>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setSkillsOpen(true);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2.5 text-sm transition hover:border-[var(--color-accent)]/50"
+                >
+                  <span className="flex items-center gap-2">
+                    <Blocks className="h-4 w-4 text-[var(--color-accent)]" />
+                    Manage skills
+                    <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+                      {skillCount}
                     </span>
                   </span>
                   <ChevronRight className="h-4 w-4 text-[var(--color-muted)]" />
