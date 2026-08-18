@@ -8,6 +8,7 @@ import { shellTool } from "./shell.js";
 import { shellViewTool } from "./shellView.js";
 import { bashWriteToProcessTool } from "./bashWriteToProcess.js";
 import { webSearchTool } from "./webSearch.js";
+import { imageSearchTool } from "./imagesearch.js";
 import { fetchWebUrlsTool } from "./fetchWebUrls.js";
 import { readImageTool } from "./readImage.js";
 import { callSubAgentTool } from "./call_sub_agent.js";
@@ -38,6 +39,7 @@ export type {
 } from "./types.js";
 export { defineTool } from "./types.js";
 export { webSearchTool, SEARCH_PROVIDERS } from "./webSearch.js";
+export { imageSearchTool, IMAGE_SEARCH_PROVIDER_SERPAPI } from "./imagesearch.js";
 export { fetchWebUrlsTool } from "./fetchWebUrls.js";
 export { applyMultipleEditsTool } from "./applyMultipleEdits.js";
 export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";
@@ -73,6 +75,7 @@ export function createToolRegistry(): ToolRegistry {
     shellViewTool,
     bashWriteToProcessTool,
     webSearchTool,
+    imageSearchTool,
     fetchWebUrlsTool,
     readImageTool,
     callSubAgentTool,
@@ -98,6 +101,7 @@ export const tools = {
   shellViewTool,
   bashWriteToProcessTool,
   webSearchTool,
+  imageSearchTool,
   fetchWebUrlsTool,
   readImageTool,
   callSubAgentTool,

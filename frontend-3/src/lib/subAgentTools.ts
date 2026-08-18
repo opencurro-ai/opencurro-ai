@@ -70,6 +70,12 @@ export const SUB_AGENT_TOOLS: readonly SubAgentToolMeta[] = [
     description:
       "Read an image from the local workspace or a live hosted image URL and visually analyze it. Requires a vision-capable model.",
   },
+  {
+    name: "image_search",
+    label: "Image search",
+    description:
+      "Search the web for images using a query and return direct live image URLs and source URLs.",
+  },
 ] as const;
 
 export const SUB_AGENT_TOOL_NAMES: readonly string[] = SUB_AGENT_TOOLS.map((t) => t.name);
