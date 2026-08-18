@@ -11,6 +11,76 @@ import type {
 } from "@/types";
 import { uid } from "@/utils/id";
 
+/**
+ * Persist an LLM-created sub-agent (create_sub_agent result) into the browser-local store so it
+ * becomes a user-owned sub-agent available in this and future sessions. Re-creating an existing
+ * name updates it in place instead of duplicating.
+ */
+function persistCreatedSubAgent(
+  s: ReturnType<typeof useStore.getState>,
+  raw: Record<string, unknown>,
+): void {
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  if (!name) return;
+  const description = typeof raw.description === "string" ? raw.description : "";
+  const systemPrompt = typeof raw.system_prompt === "string" ? raw.system_prompt : "";
+  const tools = Array.isArray(raw.tools) ? raw.tools.filter((t): t is string => typeof t === "string") : [];
+  const existing = s.subAgents.find((a) => a.name.trim().toLowerCase() === name.toLowerCase());
+  if (existing) {
+    s.updateSubAgent(existing.id, { name, description, systemPrompt, tools, enabled: true });
+  } else {
+    s.addSubAgent({ name, description, systemPrompt, tools, enabled: true });
+  }
+}
+
+/**
+ * Persist an LLM-created skill (create_skill result) into the browser-local store so it becomes a
+ * user-owned skill available in this and future sessions. The returned skill_file is treated as
+ * the entry file and its content as the entry content; all remaining files are stored alongside.
+ */
+function persistCreatedSkill(
+  s: ReturnType<typeof useStore.getState>,
+  raw: Record<string, unknown>,
+): void {
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  if (!name) return;
+  const description = typeof raw.description === "string" ? raw.description : "";
+  const skillFile = (typeof raw.skill_file === "string" && raw.skill_file.trim().length > 0
+    ? raw.skill_file
+    : "SKILL.md").replace(/^[\\/]+/, "");
+  const rawFiles = Array.isArray(raw.files) ? raw.files : [];
+  const files: Array<{ path: string; content: string }> = [];
+  for (const f of rawFiles) {
+    if (!f || typeof f !== "object") continue;
+    const rec = f as Record<string, unknown>;
+    const p = typeof rec.path === "string" ? rec.path.trim().replace(/^[\\/]+/, "") : "";
+    if (!p) continue;
+    files.push({ path: p, content: typeof rec.content === "string" ? rec.content : "" });
+  }
+
+  const entry = files.find((f) => f.path.toLowerCase() === skillFile.toLowerCase());
+  const entryContent = entry?.content ?? "";
+  const skillContent =
+    typeof raw.skill_content === "string" && raw.skill_content.trim().length > 0
+      ? raw.skill_content
+      : entryContent;
+  const extraFiles = files.filter((f) => f.path.toLowerCase() !== skillFile.toLowerCase());
+
+  const existing = s.skills.find((sk) => sk.name.trim().toLowerCase() === name.toLowerCase());
+  if (existing) {
+    s.updateSkill(existing.id, {
+      name,
+      description,
+      skillFile,
+      skillContent,
+      files: extraFiles,
+      enabled: true,
+    });
+  } else {
+    s.addSkill({ name, description, skillFile, skillContent, files: extraFiles, enabled: true });
+  }
+}
+
 interface SSEHandlers {
   onEvent: (event: string, data: SSEEventData) => void;
 }
@@ -233,6 +303,17 @@ export function useChatStream(onFilesChanged?: () => void) {
                     status: ok ? "ok" : "error",
                     result: data.result,
                   });
+                  // Persist LLM-created sub-agents / skills into the browser store so they are
+                  // treated as user-owned and available in future sessions.
+                  const payload = (data.result as Record<string, unknown> | undefined)?.data as
+                    | Record<string, unknown>
+                    | undefined;
+                  if (ok && name === "create_sub_agent" && payload?.created_sub_agent) {
+                    persistCreatedSubAgent(s, payload.created_sub_agent as Record<string, unknown>);
+                  }
+                  if (ok && name === "create_skill" && payload?.created_skill) {
+                    persistCreatedSkill(s, payload.created_skill as Record<string, unknown>);
+                  }
                   if (name === "submit_plan" && result?.decision) {
                     const statusMap: Record<string, "approved" | "canceled" | "edited" | "timeout"> = {
                       approved: "approved",
