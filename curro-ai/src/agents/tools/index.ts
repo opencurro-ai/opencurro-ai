@@ -12,6 +12,8 @@ import { fetchWebUrlsTool } from "./fetchWebUrls.js";
 import { readImageTool } from "./readImage.js";
 import { callSubAgentTool } from "./call_sub_agent.js";
 import { listSubAgentsTool } from "./list_sub_agents.js";
+import { listSkillsTool } from "./list_skills.js";
+import { skillInitializeTool } from "./skill_initialize.js";
 import { submitPlanTool } from "./submit_plan.js";
 import { askUserTool } from "./askuser.js";
 
@@ -24,6 +26,9 @@ export type {
   SearchProvider,
   SubAgentDefinition,
   SubAgentRuntime,
+  SkillDefinition,
+  SkillFileDefinition,
+  SkillRuntime,
 } from "./types.js";
 export { defineTool } from "./types.js";
 export { webSearchTool, SEARCH_PROVIDERS } from "./webSearch.js";
@@ -32,6 +37,8 @@ export { applyMultipleEditsTool } from "./applyMultipleEdits.js";
 export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";
 export { callSubAgentTool } from "./call_sub_agent.js";
 export { listSubAgentsTool } from "./list_sub_agents.js";
+export { listSkillsTool } from "./list_skills.js";
+export { skillInitializeTool } from "./skill_initialize.js";
 export { submitPlanTool } from "./submit_plan.js";
 export { askUserTool, ASK_ANSWERED, ASK_TIMEOUT } from "./askuser.js";
 export { shellViewTool } from "./shellView.js";
@@ -60,6 +67,8 @@ export function createToolRegistry(): ToolRegistry {
     readImageTool,
     callSubAgentTool,
     listSubAgentsTool,
+    listSkillsTool,
+    skillInitializeTool,
     submitPlanTool,
     askUserTool,
   ]);
@@ -79,6 +88,8 @@ export const tools = {
   readImageTool,
   callSubAgentTool,
   listSubAgentsTool,
+  listSkillsTool,
+  skillInitializeTool,
   submitPlanTool,
   askUserTool,
 };

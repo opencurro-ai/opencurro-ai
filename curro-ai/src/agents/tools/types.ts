@@ -64,6 +64,94 @@ export interface SubAgentRuntime {
   ): Promise<ToolResult>;
 }
 
+/**
+ * A single file belonging to a skill. `path` is relative to the skill's own folder — it may be
+ * a bare file name ("SKILL.md", "example.md") or a nested path ("references/branching.md",
+ * "scripts/commit.sh"). `content` is the raw text written to disk when the skill is initialized.
+ */
+export interface SkillFileDefinition {
+  path: string;
+  content: string;
+}
+
+/**
+ * A user-defined skill. Definitions are authored in the frontend and stored in the user's
+ * browser (localStorage); they are sent to the backend with each turn. A skill is a reusable,
+ * packaged capability — a folder named after the skill, containing an entry markdown file (by
+ * convention SKILL.md, but renameable) plus any number of reference/example/script files. The
+ * agent discovers skills with list_skills, then materializes the ones it needs onto disk (inside
+ * a workspace ".skills" directory) with skill_initialize before reading their files.
+ */
+export interface SkillDefinition {
+  /** Folder name and unique identifier used by skill_initialize (e.g. "git-workflow"). */
+  name: string;
+  /** Short human description surfaced to the agent by list_skills. */
+  description: string;
+  /** Entry markdown file name inside the skill folder (renameable, defaults to "SKILL.md"). */
+  skillFile: string;
+  /** Every file in the skill folder, including the entry file. */
+  files: SkillFileDefinition[];
+  /** When false the skill is hidden from list_skills and cannot be initialized. */
+  enabled?: boolean;
+}
+
+/** One skill that skill_initialize successfully wrote to disk. */
+export interface InitializedSkill {
+  skill_name: string;
+  /** Skill folder path relative to the provided file_path, e.g. ".skills/git-workflow". */
+  path: string;
+  /** Entry file path relative to the provided file_path, e.g. ".skills/git-workflow/SKILL.md". */
+  skill_file: string;
+  /** All file paths written for this skill, relative to the provided file_path. */
+  files: string[];
+}
+
+/** One skill skill_initialize could not write (unknown, disabled, or already initialized). */
+export interface FailedSkill {
+  skill_name: string;
+  error: string;
+}
+
+/** Result of a skill_initialize call. */
+export interface SkillInitializeResult {
+  success: boolean;
+  initialized: InitializedSkill[];
+  failed: FailedSkill[];
+}
+
+/** A skill as surfaced to the agent by list_skills — name, description, and its file tree. */
+export interface SkillListEntry {
+  name: string;
+  description: string;
+  /** Entry file name (e.g. "SKILL.md"). */
+  skill_file: string;
+  /** All file paths relative to the skill folder, sorted. */
+  files: string[];
+  /** Pretty ASCII tree of the skill folder, ready to show the model. */
+  tree: string;
+}
+
+/**
+ * Runtime bridge injected into the ToolContext for the main agent's turn so the list_skills /
+ * skill_initialize tools can enumerate the user's skills and materialize them onto disk. It is
+ * intentionally absent from the context handed to a sub-agent's own tool calls.
+ */
+export interface SkillRuntime {
+  /** All skill definitions provided by the user for this turn (enabled + disabled). */
+  readonly definitions: SkillDefinition[];
+  /** Enabled skills, each with its file tree — what list_skills returns. */
+  list(): SkillListEntry[];
+  /**
+   * Create a ".skills" directory under `filePath` (if missing) and write each requested skill's
+   * files into it. Skills that are unknown, disabled, or already initialized are reported in
+   * `failed` without aborting the others.
+   */
+  initialize(
+    params: { filePath: string; skillNames: string[] },
+    ctx: ToolContext,
+  ): Promise<SkillInitializeResult>;
+}
+
 /** Runtime context handed to a tool on execution. */
 export interface ToolContext {
   /** Absolute path all file operations are sandboxed to. */
@@ -88,6 +176,8 @@ export interface ToolContext {
   web?: WebToolsConfig;
   /** Sub-agent runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
   subAgents?: SubAgentRuntime;
+  /** Skill runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  skills?: SkillRuntime;
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
   /** The model id currently serving the agent (used by the read_image tool for error reporting). */

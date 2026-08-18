@@ -5,7 +5,7 @@ import { SessionEventBuffer } from "../services/eventBuffer.js";
 import type { SessionStore, StoredMessage } from "../services/sessionStore.js";
 import type { PlanApprovalStore } from "../services/planApprovalStore.js";
 import type { QuestionStore } from "../services/questionStore.js";
-import type { SubAgentDefinition } from "../agents/tools/types.js";
+import type { SkillDefinition, SkillFileDefinition, SubAgentDefinition } from "../agents/tools/types.js";
 import { initSSE, formatSSE } from "../utils/sse.js";
 
 /** Extract a string field from an untrusted object (used on the custom_provider payload). */
@@ -42,6 +42,7 @@ interface StreamBody {
   search_provider?: "tavily" | "exa" | "serpapi";
   firecrawl_api_key?: string;
   sub_agents?: unknown;
+  skills?: unknown;
 }
 
 /** Defensively coerce the client-provided sub-agent definitions into safe, well-typed values. */
@@ -67,6 +68,44 @@ function normalizeSubAgents(raw: unknown): SubAgentDefinition[] {
       description: typeof record.description === "string" ? record.description : "",
       system_prompt: systemPrompt,
       tools,
+      enabled: record.enabled !== false,
+    });
+  }
+  return out;
+}
+
+/** Defensively coerce the client-provided skill definitions into safe, well-typed values. */
+function normalizeSkills(raw: unknown): SkillDefinition[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SkillDefinition[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!name) continue;
+
+    const skillFile =
+      typeof record.skill_file === "string" && record.skill_file.trim().length > 0
+        ? record.skill_file.trim()
+        : typeof record.skillFile === "string" && record.skillFile.trim().length > 0
+          ? record.skillFile.trim()
+          : "SKILL.md";
+
+    const rawFiles = Array.isArray(record.files) ? record.files : [];
+    const files: SkillFileDefinition[] = [];
+    for (const file of rawFiles) {
+      if (!file || typeof file !== "object") continue;
+      const f = file as Record<string, unknown>;
+      const path = typeof f.path === "string" ? f.path.trim() : "";
+      if (!path) continue;
+      files.push({ path, content: typeof f.content === "string" ? f.content : "" });
+    }
+
+    out.push({
+      name,
+      description: typeof record.description === "string" ? record.description : "",
+      skillFile,
+      files,
       enabled: record.enabled !== false,
     });
   }
@@ -200,6 +239,7 @@ export function buildChatRouter(
         searchProvider: body.search_provider,
         firecrawlApiKey: body.firecrawl_api_key,
         subAgents: normalizeSubAgents(body.sub_agents),
+        skills: normalizeSkills(body.skills),
       };
 
       // Fire-and-forget the autonomous agent loop; the response streams from the buffer.
