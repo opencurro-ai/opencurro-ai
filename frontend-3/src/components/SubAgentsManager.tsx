@@ -15,14 +15,7 @@ import { SUB_AGENT_TOOLS } from "@/lib/subAgentTools";
 import type { SubAgent } from "@/types";
 import { cn } from "@/utils/cn";
 
-const NAME_MAX_WORDS = 20;
-const DESC_MAX_WORDS = 70;
-
-function wordCount(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).length;
-}
+const DESC_MAX_CHARS = 300;
 
 interface Draft {
   id: string | null;
@@ -84,10 +77,8 @@ export function SubAgentsManager() {
     const description = draft.description.trim();
 
     if (!name) return setError("Name is required.");
-    if (wordCount(name) > NAME_MAX_WORDS)
-      return setError(`Name must be ${NAME_MAX_WORDS} words or fewer.`);
-    if (wordCount(description) > DESC_MAX_WORDS)
-      return setError(`Description must be ${DESC_MAX_WORDS} words or fewer.`);
+    if (description.length > DESC_MAX_CHARS)
+      return setError(`Short description must be ${DESC_MAX_CHARS} characters or fewer.`);
     if (!draft.systemPrompt.trim()) return setError("System prompt is required.");
 
     // Names must be unique (they are how the main agent targets a sub-agent).
@@ -271,16 +262,13 @@ function SubAgentEditor({
   onSave: () => void;
 }) {
   const patch = (p: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...p } : d));
-  const nameWords = wordCount(draft.name);
-  const descWords = wordCount(draft.description);
+  const descChars = draft.description.length;
 
   return (
     <>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
         <Field
           label="Sub-agent name"
-          hint={`${nameWords}/${NAME_MAX_WORDS} words`}
-          hintError={nameWords > NAME_MAX_WORDS}
         >
           <input
             type="text"
@@ -293,14 +281,15 @@ function SubAgentEditor({
 
         <Field
           label="Short description"
-          hint={`${descWords}/${DESC_MAX_WORDS} words`}
-          hintError={descWords > DESC_MAX_WORDS}
+          hint={`${descChars}/${DESC_MAX_CHARS} chars`}
+          hintError={descChars > DESC_MAX_CHARS}
         >
           <textarea
             value={draft.description}
             onChange={(e) => patch({ description: e.target.value })}
             placeholder="What this sub-agent specializes in — shown to the main agent when it lists sub-agents."
             rows={2}
+            maxLength={DESC_MAX_CHARS}
             className="w-full resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
           />
         </Field>
