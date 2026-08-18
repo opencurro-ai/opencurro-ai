@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  AskQuestionInfo,
+  AskQuestionStatus,
   ChatMessage,
   Conversation,
   CustomProvider,
@@ -63,6 +65,24 @@ interface AppState {
   ) => void;
   setPlanText: (convId: string, msgId: string, toolId: string, plan: string) => void;
   updatePlanForTool: (toolId: string, patch: { status?: PlanApprovalStatus; plan?: string }) => void;
+
+  // Actions — ask_question_to_user human-in-the-loop Q&A
+  setQuestionPending: (
+    convId: string,
+    msgId: string,
+    toolId: string,
+    info: { id: string; chatId: string; questions: AskQuestionInfo["questions"] },
+  ) => void;
+  setQuestionStatus: (
+    convId: string,
+    msgId: string,
+    toolId: string,
+    status: AskQuestionStatus,
+  ) => void;
+  updateQuestionForTool: (
+    toolId: string,
+    patch: { status?: AskQuestionStatus },
+  ) => void;
 
   // Actions — sub-agent live runs (attached to a call_sub_agent tool chip)
   startSubAgent: (
@@ -316,6 +336,56 @@ export const useStore = create<AppState>()(
           conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) =>
             tool.plan ? { ...tool, plan: { ...tool.plan, plan } } : tool,
           ),
+        })),
+
+      setQuestionPending: (convId, msgId, toolId, info) =>
+        set((s) => ({
+          conversations: patchTool(
+            s.conversations,
+            convId,
+            msgId,
+            toolId,
+            (tool) => ({ ...tool, ask: { ...info, status: "pending" as const } }),
+            () => ({
+              id: toolId,
+              name: "ask_question_to_user",
+              label: `Ask ${info.questions.length} Question${info.questions.length === 1 ? "" : "s"}`,
+              status: "running",
+              ask: { ...info, status: "pending" as const },
+            }),
+          ),
+        })),
+
+      setQuestionStatus: (convId, msgId, toolId, status) =>
+        set((s) => ({
+          conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) =>
+            tool.ask ? { ...tool, ask: { ...tool.ask, status } } : tool,
+          ),
+        })),
+
+      // Locate the question tool by its unique id across every conversation/message. Used by
+      // the answer block, which does not know the enclosing convId/msgId.
+      updateQuestionForTool: (toolId, patch) =>
+        set((s) => ({
+          conversations: s.conversations.map((c) => ({
+            ...c,
+            messages: c.messages.map((m) =>
+              m.tools?.some((t) => t.ask?.id === toolId)
+                ? {
+                    ...m,
+                    tools: m.tools.map((t) =>
+                      t.ask?.id === toolId
+                        ? {
+                            ...t,
+                            ask: { ...t.ask, ...patch },
+                            status: patch.status && patch.status !== "pending" ? "ok" : t.status,
+                          }
+                        : t,
+                    ),
+                  }
+                : m,
+            ),
+          })),
         })),
 
       // Locate the plan tool by its unique id across every conversation/message. Used by the

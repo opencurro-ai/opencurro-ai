@@ -50,6 +50,12 @@ export const API_ROUTES = {
     path: "/api/chat/plan/:chatId/:toolCallId",
     description: "Submit the user's decision (approve / cancel / edited) for a submitted plan.",
   },
+  chatQuestionAnswer: {
+    name: "chat.question.answer",
+    method: "POST",
+    path: "/api/chat/question/:chatId/:toolCallId",
+    description: "Submit the user's answers to the ask_question_to_user tool.",
+  },
   filesTree: {
     name: "files.tree",
     method: "GET",

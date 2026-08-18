@@ -180,6 +180,20 @@ export function useChatStream(onFilesChanged?: () => void) {
                   });
                   break;
                 }
+                case "ask_question": {
+                  const askId = String(data.id ?? uid("tool"));
+                  const questions = (data.questions ?? []).map((q) => ({
+                    question: String(q?.question ?? ""),
+                    context: String(q?.context ?? ""),
+                    options: (q?.options ?? []).map((o) => String(o)),
+                  }));
+                  s.setQuestionPending(convId, assistantId, askId, {
+                    id: askId,
+                    chatId: String(data.chat_id ?? convId),
+                    questions,
+                  });
+                  break;
+                }
                 case "tool_result": {
                   const ok = Boolean(data.ok);
                   const id = String(data.id ?? uid("tool"));
@@ -201,6 +215,14 @@ export function useChatStream(onFilesChanged?: () => void) {
                     };
                     const planStatus = statusMap[result.decision];
                     if (planStatus) s.setPlanStatus(convId, assistantId, id, planStatus);
+                  }
+                  if (name === "ask_question_to_user" && (result?.decision === "answered" || result?.decision === "timeout")) {
+                    s.setQuestionStatus(
+                      convId,
+                      assistantId,
+                      id,
+                      result.decision === "answered" ? "answered" : "timeout",
+                    );
                   }
                   onFilesChanged?.();
                   break;
