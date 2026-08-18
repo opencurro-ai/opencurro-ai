@@ -15,14 +15,7 @@ import { SUB_AGENT_TOOLS } from "@/lib/subAgentTools";
 import type { SubAgent } from "@/types";
 import { cn } from "@/utils/cn";
 
-const NAME_MAX_WORDS = 20;
 const DESC_MAX_CHARS = 300;
-
-function wordCount(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).length;
-}
 
 interface Draft {
   id: string | null;
@@ -84,8 +77,6 @@ export function SubAgentsManager() {
     const description = draft.description.trim();
 
     if (!name) return setError("Name is required.");
-    if (wordCount(name) > NAME_MAX_WORDS)
-      return setError(`Name must be ${NAME_MAX_WORDS} words or fewer.`);
     if (description.length > DESC_MAX_CHARS)
       return setError(`Short description must be ${DESC_MAX_CHARS} characters or fewer.`);
     if (!draft.systemPrompt.trim()) return setError("System prompt is required.");
@@ -271,7 +262,6 @@ function SubAgentEditor({
   onSave: () => void;
 }) {
   const patch = (p: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...p } : d));
-  const nameWords = wordCount(draft.name);
   const descChars = draft.description.length;
 
   return (
@@ -279,8 +269,6 @@ function SubAgentEditor({
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
         <Field
           label="Sub-agent name"
-          hint={`${nameWords}/${NAME_MAX_WORDS} words`}
-          hintError={nameWords > NAME_MAX_WORDS}
         >
           <input
             type="text"
