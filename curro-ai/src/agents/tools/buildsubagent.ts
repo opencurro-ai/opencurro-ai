@@ -19,6 +19,8 @@ export const SUB_AGENT_CREATE_RESTRICTED_TOOLS: readonly string[] = [
   "submit_plan",
   "call_sub_agent",
   "list_sub_agents",
+  "TodoWrite",
+  "read_todos",
 ];
 
 const schema = z.object({
@@ -69,8 +71,8 @@ export const buildSubAgentTool = defineTool({
     "not omit any required field. The created sub-agent is saved to the user's browser-local " +
     "storage (treated as a user-owned installed sub-agent) and becomes available to " +
     "list_sub_agents / call_sub_agent in this and future sessions. By default the sub-agent is " +
-    "granted every tool except ask_question_to_user, submit_plan, call_sub_agent and " +
-    "list_sub_agents; the user can restrict its tools later.",
+    "granted every tool except ask_question_to_user, submit_plan, call_sub_agent, list_sub_agents, " +
+    "TodoWrite and read_todos; the user can restrict its tools later.",
   schema,
   label: (args) => `Create Sub-Agent: ${args.name}`,
   async execute(args, ctx: ToolContext): Promise<ToolResult> {
