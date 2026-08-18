@@ -213,6 +213,35 @@ export interface FileNode {
 
 export type SearchProvider = "tavily" | "exa" | "serpapi";
 
+/** Status a todo can be in. */
+export type TodoStatus = "pending" | "in_progress" | "completed";
+
+/** Priority a todo can carry. */
+export type TodoPriority = "low" | "medium" | "high";
+
+/** A single todo item in the session's task list, stored in the browser (localStorage). */
+export interface TodoItem {
+  /** Unique string identifier (starts at 1; used to refer to the todo in updates). */
+  id: string;
+  /** Clear description of the task. */
+  content: string;
+  /** One of `pending`, `in_progress`, or `completed`. */
+  status: TodoStatus;
+  /** One of `low`, `medium`, or `high`. */
+  priority: TodoPriority;
+}
+
+/** Structured result streamed back for the TodoWrite / read_todos tools. */
+export interface TodoToolResult {
+  ok?: boolean;
+  data?: {
+    todos?: TodoItem[];
+    count?: number;
+    message?: string;
+  };
+  error?: { code?: string; message?: string };
+}
+
 export interface Settings {
   provider: string;
   model: string;
@@ -251,6 +280,7 @@ export interface StreamRequest {
   firecrawl_api_key?: string;
   sub_agents?: BackendSubAgent[];
   skills?: BackendSkill[];
+  todos?: TodoItem[];
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */
@@ -285,4 +315,6 @@ export interface SSEEventData {
   plan?: string;
   // ask_question_to_user fields
   questions?: Array<{ question?: string; context?: string; options?: string[] }>;
+  // todo_updated (TodoWrite) fields
+  todos?: TodoItem[];
 }

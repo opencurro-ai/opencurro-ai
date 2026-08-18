@@ -8,6 +8,7 @@ import type {
   BackendSubAgent,
   ChatMessage,
   SSEEventData,
+  TodoItem,
 } from "@/types";
 import { uid } from "@/utils/id";
 
@@ -177,6 +178,10 @@ export function useChatStream(onFilesChanged?: () => void) {
         };
       });
 
+      // Todo definitions live in the browser (localStorage) and travel with each turn. They are
+      // the authoritative task list the LLM reads/writes via the TodoWrite / read_todos tools.
+      const todos: TodoItem[] = store.todos;
+
       const userMsg: ChatMessage = {
         id: uid("msg"),
         role: "user",
@@ -230,6 +235,7 @@ export function useChatStream(onFilesChanged?: () => void) {
             firecrawl_api_key: settings.firecrawlApiKey || undefined,
             sub_agents: subAgents,
             skills,
+            todos,
           },
           controller.signal,
         );
@@ -314,6 +320,11 @@ export function useChatStream(onFilesChanged?: () => void) {
                   if (ok && name === "create_skill" && payload?.created_skill) {
                     persistCreatedSkill(s, payload.created_skill as Record<string, unknown>);
                   }
+                  // Todo tools carry the full updated todo list in the result data — persist it so
+                  // the popup and browser storage match the latest agent state.
+                  if ((name === "TodoWrite" || name === "read_todos") && Array.isArray(payload?.todos)) {
+                    s.setTodos(payload.todos as TodoItem[]);
+                  }
                   if (name === "submit_plan" && result?.decision) {
                     const statusMap: Record<string, "approved" | "canceled" | "edited" | "timeout"> = {
                       approved: "approved",
@@ -333,6 +344,14 @@ export function useChatStream(onFilesChanged?: () => void) {
                     );
                   }
                   onFilesChanged?.();
+                  break;
+                }
+                case "todo_updated": {
+                  // TodoWrite replaced the todo list — persist it to the browser so it survives
+                  // reloads and stays in sync with the popup and future turns.
+                  if (Array.isArray(data.todos)) {
+                    s.setTodos(data.todos as TodoItem[]);
+                  }
                   break;
                 }
                 case "sub_agent_start":

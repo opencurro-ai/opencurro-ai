@@ -27,8 +27,10 @@ import {
   UserPlus,
   Wand2,
   Wrench,
+  ListTodo,
+  ClipboardList,
 } from "lucide-react";
-import type { ReadImageToolResult, SubAgentRun, ToolActivity } from "@/types";
+import type { ReadImageToolResult, SubAgentRun, TodoToolResult, ToolActivity } from "@/types";
 import { cn } from "@/utils/cn";
 import { SubmitPlanBlock } from "./SubmitPlanBlock";
 import { AskQuestionBlock } from "./AskQuestionBlock";
@@ -51,6 +53,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   skill_initialize: PackagePlus,
   create_sub_agent: UserPlus,
   create_skill: Wand2,
+  TodoWrite: ListTodo,
+  read_todos: ClipboardList,
 };
 
 interface SearchResultItem {
@@ -201,6 +205,12 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "create_skill") {
     return <CreateSkillChip tool={tool} />;
+  }
+  if (tool.name === "TodoWrite") {
+    return <TodoWriteChip tool={tool} />;
+  }
+  if (tool.name === "read_todos") {
+    return <TodoReadChip tool={tool} />;
   }
   return <RegularChip tool={tool} />;
 }
@@ -1243,6 +1253,223 @@ function CreateSkillChip({ tool }: { tool: ToolActivity }) {
             </>
           ) : (
             <p className="text-[var(--color-muted)]">No created skill in result.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PRIORITY_TAG_STYLES: Record<string, string> = {
+  high: "border-red-500/40 bg-red-500/10 text-red-300",
+  medium: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  low: "border-[var(--color-border)] text-[var(--color-muted)]",
+};
+
+const STATUS_TAG_STYLES: Record<string, string> = {
+  pending: "border-[var(--color-border)] text-[var(--color-muted)]",
+  in_progress: "border-[var(--color-accent)]/40 text-[var(--color-accent)]",
+  completed: "border-emerald-500/40 text-emerald-300",
+};
+
+interface TodoResultItem {
+  id?: string;
+  content?: string;
+  status?: string;
+  priority?: string;
+}
+
+function TodoSummaryCard({ todos }: { todos: TodoResultItem[] }) {
+  return (
+    <ul className="space-y-1.5">
+      {todos.map((todo, i) => {
+        const status = todo.status ?? "pending";
+        const priority = todo.priority ?? "medium";
+        return (
+          <li
+            key={todo.id ?? i}
+            className="flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+          >
+            <span
+              className={cn(
+                "mt-1 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border",
+                status === "completed" && "border-emerald-400 text-emerald-400",
+              )}
+            >
+              {status === "completed" && <Check className="h-2.5 w-2.5" />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p
+                className={cn(
+                  "text-[11px] leading-relaxed text-[var(--color-fg)]",
+                  status === "completed" && "text-[var(--color-muted)] line-through",
+                )}
+              >
+                {todo.content || "(empty todo)"}
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <span
+                  className={cn(
+                    "rounded-full border px-1.5 py-0.5 text-[10px] capitalize",
+                    STATUS_TAG_STYLES[status] ?? STATUS_TAG_STYLES.pending,
+                  )}
+                >
+                  {status}
+                </span>
+                <span
+                  className={cn(
+                    "rounded-full border px-1.5 py-0.5 text-[10px] capitalize",
+                    PRIORITY_TAG_STYLES[priority] ?? PRIORITY_TAG_STYLES.medium,
+                  )}
+                >
+                  {priority}
+                </span>
+                {todo.id && (
+                  <span className="font-mono text-[10px] text-[var(--color-muted)]">#{todo.id}</span>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function TodoWriteChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as TodoToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const todos = data?.todos ?? [];
+  const argsTodos = Array.isArray(tool.args?.todos)
+    ? (tool.args.todos as TodoResultItem[])
+    : [];
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <ListTodo className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+        {data?.count ?? argsTodos.length}
+      </span>
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              {error.message ?? error.code ?? "Failed to update todo list"}
+            </p>
+          ) : data ? (
+            <>
+              <div className="flex items-center gap-2 text-[var(--color-muted)]">
+                <span className="font-medium text-[var(--color-fg)]">
+                  {todos.length} todo{todos.length === 1 ? "" : "s"}
+                </span>
+                {data.message && (
+                  <span className="min-w-0 truncate" title={data.message}>
+                    · {data.message}
+                  </span>
+                )}
+              </div>
+              {todos.length === 0 ? (
+                <p className="text-[var(--color-muted)]">Todo list is empty.</p>
+              ) : (
+                <TodoSummaryCard todos={todos} />
+              )}
+            </>
+          ) : (
+            <p className="text-[var(--color-muted)]">No todo data in result.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TodoReadChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as TodoToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const todos = data?.todos ?? [];
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <ClipboardList className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+        {todos.length}
+      </span>
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              {error.message ?? error.code ?? "Failed to read todo list"}
+            </p>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-[var(--color-muted)]">
+                <span className="font-medium text-[var(--color-fg)]">
+                  {todos.length} todo{todos.length === 1 ? "" : "s"}
+                </span>
+                <span className="text-[10px]">(read-only)</span>
+              </div>
+              {todos.length === 0 ? (
+                <p className="text-[var(--color-muted)]">No todos found.</p>
+              ) : (
+                <TodoSummaryCard todos={todos} />
+              )}
+            </>
           )}
         </div>
       )}

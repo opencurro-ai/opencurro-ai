@@ -14,6 +14,7 @@ import type {
   Skill,
   SubAgent,
   SubAgentRun,
+  TodoItem,
   ToolActivity,
 } from "@/types";
 import { uid } from "@/utils/id";
@@ -26,6 +27,7 @@ interface AppState {
   settings: Settings;
   subAgents: SubAgent[];
   skills: Skill[];
+  todos: TodoItem[];
   customProviders: CustomProvider[];
 
   // Ephemeral UI
@@ -36,6 +38,7 @@ interface AppState {
   settingsOpen: boolean;
   subAgentsOpen: boolean;
   skillsOpen: boolean;
+  todosOpen: boolean;
   streaming: boolean;
   filesVersion: number;
 
@@ -116,6 +119,9 @@ interface AppState {
   deleteSkill: (id: string) => void;
   toggleSkill: (id: string) => void;
 
+  // Actions — todo list (persisted in the browser; owned by the TodoWrite/read_todos tools)
+  setTodos: (todos: TodoItem[]) => void;
+
   // Actions — custom OpenAI-compatible providers (persisted in the browser)
   addCustomProvider: (input: Omit<CustomProvider, "id" | "createdAt" | "updatedAt">) => CustomProvider;
   updateCustomProvider: (id: string, patch: Partial<Omit<CustomProvider, "id" | "createdAt">>) => void;
@@ -137,6 +143,7 @@ interface AppState {
   setSettingsOpen: (v: boolean) => void;
   setSubAgentsOpen: (v: boolean) => void;
   setSkillsOpen: (v: boolean) => void;
+  setTodosOpen: (v: boolean) => void;
   setStreaming: (v: boolean) => void;
   bumpFiles: () => void;
 }
@@ -207,6 +214,7 @@ export const useStore = create<AppState>()(
       settings: defaultSettings,
       subAgents: [],
       skills: [],
+      todos: [],
       customProviders: [],
 
       providers: [],
@@ -216,6 +224,7 @@ export const useStore = create<AppState>()(
       settingsOpen: false,
       subAgentsOpen: false,
       skillsOpen: false,
+      todosOpen: false,
       streaming: false,
       filesVersion: 0,
 
@@ -538,6 +547,19 @@ export const useStore = create<AppState>()(
           ),
         })),
 
+      setTodos: (todos) =>
+        set((s) => ({
+          todos: Array.isArray(todos)
+            ? todos.filter(
+                (t) =>
+                  t &&
+                  typeof t === "object" &&
+                  typeof t.id === "string" &&
+                  typeof t.content === "string",
+              )
+            : s.todos,
+        })),
+
       addCustomProvider: (input) => {
         const now = Date.now();
         const provider: CustomProvider = {
@@ -618,6 +640,7 @@ export const useStore = create<AppState>()(
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
       setSubAgentsOpen: (subAgentsOpen) => set({ subAgentsOpen }),
       setSkillsOpen: (skillsOpen) => set({ skillsOpen }),
+      setTodosOpen: (todosOpen) => set({ todosOpen }),
       setStreaming: (streaming) => set({ streaming }),
       bumpFiles: () => set((s) => ({ filesVersion: s.filesVersion + 1 })),
     }),
@@ -634,6 +657,7 @@ export const useStore = create<AppState>()(
           settings: { ...current.settings, ...(p.settings ?? {}) },
           subAgents: Array.isArray(p.subAgents) ? p.subAgents : current.subAgents,
           skills: Array.isArray(p.skills) ? p.skills : current.skills,
+          todos: Array.isArray(p.todos) ? p.todos : current.todos,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,
         };
       },
@@ -643,6 +667,7 @@ export const useStore = create<AppState>()(
         settings: s.settings,
         subAgents: s.subAgents,
         skills: s.skills,
+        todos: s.todos,
         customProviders: s.customProviders,
       }),
     },
