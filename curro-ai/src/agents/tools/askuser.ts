@@ -39,11 +39,10 @@ const schema = z
  */
 export const ASK_ANSWERED =
   "the user answered the questions with the provided answers, continue your task using these answers";
-export const ASK_TIMEOUT =
-  "the user did not respond to the questions within the time limit, proceed autonomously and make a reasonable decision yourself";
+export const ASK_TIMEOUT = "user is not hare start the task by your own";
 
-/** Default wait for the user's answers when the runtime does not provide one (ms). */
-const DEFAULT_QUESTION_TIMEOUT_MS = 60_000;
+/** Default wait for the user's answers when the runtime does not provide one (ms) — 3 minutes. */
+const DEFAULT_QUESTION_TIMEOUT_MS = 180_000;
 
 export const askUserTool = defineTool({
   name: "ask_question_to_user",

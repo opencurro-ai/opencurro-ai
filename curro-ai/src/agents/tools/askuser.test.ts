@@ -212,6 +212,19 @@ describe("ask_question_to_user tool", () => {
     assert.equal(store.submitAnswers("chat-1", "toolcall-1", []), false, "already answered");
   });
 
+  it("waits for answers (3-minute default timeout) instead of timing out immediately", async () => {
+    // No questionTimeoutMs override -> the 3-minute default applies.
+    const ctx = makeCtx({});
+    const runPromise = registry.execute("ask_question_to_user", SAMPLE_ARGS, ctx);
+    await tick(50);
+
+    // Still pending after a short wait — the default is far longer than a few ms.
+    assert.equal(store.submitAnswers("chat-1", "toolcall-1", SAMPLE_ARGS.questions.map((q) => ({ question: q.question, answer: q.options[0] }))), true);
+    const result = await runPromise;
+    assert.equal(result.ok, true);
+    assert.equal((result.data as { decision: string }).decision, "answered");
+  });
+
   it("resolves to an aborted error when the turn is aborted while waiting", async () => {
     const controller = new AbortController();
     const ctx = makeCtx({ signal: controller.signal });
@@ -259,7 +272,7 @@ describe("ask_question_to_user tool", () => {
     assert.equal(askUserTool.label({ questions: [{ question: "q", context: "c", options: ["o"] }] } as never), "Ask 1 Question");
     assert.ok(askUserTool.description.length > 0);
     assert.match(ASK_ANSWERED, /answered/i);
-    assert.match(ASK_TIMEOUT, /time limit/i);
+    assert.match(ASK_TIMEOUT, /user is not hare/i);
 
     const normalized = [
       { question: "Pick one", context: "ctx", options: ["a", "b"] },
