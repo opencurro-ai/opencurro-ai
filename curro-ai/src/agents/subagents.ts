@@ -177,6 +177,7 @@ class SubAgentRunner {
       web: ctx.web,
       model: this.deps.model,
       visionCapable: ctx.visionCapable,
+      availableToolNames: tools.names(),
     };
 
     const answerAcrossTurns: string[] = [];

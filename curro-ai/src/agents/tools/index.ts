@@ -16,6 +16,8 @@ import { listSkillsTool } from "./list_skills.js";
 import { skillInitializeTool } from "./skill_initialize.js";
 import { submitPlanTool } from "./submit_plan.js";
 import { askUserTool } from "./askuser.js";
+import { buildSubAgentTool } from "./buildsubagent.js";
+import { createSkillTool } from "./createskill.js";
 
 export { ToolRegistry } from "./registry.js";
 export type {
@@ -39,6 +41,8 @@ export { callSubAgentTool } from "./call_sub_agent.js";
 export { listSubAgentsTool } from "./list_sub_agents.js";
 export { listSkillsTool } from "./list_skills.js";
 export { skillInitializeTool } from "./skill_initialize.js";
+export { buildSubAgentTool } from "./buildsubagent.js";
+export { createSkillTool } from "./createskill.js";
 export { submitPlanTool } from "./submit_plan.js";
 export { askUserTool, ASK_ANSWERED, ASK_TIMEOUT } from "./askuser.js";
 export { shellViewTool } from "./shellView.js";
@@ -71,6 +75,8 @@ export function createToolRegistry(): ToolRegistry {
     skillInitializeTool,
     submitPlanTool,
     askUserTool,
+    buildSubAgentTool,
+    createSkillTool,
   ]);
 }
 
@@ -92,4 +98,6 @@ export const tools = {
   skillInitializeTool,
   submitPlanTool,
   askUserTool,
+  buildSubAgentTool,
+  createSkillTool,
 };
