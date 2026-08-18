@@ -25,6 +25,7 @@ import {
 import type { ReadImageToolResult, SubAgentRun, ToolActivity } from "@/types";
 import { cn } from "@/utils/cn";
 import { SubmitPlanBlock } from "./SubmitPlanBlock";
+import { AskQuestionBlock } from "./AskQuestionBlock";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   file_write: FilePlus2,
@@ -110,6 +111,10 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   // A submit_plan tool renders the big inline review block (not the compact chip).
   if (tool.name === "submit_plan") {
     return <SubmitPlanBlock tool={tool} />;
+  }
+  // An ask_question_to_user tool renders the big inline answer block (not the compact chip).
+  if (tool.name === "ask_question_to_user") {
+    return <AskQuestionBlock tool={tool} />;
   }
   // A call_sub_agent chip renders the live sub-agent block once its run has started.
   if (tool.name === "call_sub_agent" && tool.subAgent) {

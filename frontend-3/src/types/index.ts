@@ -63,6 +63,26 @@ export interface PlanApprovalInfo {
   status: PlanApprovalStatus;
 }
 
+/** A single question the agent asked the user, with context and predefined options. */
+export interface AskQuestionItem {
+  question: string;
+  context: string;
+  options: string[];
+}
+
+export type AskQuestionStatus = "pending" | "answered" | "timeout";
+
+/** Question-answer state attached to the ask_question_to_user tool for the answer block. */
+export interface AskQuestionInfo {
+  /** The backend tool-call id — used to post the user's answers. */
+  id: string;
+  /** Chat session the questions belong to. */
+  chatId: string;
+  /** The questions the user is answering. */
+  questions: AskQuestionItem[];
+  status: AskQuestionStatus;
+}
+
 export interface ToolActivity {
   id: string;
   name: string;
@@ -77,6 +97,8 @@ export interface ToolActivity {
   subAgent?: SubAgentRun;
   /** Human-in-the-loop plan review rendered as the big chat block for submit_plan. */
   plan?: PlanApprovalInfo;
+  /** Human-in-the-loop question-answer block rendered for ask_question_to_user. */
+  ask?: AskQuestionInfo;
 }
 
 /** Structured result streamed back for the read_image tool (no image payload — metadata only). */
@@ -221,4 +243,6 @@ export interface SSEEventData {
   // submit_plan review fields
   chat_id?: string;
   plan?: string;
+  // ask_question_to_user fields
+  questions?: Array<{ question?: string; context?: string; options?: string[] }>;
 }

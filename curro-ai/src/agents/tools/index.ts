@@ -13,6 +13,7 @@ import { readImageTool } from "./readImage.js";
 import { callSubAgentTool } from "./call_sub_agent.js";
 import { listSubAgentsTool } from "./list_sub_agents.js";
 import { submitPlanTool } from "./submit_plan.js";
+import { askUserTool } from "./askuser.js";
 
 export { ToolRegistry } from "./registry.js";
 export type {
@@ -32,6 +33,7 @@ export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";
 export { callSubAgentTool } from "./call_sub_agent.js";
 export { listSubAgentsTool } from "./list_sub_agents.js";
 export { submitPlanTool } from "./submit_plan.js";
+export { askUserTool, ASK_ANSWERED, ASK_TIMEOUT } from "./askuser.js";
 export { shellViewTool } from "./shellView.js";
 export { bashWriteToProcessTool } from "./bashWriteToProcess.js";
 export {
@@ -59,6 +61,7 @@ export function createToolRegistry(): ToolRegistry {
     callSubAgentTool,
     listSubAgentsTool,
     submitPlanTool,
+    askUserTool,
   ]);
 }
 
@@ -77,4 +80,5 @@ export const tools = {
   callSubAgentTool,
   listSubAgentsTool,
   submitPlanTool,
+  askUserTool,
 };

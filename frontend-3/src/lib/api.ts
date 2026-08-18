@@ -63,6 +63,36 @@ export async function abortChat(chatId: string): Promise<void> {
 
 export type PlanDecision = "approved" | "canceled" | "edited";
 
+export interface QuestionAnswerPayload {
+  question: string;
+  answer: string;
+}
+
+/**
+ * Submit the user's answers to a pending ask_question_to_user request. Returns false when the
+ * backend reports the request is no longer pending (already answered, timed out, or unknown) —
+ * the UI treats that as a no-op instead of an error.
+ */
+export async function submitAnswers(
+  chatId: string,
+  toolCallId: string,
+  answers: QuestionAnswerPayload[],
+): Promise<boolean> {
+  try {
+    const data = await requestJson<{ ok?: boolean }>(
+      routeUrl(API_ROUTES.chatQuestionAnswer, { params: { chatId, toolCallId } }),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      },
+    );
+    return data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Submit the user's decision for a submitted plan. Returns false when the backend reports the
  * plan is no longer pending (already decided, timed out, or unknown) — the UI treats that as a

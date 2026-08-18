@@ -4,6 +4,7 @@ import { AgentRunner, type RunAgentRequest } from "../agents/agent.js";
 import { SessionEventBuffer } from "../services/eventBuffer.js";
 import type { SessionStore, StoredMessage } from "../services/sessionStore.js";
 import type { PlanApprovalStore } from "../services/planApprovalStore.js";
+import type { QuestionStore } from "../services/questionStore.js";
 import type { SubAgentDefinition } from "../agents/tools/types.js";
 import { initSSE, formatSSE } from "../utils/sse.js";
 
@@ -77,6 +78,7 @@ export function buildChatRouter(
   store: SessionStore,
   config: AppConfig,
   planApprovals: PlanApprovalStore,
+  askQuestions: QuestionStore,
 ): Router {
   const router = Router();
 
@@ -116,6 +118,39 @@ export function buildChatRouter(
     }
 
     const supplied = planApprovals.decide(chatId, toolCallId, decision, decision === "edited" ? plan : undefined);
+    res.json({ ok: supplied });
+  });
+
+  /**
+   * Supply the user's answers for a pending ask_question_to_user request.
+   *   body: { answers: [{ question: string, answer: string }] }
+   * A no-op (ok:false) is returned when no matching pending request exists (already
+   * answered, timed out, or aborted).
+   */
+  router.post("/question/:chatId/:toolCallId", (req: Request, res: Response) => {
+    const chatId = String(req.params.chatId);
+    const toolCallId = String(req.params.toolCallId);
+    const body = (req.body ?? {}) as { answers?: unknown };
+
+    if (!Array.isArray(body.answers)) {
+      res.status(400).json({ error: "answers must be an array of { question, answer } objects." });
+      return;
+    }
+
+    const answers = body.answers
+      .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+      .map((item) => ({
+        question: typeof item.question === "string" ? item.question : "",
+        answer: typeof item.answer === "string" ? item.answer : "",
+      }))
+      .filter((a) => a.question.trim().length > 0);
+
+    if (answers.length === 0) {
+      res.status(400).json({ error: "At least one non-empty answer is required." });
+      return;
+    }
+
+    const supplied = askQuestions.submitAnswers(chatId, toolCallId, answers);
     res.json({ ok: supplied });
   });
 
