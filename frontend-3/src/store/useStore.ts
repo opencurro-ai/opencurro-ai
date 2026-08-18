@@ -11,6 +11,7 @@ import type {
   ProviderMeta,
   SearchProvider,
   Settings,
+  Skill,
   SubAgent,
   SubAgentRun,
   ToolActivity,
@@ -24,6 +25,7 @@ interface AppState {
   currentId: string | null;
   settings: Settings;
   subAgents: SubAgent[];
+  skills: Skill[];
   customProviders: CustomProvider[];
 
   // Ephemeral UI
@@ -33,6 +35,7 @@ interface AppState {
   sidebarOpen: boolean;
   settingsOpen: boolean;
   subAgentsOpen: boolean;
+  skillsOpen: boolean;
   streaming: boolean;
   filesVersion: number;
 
@@ -107,6 +110,12 @@ interface AppState {
   deleteSubAgent: (id: string) => void;
   toggleSubAgent: (id: string) => void;
 
+  // Actions — custom skill management (persisted in the browser)
+  addSkill: (input: Omit<Skill, "id" | "createdAt" | "updatedAt">) => void;
+  updateSkill: (id: string, patch: Partial<Omit<Skill, "id" | "createdAt">>) => void;
+  deleteSkill: (id: string) => void;
+  toggleSkill: (id: string) => void;
+
   // Actions — custom OpenAI-compatible providers (persisted in the browser)
   addCustomProvider: (input: Omit<CustomProvider, "id" | "createdAt" | "updatedAt">) => CustomProvider;
   updateCustomProvider: (id: string, patch: Partial<Omit<CustomProvider, "id" | "createdAt">>) => void;
@@ -127,6 +136,7 @@ interface AppState {
   toggleSidebar: () => void;
   setSettingsOpen: (v: boolean) => void;
   setSubAgentsOpen: (v: boolean) => void;
+  setSkillsOpen: (v: boolean) => void;
   setStreaming: (v: boolean) => void;
   bumpFiles: () => void;
 }
@@ -196,6 +206,7 @@ export const useStore = create<AppState>()(
       currentId: null,
       settings: defaultSettings,
       subAgents: [],
+      skills: [],
       customProviders: [],
 
       providers: [],
@@ -204,6 +215,7 @@ export const useStore = create<AppState>()(
       sidebarOpen: true,
       settingsOpen: false,
       subAgentsOpen: false,
+      skillsOpen: false,
       streaming: false,
       filesVersion: 0,
 
@@ -503,6 +515,29 @@ export const useStore = create<AppState>()(
           ),
         })),
 
+      addSkill: (input) =>
+        set((s) => {
+          const now = Date.now();
+          const skill: Skill = { id: uid("skill"), createdAt: now, updatedAt: now, ...input };
+          return { skills: [skill, ...s.skills] };
+        }),
+
+      updateSkill: (id, patch) =>
+        set((s) => ({
+          skills: s.skills.map((sk) =>
+            sk.id === id ? { ...sk, ...patch, updatedAt: Date.now() } : sk,
+          ),
+        })),
+
+      deleteSkill: (id) => set((s) => ({ skills: s.skills.filter((sk) => sk.id !== id) })),
+
+      toggleSkill: (id) =>
+        set((s) => ({
+          skills: s.skills.map((sk) =>
+            sk.id === id ? { ...sk, enabled: !sk.enabled, updatedAt: Date.now() } : sk,
+          ),
+        })),
+
       addCustomProvider: (input) => {
         const now = Date.now();
         const provider: CustomProvider = {
@@ -582,6 +617,7 @@ export const useStore = create<AppState>()(
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
       setSubAgentsOpen: (subAgentsOpen) => set({ subAgentsOpen }),
+      setSkillsOpen: (skillsOpen) => set({ skillsOpen }),
       setStreaming: (streaming) => set({ streaming }),
       bumpFiles: () => set((s) => ({ filesVersion: s.filesVersion + 1 })),
     }),
@@ -597,6 +633,7 @@ export const useStore = create<AppState>()(
           ...p,
           settings: { ...current.settings, ...(p.settings ?? {}) },
           subAgents: Array.isArray(p.subAgents) ? p.subAgents : current.subAgents,
+          skills: Array.isArray(p.skills) ? p.skills : current.skills,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,
         };
       },
@@ -605,6 +642,7 @@ export const useStore = create<AppState>()(
         currentId: s.currentId,
         settings: s.settings,
         subAgents: s.subAgents,
+        skills: s.skills,
         customProviders: s.customProviders,
       }),
     },

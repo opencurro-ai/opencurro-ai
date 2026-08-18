@@ -146,6 +146,45 @@ export interface BackendSubAgent {
   enabled: boolean;
 }
 
+/** A single file inside a skill folder — a bare name or a nested path plus its content. */
+export interface SkillFile {
+  /** Path relative to the skill folder, e.g. "SKILL.md" or "references/branching.md". */
+  path: string;
+  content: string;
+}
+
+/**
+ * A user-defined skill, stored in the browser (localStorage) — never on the server. A skill is a
+ * reusable, packaged capability: a folder named after the skill containing an entry markdown file
+ * (SKILL.md by default, renameable) plus any number of reference/example/script files.
+ */
+export interface Skill {
+  id: string;
+  /** Folder name and unique identifier (e.g. "git-workflow"). */
+  name: string;
+  description: string;
+  /** Entry file name (renameable, defaults to "SKILL.md"). */
+  skillFile: string;
+  /** Content of the entry file. */
+  skillContent: string;
+  /** Additional files/folders beyond the entry file. */
+  files: SkillFile[];
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Skill definition in the backend/wire format sent with each turn. */
+export interface BackendSkill {
+  name: string;
+  description: string;
+  /** Entry file name, e.g. "SKILL.md". */
+  skill_file: string;
+  /** Every file in the skill folder, including the entry file. */
+  files: Array<{ path: string; content: string }>;
+  enabled: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -211,6 +250,7 @@ export interface StreamRequest {
   search_provider?: SearchProvider;
   firecrawl_api_key?: string;
   sub_agents?: BackendSubAgent[];
+  skills?: BackendSkill[];
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */

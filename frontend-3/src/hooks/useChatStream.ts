@@ -2,7 +2,13 @@ import { useCallback, useRef } from "react";
 import { abortChat, streamChat } from "@/lib/api";
 import { useStore } from "@/store/useStore";
 import { CUSTOM_PROVIDER_PREFIX, toCustomProviderConfig } from "@/lib/providers";
-import type { BackendMessage, BackendSubAgent, ChatMessage, SSEEventData } from "@/types";
+import type {
+  BackendMessage,
+  BackendSkill,
+  BackendSubAgent,
+  ChatMessage,
+  SSEEventData,
+} from "@/types";
 import { uid } from "@/utils/id";
 
 interface SSEHandlers {
@@ -81,6 +87,26 @@ export function useChatStream(onFilesChanged?: () => void) {
         enabled: a.enabled,
       }));
 
+      // Skill definitions also live in the browser and travel with each turn. The entry file
+      // (skillFile/skillContent) is flattened into the files array alongside the extra files so
+      // the backend receives every file the skill folder should contain.
+      const skills: BackendSkill[] = store.skills.map((sk) => {
+        const entryName = sk.skillFile.trim() || "SKILL.md";
+        const files = [
+          { path: entryName, content: sk.skillContent },
+          ...sk.files
+            .filter((f) => f.path.trim().length > 0)
+            .map((f) => ({ path: f.path.trim(), content: f.content })),
+        ];
+        return {
+          name: sk.name,
+          description: sk.description,
+          skill_file: entryName,
+          files,
+          enabled: sk.enabled,
+        };
+      });
+
       const userMsg: ChatMessage = {
         id: uid("msg"),
         role: "user",
@@ -133,6 +159,7 @@ export function useChatStream(onFilesChanged?: () => void) {
             search_provider: settings.searchProvider,
             firecrawl_api_key: settings.firecrawlApiKey || undefined,
             sub_agents: subAgents,
+            skills,
           },
           controller.signal,
         );
