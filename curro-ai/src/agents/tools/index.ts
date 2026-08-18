@@ -18,6 +18,8 @@ import { submitPlanTool } from "./submit_plan.js";
 import { askUserTool } from "./askuser.js";
 import { buildSubAgentTool } from "./buildsubagent.js";
 import { createSkillTool } from "./createskill.js";
+import { todoWriteTool } from "./todowrite.js";
+import { readTodosTool } from "./todoread.js";
 
 export { ToolRegistry } from "./registry.js";
 export type {
@@ -31,6 +33,8 @@ export type {
   SkillDefinition,
   SkillFileDefinition,
   SkillRuntime,
+  TodoItem,
+  TodoRuntime,
 } from "./types.js";
 export { defineTool } from "./types.js";
 export { webSearchTool, SEARCH_PROVIDERS } from "./webSearch.js";
@@ -43,6 +47,8 @@ export { listSkillsTool } from "./list_skills.js";
 export { skillInitializeTool } from "./skill_initialize.js";
 export { buildSubAgentTool } from "./buildsubagent.js";
 export { createSkillTool } from "./createskill.js";
+export { todoWriteTool } from "./todowrite.js";
+export { readTodosTool } from "./todoread.js";
 export { submitPlanTool } from "./submit_plan.js";
 export { askUserTool, ASK_ANSWERED, ASK_TIMEOUT } from "./askuser.js";
 export { shellViewTool } from "./shellView.js";
@@ -77,6 +83,8 @@ export function createToolRegistry(): ToolRegistry {
     askUserTool,
     buildSubAgentTool,
     createSkillTool,
+    todoWriteTool,
+    readTodosTool,
   ]);
 }
 
@@ -100,4 +108,6 @@ export const tools = {
   askUserTool,
   buildSubAgentTool,
   createSkillTool,
+  todoWriteTool,
+  readTodosTool,
 };

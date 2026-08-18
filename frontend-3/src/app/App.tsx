@@ -7,6 +7,7 @@ import { FileExplorer } from "@/components/FileExplorer";
 import { SettingsModal } from "@/components/SettingsModal";
 import { SubAgentsManager } from "@/components/SubAgentsManager";
 import { SkillsManager } from "@/components/SkillsManager";
+import { TodoPanel } from "@/components/TodoPanel";
 import { useStore } from "@/store/useStore";
 import { fetchProviders } from "@/lib/api";
 import { cn } from "@/utils/cn";
@@ -72,6 +73,7 @@ export function App() {
       <SettingsModal />
       <SubAgentsManager />
       <SkillsManager />
+      <TodoPanel />
     </div>
   );
 }

@@ -19,6 +19,8 @@ import type { QuestionStore } from "../services/questionStore.js";
 import { safeJsonParse } from "../utils/json.js";
 import { SubAgentSessionStore, createSubAgentRuntime } from "./subagents.js";
 import { createSkillRuntime } from "./skills.js";
+import { createTodoRuntime } from "./todos.js";
+import type { TodoItem } from "./tools/types.js";
 
 export interface RunAgentRequest {
   chatId: string;
@@ -41,6 +43,8 @@ export interface RunAgentRequest {
   subAgents?: SubAgentDefinition[];
   /** User-defined skills (from the frontend, stored in the browser) available this turn. */
   skills?: SkillDefinition[];
+  /** User-defined todos (from the frontend, stored in the browser) available this turn. */
+  todos?: TodoItem[];
 }
 
 export class AgentRunner {
@@ -111,6 +115,10 @@ export class AgentRunner {
       // them onto disk inside the workspace's ".skills" directory (skill_initialize). Skills, like
       // sub-agents, are authored in the frontend and travel with each turn.
       const skillRuntime = createSkillRuntime(request.skills ?? []);
+
+      // Todo runtime for this turn — a browser-backed snapshot of the user's todo list that the
+      // TodoWrite / read_todos tools read and update. Present only for main-agent tool calls.
+      const todoRuntime = createTodoRuntime(request.todos ?? []);
 
       const visibleAnswer: string[] = [];
       const visibleReasoning: string[] = [];
@@ -209,6 +217,7 @@ export class AgentRunner {
               web,
               subAgents: subAgentRuntime,
               skills: skillRuntime,
+              todos: todoRuntime,
               toolCallId: toolCall.id ?? undefined,
               chatId: request.chatId,
               emit: send,

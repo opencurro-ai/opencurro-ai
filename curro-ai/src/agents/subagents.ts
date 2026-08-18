@@ -25,6 +25,8 @@ export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
   "list_sub_agents",
   "list_skills",
   "skill_initialize",
+  "TodoWrite",
+  "read_todos",
 ];
 
 /**

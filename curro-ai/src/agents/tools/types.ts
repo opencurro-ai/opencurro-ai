@@ -112,6 +112,42 @@ export interface FailedSkill {
   error: string;
 }
 
+/** Status a todo can be in. */
+export type TodoStatus = "pending" | "in_progress" | "completed";
+
+/** Priority a todo can carry. */
+export type TodoPriority = "low" | "medium" | "high";
+
+/**
+ * A single todo item in the session's task list. Todos are authored by the main agent and stored
+ * in the user's browser (localStorage); they travel with each turn and are rendered in a popup.
+ */
+export interface TodoItem {
+  /** Unique string identifier — recreated during a turn only if missing/unfit. */
+  id: string;
+  /** Clear description of the task. */
+  content: string;
+  /** One of `pending`, `in_progress`, or `completed`. */
+  status: TodoStatus;
+  /** One of `low`, `medium`, or `high`. */
+  priority: TodoPriority;
+}
+
+/**
+ * Runtime bridge injected into the ToolContext for the main agent's turn so the todo tools
+ * (TodoWrite / read_todos) can read and update the user's todo list. It is intentionally absent
+ * from the context handed to a sub-agent's own tool calls.
+ */
+export interface TodoRuntime {
+  /** The current todo list received from the user's browser at turn start (may be empty). */
+  readonly todos: TodoItem[];
+  /**
+   * Replace the whole todo list (create/update/delete in one call), emit a `todo_updated` SSE
+   * event so the frontend persists the change to the user's browser, and return the new list.
+   */
+  write(todos: TodoItem[], ctx: ToolContext): TodoItem[];
+}
+
 /** Result of a skill_initialize call. */
 export interface SkillInitializeResult {
   success: boolean;
@@ -178,6 +214,8 @@ export interface ToolContext {
   subAgents?: SubAgentRuntime;
   /** Skill runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
   skills?: SkillRuntime;
+  /** Todo runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  todos?: TodoRuntime;
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
   /**
