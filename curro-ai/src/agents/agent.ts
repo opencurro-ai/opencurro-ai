@@ -218,6 +218,7 @@ export class AgentRunner {
               questionTimeoutMs: this.config.questionTimeoutMs,
               model: request.model,
               visionCapable,
+              availableToolNames: this.tools.names(),
             });
 
             // read_image attaches the loaded image to its result. The base64 payload

@@ -180,6 +180,12 @@ export interface ToolContext {
   skills?: SkillRuntime;
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
+  /**
+   * Every tool name currently registered in the agent's tool registry (in registration order).
+   * Present in both the main-agent and sub-agent tool contexts so LLM-created sub-agents
+   * (create_sub_agent) can enumerate which tools they will be granted by default.
+   */
+  availableToolNames?: string[];
   /** The model id currently serving the agent (used by the read_image tool for error reporting). */
   model?: string;
   /** Whether the selected model accepts image inputs; false blocks the read_image tool. */

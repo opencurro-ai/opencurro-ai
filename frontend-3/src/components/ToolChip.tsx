@@ -24,6 +24,9 @@ import {
   Blocks,
   FolderTree as FolderTreeIcon,
   PackagePlus,
+  UserPlus,
+  Wand2,
+  Wrench,
 } from "lucide-react";
 import type { ReadImageToolResult, SubAgentRun, ToolActivity } from "@/types";
 import { cn } from "@/utils/cn";
@@ -46,6 +49,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   list_sub_agents: ListTree,
   list_skills: Blocks,
   skill_initialize: PackagePlus,
+  create_sub_agent: UserPlus,
+  create_skill: Wand2,
 };
 
 interface SearchResultItem {
@@ -190,6 +195,12 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "apply_multiple_edits") {
     return <ApplyMultipleEditsChip tool={tool} />;
+  }
+  if (tool.name === "create_sub_agent") {
+    return <CreateSubAgentChip tool={tool} />;
+  }
+  if (tool.name === "create_skill") {
+    return <CreateSkillChip tool={tool} />;
   }
   return <RegularChip tool={tool} />;
 }
@@ -868,6 +879,371 @@ function BashWriteToProcessChip({ tool }: { tool: ToolActivity }) {
               </pre>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface CreateSubAgentToolResult {
+  ok?: boolean;
+  data?: {
+    created_sub_agent?: {
+      name?: string;
+      description?: string;
+      system_prompt?: string;
+      tools?: string[];
+      enabled?: boolean;
+    };
+    granted_tools?: number;
+    message?: string;
+  };
+  error?: { code?: string; message?: string };
+}
+
+function CreateSubAgentChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [showTools, setShowTools] = useState(false);
+  const result = tool.result as CreateSubAgentToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const created = data?.created_sub_agent;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <UserPlus className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {created?.name && (
+        <span className="rounded-full border border-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
+          saved
+        </span>
+      )}
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  const argsName = typeof tool.args?.name === "string" ? tool.args.name : "";
+  const argsDescription = typeof tool.args?.description === "string" ? tool.args.description : "";
+  const argsSystemPrompt =
+    typeof tool.args?.system_prompt === "string" ? tool.args.system_prompt : "";
+
+  const grantedTools = created?.tools ?? [];
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              Create sub-agent failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : created ? (
+            <>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <UserPlus className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  {created.name}
+                </span>
+                <span className="rounded-full border border-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                  {created.tools?.length ?? 0} tool{(created.tools?.length ?? 0) === 1 ? "" : "s"}
+                </span>
+                <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                  saved to browser
+                </span>
+              </div>
+
+              {created.description && (
+                <p className="leading-relaxed text-[var(--color-muted)]">{created.description}</p>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowPrompt((v) => !v)}
+                    aria-expanded={showPrompt}
+                    className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                  >
+                    <Braces className="h-3 w-3" />
+                    System prompt
+                    <ChevronRight
+                      className={cn("h-3.5 w-3.5 transition-transform", showPrompt && "rotate-90")}
+                    />
+                  </button>
+                  {showPrompt && (
+                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-b-lg border-t border-[var(--color-border)] bg-[var(--color-bg-elev)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                      {created.system_prompt}
+                    </pre>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowTools((v) => !v)}
+                    aria-expanded={showTools}
+                    className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                  >
+                    <Wrench className="h-3 w-3" />
+                    Granted tools ({grantedTools.length})
+                    <ChevronRight
+                      className={cn("h-3.5 w-3.5 transition-transform", showTools && "rotate-90")}
+                    />
+                  </button>
+                  {showTools && (
+                    <div className="flex flex-wrap gap-1 border-t border-[var(--color-border)] p-2">
+                      {grantedTools.length === 0 ? (
+                        <span className="text-[10px] text-[var(--color-muted)]">No tools granted.</span>
+                      ) : (
+                        grantedTools.map((t) => (
+                          <span
+                            key={t}
+                            className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-muted)]"
+                          >
+                            <Wrench className="h-2.5 w-2.5" />
+                            {t}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Raw arguments */}
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60">
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]">
+                    <Braces className="h-3 w-3" />
+                    Arguments
+                    <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+                  </summary>
+                  <div className="space-y-2 border-t border-[var(--color-border)] p-2">
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                        Name
+                      </div>
+                      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] text-[var(--color-fg)]">
+                        {argsName}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                        Description
+                      </div>
+                      <div className="whitespace-pre-wrap rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 text-[11px] text-[var(--color-fg)]">
+                        {argsDescription}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                        System prompt (submitted)
+                      </div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] text-[var(--color-fg)]">
+                        {argsSystemPrompt}
+                      </pre>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </>
+          ) : (
+            <p className="text-[var(--color-muted)]">No created sub-agent in result.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface CreateSkillToolResult {
+  ok?: boolean;
+  data?: {
+    created_skill?: {
+      name?: string;
+      description?: string;
+      skill_file?: string;
+      files?: Array<{ path?: string; content?: string }>;
+      enabled?: boolean;
+    };
+    file_count?: number;
+    entry_file?: string;
+    message?: string;
+  };
+  error?: { code?: string; message?: string };
+}
+
+function CreateSkillChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
+  const result = tool.result as CreateSkillToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const created = data?.created_skill;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Wand2 className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {created?.name && (
+        <span className="rounded-full border border-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
+          saved
+        </span>
+      )}
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  const argsSourcePath = typeof tool.args?.source_path === "string" ? tool.args.source_path : "";
+  const argsDescription = typeof tool.args?.description === "string" ? tool.args.description : "";
+  const files = created?.files ?? [];
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              Create skill failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : created ? (
+            <>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <Wand2 className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  {created.name}
+                </span>
+                <span className="rounded-full border border-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                  {data?.file_count ?? files.length} file{(data?.file_count ?? files.length) === 1 ? "" : "s"}
+                </span>
+                <span className="rounded-full border border-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                  saved to browser
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 text-[var(--color-muted)]">
+                <span className="text-[10px] font-semibold uppercase tracking-wide">Entry file</span>
+                <span className="rounded-full border border-[var(--color-accent)]/40 px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-accent)]">
+                  {created.skill_file || "SKILL.md"}
+                </span>
+              </div>
+
+              {created.description && (
+                <p className="leading-relaxed text-[var(--color-muted)]">{created.description}</p>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowFiles((v) => !v)}
+                    aria-expanded={showFiles}
+                    className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                  >
+                    <Blocks className="h-3 w-3" />
+                    Files ({files.length})
+                    <ChevronRight
+                      className={cn("h-3.5 w-3.5 transition-transform", showFiles && "rotate-90")}
+                    />
+                  </button>
+                  {showFiles && (
+                    <div className="flex flex-wrap gap-1 border-t border-[var(--color-border)] p-2">
+                      {files.length === 0 ? (
+                        <span className="text-[10px] text-[var(--color-muted)]">No files.</span>
+                      ) : (
+                        files.map((f, i) => (
+                          <span
+                            key={`${f.path ?? "file"}-${i}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-muted)]"
+                          >
+                            <FileText className="h-2.5 w-2.5" />
+                            {f.path}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60">
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]">
+                    <Braces className="h-3 w-3" />
+                    Arguments
+                    <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+                  </summary>
+                  <div className="space-y-2 border-t border-[var(--color-border)] p-2">
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                        Name
+                      </div>
+                      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] text-[var(--color-fg)]">
+                        {created.name}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                        Description
+                      </div>
+                      <div className="whitespace-pre-wrap rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 text-[11px] text-[var(--color-fg)]">
+                        {argsDescription}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                        Source path
+                      </div>
+                      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] text-[var(--color-fg)]">
+                        {argsSourcePath}
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </>
+          ) : (
+            <p className="text-[var(--color-muted)]">No created skill in result.</p>
+          )}
         </div>
       )}
     </div>
