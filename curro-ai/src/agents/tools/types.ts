@@ -76,6 +76,10 @@ export interface ToolContext {
   planApprovals?: import("../../services/planApprovalStore.js").PlanApprovalStore;
   /** How long a submitted plan waits for a user decision before auto-continuing. */
   planApprovalTimeoutMs?: number;
+  /** Human-in-the-loop question-answer runtime — present only for main-agent tool calls. */
+  askQuestions?: import("../../services/questionStore.js").QuestionStore;
+  /** How long the user's questions wait for answers before auto-continuing. */
+  questionTimeoutMs?: number;
   /** Timeout (ms) applied to shell commands. */
   shellTimeoutMs: number;
   /** Abort signal so long running tools stop when the turn is cancelled. */

@@ -15,6 +15,7 @@ import type { ToolCall, ToolCallDelta } from "./providers/types.js";
 import type { ChatSession, StoredMessage } from "../services/sessionStore.js";
 import type { SessionEventBuffer } from "../services/eventBuffer.js";
 import type { PlanApprovalStore } from "../services/planApprovalStore.js";
+import type { QuestionStore } from "../services/questionStore.js";
 import { safeJsonParse } from "../utils/json.js";
 import { SubAgentSessionStore, createSubAgentRuntime } from "./subagents.js";
 
@@ -48,6 +49,7 @@ export class AgentRunner {
     private readonly tools: ToolRegistry,
     private readonly config: AppConfig,
     private readonly planApprovals: PlanApprovalStore,
+    private readonly askQuestions: QuestionStore,
   ) {}
 
   /**
@@ -203,6 +205,8 @@ export class AgentRunner {
               emit: send,
               planApprovals: this.planApprovals,
               planApprovalTimeoutMs: this.config.planApprovalTimeoutMs,
+              askQuestions: this.askQuestions,
+              questionTimeoutMs: this.config.questionTimeoutMs,
               model: request.model,
               visionCapable,
             });

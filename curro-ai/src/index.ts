@@ -6,6 +6,7 @@ import { createToolRegistry } from "./agents/tools/index.js";
 import { AgentRunner } from "./agents/agent.js";
 import { SessionStore } from "./services/sessionStore.js";
 import { PlanApprovalStore } from "./services/planApprovalStore.js";
+import { QuestionStore } from "./services/questionStore.js";
 import { buildChatRouter } from "./api/chat.js";
 import { buildProviderRouter } from "./api/providers.js";
 import { buildFilesRouter } from "./api/files.js";
@@ -17,7 +18,8 @@ function main(): void {
   const tools = createToolRegistry();
   const store = new SessionStore();
   const planApprovals = new PlanApprovalStore();
-  const agent = new AgentRunner(providers, tools, config, planApprovals);
+  const askQuestions = new QuestionStore();
+  const agent = new AgentRunner(providers, tools, config, planApprovals, askQuestions);
 
   const app = express();
   app.use(
@@ -40,7 +42,7 @@ function main(): void {
   });
 
   app.use("/api/providers", buildProviderRouter(providers));
-  app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals));
+  app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals, askQuestions));
   app.use("/api/files", buildFilesRouter(config));
 
   const server = app.listen(config.port, () => {
