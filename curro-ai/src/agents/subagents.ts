@@ -16,8 +16,16 @@ import type {
 } from "./tools/types.js";
 import { safeJsonParse } from "../utils/json.js";
 
-/** Tools a sub-agent may never use — prevents recursive sub-agent invocation. */
-export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = ["call_sub_agent", "list_sub_agents"];
+/**
+ * Tools a sub-agent may never use: the sub-agent meta tools (prevents recursive delegation) and
+ * the skill meta tools (the skill runtime is only wired to the main agent's turn).
+ */
+export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
+  "call_sub_agent",
+  "list_sub_agents",
+  "list_skills",
+  "skill_initialize",
+];
 
 /**
  * Persistent (process-lifetime) store of sub-agent conversation memory, keyed by
