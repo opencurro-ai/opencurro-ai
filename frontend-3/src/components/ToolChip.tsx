@@ -29,11 +29,23 @@ import {
   Wrench,
   ListTodo,
   ClipboardList,
+  Paperclip,
+  Download,
 } from "lucide-react";
-import type { ReadImageToolResult, SubAgentRun, TodoToolResult, ToolActivity } from "@/types";
+import type {
+  AttachFilesToolResult,
+  AttachedFile,
+  EmbedUrlToolResult,
+  ReadImageToolResult,
+  SubAgentRun,
+  TodoToolResult,
+  ToolActivity,
+} from "@/types";
 import { cn } from "@/utils/cn";
 import { SubmitPlanBlock } from "./SubmitPlanBlock";
 import { AskQuestionBlock } from "./AskQuestionBlock";
+import { API_ROUTES, routeUrl } from "@/app/api/routes";
+import { useStore } from "@/store/useStore";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   file_write: FilePlus2,
@@ -56,6 +68,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   create_skill: Wand2,
   TodoWrite: ListTodo,
   read_todos: ClipboardList,
+  embed_url: Link2,
+  attach_files: Paperclip,
 };
 
 interface SearchResultItem {
@@ -232,6 +246,12 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "read_todos") {
     return <TodoReadChip tool={tool} />;
+  }
+  if (tool.name === "embed_url") {
+    return <EmbedUrlChip tool={tool} />;
+  }
+  if (tool.name === "attach_files") {
+    return <AttachFilesChip tool={tool} />;
   }
   return <RegularChip tool={tool} />;
 }
@@ -1491,6 +1511,220 @@ function TodoReadChip({ tool }: { tool: ToolActivity }) {
                 <TodoSummaryCard todos={todos} />
               )}
             </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmbedUrlChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const setPreview = useStore((s) => s.setPreview);
+  const setPreviewOpen = useStore((s) => s.setPreviewOpen);
+  const result = tool.result as EmbedUrlToolResult | undefined;
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const url = data?.url ?? String(tool.args?.url ?? "");
+
+  const openInPanel = () => {
+    if (!url) return;
+    setPreview(url);
+    setPreviewOpen(true);
+    setOpen(false);
+  };
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!url}
+      onClick={() => (url ? setOpen((v) => !v) : undefined)}
+      aria-expanded={open}
+      className={chipClasses(tool.status, Boolean(url))}
+      title={tool.label}
+    >
+      <Link2 className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[300px] truncate font-mono font-medium">{url}</span>
+      <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+        preview
+      </span>
+      {url && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              Embed failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : url ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={openInPanel}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 px-2.5 py-1.5 text-[var(--color-accent)] transition hover:bg-[var(--color-accent)]/10"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Open browser preview
+                </button>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 text-[var(--color-muted)] transition hover:text-[var(--color-fg)]"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open in new tab
+                </a>
+              </div>
+              <div className="relative min-h-[260px] overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]">
+                <iframe
+                  src={url}
+                  title="Embedded preview"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
+                  referrerPolicy="no-referrer"
+                  className="h-[320px] w-full border-0"
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-[var(--color-muted)]">No URL in the tool result.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fileSizeLabel(file: AttachedFile): string {
+  if (file.size_label) return file.size_label;
+  const bytes = Number.isFinite(file.size) ? file.size : 0;
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
+  return `${(kb / 1024).toFixed(kb / 1024 < 10 ? 1 : 0)} MB`;
+}
+
+function AttachFilesChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const setPreview = useStore((s) => s.setPreview);
+  const setPreviewOpen = useStore((s) => s.setPreviewOpen);
+  const result = tool.result as AttachFilesToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+  const files: AttachedFile[] = data?.files ?? [];
+  const failed = data?.errors ?? (result && !result.ok ? result.error?.errors : undefined);
+  const count = data?.file_count ?? files.length;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Paperclip className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+        {count}
+      </span>
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  const previewFile = (file: AttachedFile) => {
+    setPreview(routeUrl(API_ROUTES.filesPreview, { query: { path: file.path } }));
+    setPreviewOpen(true);
+  };
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error && (
+            <p className="whitespace-pre-wrap text-red-300">
+              Attach failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          )}
+          {files.length === 0 && !failed?.length ? (
+            <p className="text-[var(--color-muted)]">No files attached.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {files.map((file, i) => (
+                <li
+                  key={`${file.path ?? "file"}-${i}`}
+                  className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-mono text-[var(--color-fg)]">{file.name}</div>
+                    <div className="truncate text-[10px] text-[var(--color-muted)]">
+                      {file.path} · {fileSizeLabel(file)}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => previewFile(file)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] px-2 py-1 text-[10px] text-[var(--color-muted)] transition hover:border-[var(--color-accent)]/50 hover:text-[var(--color-fg)]"
+                    title="Preview in browser preview panel"
+                  >
+                    <Eye className="h-3 w-3" />
+                    Preview
+                  </button>
+                  <a
+                    href={routeUrl(API_ROUTES.filesDownload, { query: { path: file.path } })}
+                    download={file.name}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] px-2 py-1 text-[10px] text-[var(--color-muted)] transition hover:border-[var(--color-accent)]/50 hover:text-[var(--color-fg)]"
+                    title="Download"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          {failed && failed.length > 0 && (
+            <div>
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                Skipped ({failed.length})
+              </div>
+              <ul className="space-y-1">
+                {failed.map((f, i) => (
+                  <li
+                    key={`${f.path ?? "failed"}-${i}`}
+                    className="rounded-lg border border-red-500/30 bg-red-500/5 p-2 text-[var(--color-muted)]"
+                  >
+                    <span className="font-mono text-red-300">{f.path}</span> — {f.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}

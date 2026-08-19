@@ -68,6 +68,18 @@ export const API_ROUTES = {
     path: "/api/files/read",
     description: "Read a single workspace file's contents.",
   },
+  filesPreview: {
+    name: "files.preview",
+    method: "GET",
+    path: "/api/files/preview",
+    description: "Stream a workspace file inline for browser preview.",
+  },
+  filesDownload: {
+    name: "files.download",
+    method: "GET",
+    path: "/api/files/download",
+    description: "Download a workspace file as an attachment.",
+  },
 } as const satisfies Record<string, ApiRoute>;
 
 export type ApiRouteName = keyof typeof API_ROUTES;

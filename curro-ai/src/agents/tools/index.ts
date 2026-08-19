@@ -22,6 +22,8 @@ import { buildSubAgentTool } from "./buildsubagent.js";
 import { createSkillTool } from "./createskill.js";
 import { todoWriteTool } from "./todowrite.js";
 import { readTodosTool } from "./todoread.js";
+import { embedUrlTool } from "./embedUrl.js";
+import { attachFilesTool } from "./attachFiles.js";
 
 export { ToolRegistry } from "./registry.js";
 export type {
@@ -62,6 +64,9 @@ export { todoWriteTool } from "./todowrite.js";
 export { readTodosTool } from "./todoread.js";
 export { submitPlanTool } from "./submit_plan.js";
 export { askUserTool, ASK_ANSWERED, ASK_TIMEOUT } from "./askuser.js";
+export { embedUrlTool } from "./embedUrl.js";
+export { attachFilesTool, formatFileSizeLabel } from "./attachFiles.js";
+export type { AttachedFileInfo, AttachFileFailure } from "./attachFiles.js";
 export { shellViewTool } from "./shellView.js";
 export { bashWriteToProcessTool } from "./bashWriteToProcess.js";
 export {
@@ -98,6 +103,8 @@ export function createToolRegistry(): ToolRegistry {
     createSkillTool,
     todoWriteTool,
     readTodosTool,
+    embedUrlTool,
+    attachFilesTool,
   ]);
 }
 
@@ -125,4 +132,6 @@ export const tools = {
   createSkillTool,
   todoWriteTool,
   readTodosTool,
+  embedUrlTool,
+  attachFilesTool,
 };

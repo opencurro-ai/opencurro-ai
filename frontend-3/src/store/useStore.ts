@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware";
 import type {
   AskQuestionInfo,
   AskQuestionStatus,
+  AttachedFile,
+  BrowserPreview,
   ChatMessage,
   Conversation,
   CustomProvider,
@@ -40,8 +42,13 @@ interface AppState {
   subAgentsOpen: boolean;
   skillsOpen: boolean;
   todosOpen: boolean;
+  filesOpen: boolean;
   streaming: boolean;
   filesVersion: number;
+  /** Live browser preview driven by the embed_url tool. */
+  preview: BrowserPreview;
+  /** Files attached by the attach_files tool (for preview/download). */
+  attachedFiles: AttachedFile[];
 
   // Actions — conversations
   newConversation: () => string;
@@ -122,6 +129,12 @@ interface AppState {
 
   // Actions — todo list (persisted in the browser; owned by the TodoWrite/read_todos tools)
   setTodos: (todos: TodoItem[]) => void;
+
+  // Actions — browser preview (embed_url) & attached files (attach_files)
+  setPreview: (url: string) => void;
+  setPreviewOpen: (open: boolean) => void;
+  addAttachedFiles: (files: AttachedFile[]) => void;
+  setFilesOpen: (open: boolean) => void;
 
   // Actions — custom OpenAI-compatible providers (persisted in the browser)
   addCustomProvider: (input: Omit<CustomProvider, "id" | "createdAt" | "updatedAt">) => CustomProvider;
@@ -228,8 +241,11 @@ export const useStore = create<AppState>()(
       subAgentsOpen: false,
       skillsOpen: false,
       todosOpen: false,
+      filesOpen: false,
       streaming: false,
       filesVersion: 0,
+      preview: { url: "", open: false },
+      attachedFiles: [],
 
       newConversation: () => {
         const id = uid("conv");
@@ -649,6 +665,17 @@ export const useStore = create<AppState>()(
       setSubAgentsOpen: (subAgentsOpen) => set({ subAgentsOpen }),
       setSkillsOpen: (skillsOpen) => set({ skillsOpen }),
       setTodosOpen: (todosOpen) => set({ todosOpen }),
+      setFilesOpen: (filesOpen) => set({ filesOpen }),
+      setPreview: (url) =>
+        set((s) => ({ preview: { url, open: s.preview.url !== url || s.preview.open } })),
+      setPreviewOpen: (open) => set((s) => ({ preview: { ...s.preview, open } })),
+      addAttachedFiles: (files) =>
+        set((s) => {
+          const seen = new Set(s.attachedFiles.map((f) => f.path));
+          const fresh = files.filter((f) => f && f.path && !seen.has(f.path));
+          if (fresh.length === 0) return {};
+          return { attachedFiles: [...s.attachedFiles, ...fresh] };
+        }),
       setStreaming: (streaming) => set({ streaming }),
       bumpFiles: () => set((s) => ({ filesVersion: s.filesVersion + 1 })),
     }),
