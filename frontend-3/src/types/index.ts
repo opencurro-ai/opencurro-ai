@@ -213,6 +213,9 @@ export interface FileNode {
 
 export type SearchProvider = "duckduckgo" | "tavily" | "exa" | "serpapi";
 
+/** Web fetch/scrape provider. "builtin" is our free, keyless scraper (default). */
+export type FetchProvider = "builtin" | "firecrawl";
+
 /** Status a todo can be in. */
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
@@ -248,6 +251,7 @@ export interface Settings {
   apiKeys: Record<string, string>;
   baseUrl: string;
   searchProvider: SearchProvider;
+  fetchProvider: FetchProvider;
   tavilyApiKey: string;
   exaApiKey: string;
   serpapiApiKey: string;
@@ -277,6 +281,7 @@ export interface StreamRequest {
   exa_api_key?: string;
   serpapi_api_key?: string;
   search_provider?: SearchProvider;
+  fetch_provider?: FetchProvider;
   firecrawl_api_key?: string;
   sub_agents?: BackendSubAgent[];
   skills?: BackendSkill[];

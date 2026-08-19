@@ -32,6 +32,8 @@ export interface AppConfig {
   questionTimeoutMs: number;
   /** Fallback web tool keys/provider, overridden per-request by the frontend settings. */
   searchProvider: "duckduckgo" | "tavily" | "exa" | "serpapi";
+  /** Web fetch/scrape provider; builtin (free) is the default. */
+  fetchProvider: "builtin" | "firecrawl";
   tavilyApiKey: string;
   exaApiKey: string;
   serpapiApiKey: string;
@@ -57,6 +59,13 @@ function parseSearchProvider(raw: string | undefined): "duckduckgo" | "tavily" |
   return "duckduckgo";
 }
 
+function parseFetchProvider(raw: string | undefined): "builtin" | "firecrawl" {
+  const value = raw?.trim().toLowerCase();
+  if (value === "firecrawl") return "firecrawl";
+  // The built-in scraper is free and keyless.
+  return "builtin";
+}
+
 /** Parse a comma-separated list of model-id substrings from an env var. */
 function parsePatterns(raw: string | undefined): string[] {
   return (raw ?? "")
@@ -74,6 +83,7 @@ export const config: AppConfig = {
   planApprovalTimeoutMs: Number(process.env.PLAN_APPROVAL_TIMEOUT_MS ?? 60_000),
   questionTimeoutMs: Number(process.env.QUESTION_TIMEOUT_MS ?? 180_000),
   searchProvider: parseSearchProvider(process.env.SEARCH_PROVIDER),
+  fetchProvider: parseFetchProvider(process.env.FETCH_PROVIDER),
   tavilyApiKey: process.env.TAVILY_API_KEY?.trim() ?? "",
   exaApiKey: process.env.EXA_API_KEY?.trim() ?? "",
   serpapiApiKey: process.env.SERPAPI_API_KEY?.trim() ?? "",

@@ -19,10 +19,18 @@ export interface ToolResult {
  */
 export type SearchProvider = "duckduckgo" | "tavily" | "exa" | "serpapi";
 
+/**
+ * Web fetching/scraping provider. "builtin" is our free, keyless scraper (the
+ * default). "firecrawl" uses the paid Firecrawl API and requires a key.
+ */
+export type FetchProvider = "builtin" | "firecrawl";
+
 /** API keys + provider selection for the web_search and fatch_web_urls tools. */
 export interface WebToolsConfig {
   /** Active search provider; duckduckgo (free, keyless) is the default. */
   searchProvider: SearchProvider;
+  /** Active web fetch/scrape provider; builtin (free, keyless) is the default. */
+  fetchProvider?: FetchProvider;
   tavilyApiKey?: string;
   exaApiKey?: string;
   serpapiApiKey?: string;

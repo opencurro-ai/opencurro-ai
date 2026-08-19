@@ -232,6 +232,7 @@ export function useChatStream(onFilesChanged?: () => void) {
             exa_api_key: settings.exaApiKey || undefined,
             serpapi_api_key: settings.serpapiApiKey || undefined,
             search_provider: settings.searchProvider,
+            fetch_provider: settings.fetchProvider,
             firecrawl_api_key: settings.firecrawlApiKey || undefined,
             sub_agents: subAgents,
             skills,

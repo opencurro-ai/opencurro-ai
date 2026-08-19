@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   Conversation,
   CustomProvider,
+  FetchProvider,
   ModelInfo,
   PlanApprovalStatus,
   ProviderMeta,
@@ -132,6 +133,7 @@ interface AppState {
   setSettings: (patch: Partial<Settings>) => void;
   setApiKey: (provider: string, key: string) => void;
   setSearchProvider: (provider: SearchProvider) => void;
+  setFetchProvider: (provider: FetchProvider) => void;
   setSearchApiKey: (
     provider: "tavily" | "exa" | "serpapi" | "firecrawl",
     key: string,
@@ -154,6 +156,7 @@ const defaultSettings: Settings = {
   apiKeys: {},
   baseUrl: "",
   searchProvider: "duckduckgo",
+  fetchProvider: "builtin",
   tavilyApiKey: "",
   exaApiKey: "",
   serpapiApiKey: "",
@@ -605,6 +608,7 @@ export const useStore = create<AppState>()(
           settings: { ...s.settings, apiKeys: { ...s.settings.apiKeys, [provider]: key } },
         })),
       setSearchProvider: (searchProvider) => set((s) => ({ settings: { ...s.settings, searchProvider } })),
+      setFetchProvider: (fetchProvider) => set((s) => ({ settings: { ...s.settings, fetchProvider } })),
       setSearchApiKey: (provider, key) =>
         set((s) => {
           const field =

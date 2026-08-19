@@ -32,6 +32,7 @@ export function SettingsModal() {
   const setSettings = useStore((s) => s.setSettings);
   const setApiKey = useStore((s) => s.setApiKey);
   const setSearchProvider = useStore((s) => s.setSearchProvider);
+  const setFetchProvider = useStore((s) => s.setFetchProvider);
   const setSearchApiKey = useStore((s) => s.setSearchApiKey);
   const setSubAgentsOpen = useStore((s) => s.setSubAgentsOpen);
   const subAgentCount = useStore((s) => s.subAgents.length);
@@ -444,16 +445,35 @@ export function SettingsModal() {
                   </>
                 )}
 
-                <Field label="Firecrawl API key (web fetch)">
-                  <input
-                    type="password"
-                    value={settings.firecrawlApiKey}
-                    onChange={(e) => setSearchApiKey("firecrawl", e.target.value)}
-                    placeholder="fc-…"
-                    autoComplete="off"
+                <Field label="Web fetch / scrape provider">
+                  <select
+                    value={settings.fetchProvider ?? "builtin"}
+                    onChange={(e) => setFetchProvider(e.target.value as "builtin" | "firecrawl")}
                     className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
-                  />
+                  >
+                    <option value="builtin">Built-in scraper — free, no API key required (default)</option>
+                    <option value="firecrawl">Firecrawl — paid scraping API (API key)</option>
+                  </select>
                 </Field>
+
+                {settings.fetchProvider === "builtin" ? (
+                  <p className="mb-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-3 text-xs text-[var(--color-muted)]">
+                    The built-in scraper fetches pages and converts them to clean Markdown
+                    (plus text/JSON, links, images and metadata) — free and keyless. Switch to
+                    Firecrawl if you'd prefer its API for fetching page content.
+                  </p>
+                ) : (
+                  <Field label="Firecrawl API key (web fetch)">
+                    <input
+                      type="password"
+                      value={settings.firecrawlApiKey}
+                      onChange={(e) => setSearchApiKey("firecrawl", e.target.value)}
+                      placeholder="fc-…"
+                      autoComplete="off"
+                      className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]/50"
+                    />
+                  </Field>
+                )}
               </div>
 
               <div className="border-t border-[var(--color-border)] pt-4">
