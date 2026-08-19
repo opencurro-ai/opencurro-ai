@@ -19,6 +19,7 @@ import type { QuestionStore } from "../services/questionStore.js";
 import { safeJsonParse } from "../utils/json.js";
 import { SubAgentSessionStore, createSubAgentRuntime } from "./subagents.js";
 import { createSkillRuntime } from "./skills.js";
+import { mergeDefaultSkills, resolveDefaultSkills } from "./skills/index.js";
 import { createTodoRuntime } from "./todos.js";
 import type { TodoItem } from "./tools/types.js";
 
@@ -115,8 +116,11 @@ export class AgentRunner {
 
       // Skill runtime for this turn — enumerates the user's skills (list_skills) and materializes
       // them onto disk inside the workspace's ".skills" directory (skill_initialize). Skills, like
-      // sub-agents, are authored in the frontend and travel with each turn.
-      const skillRuntime = createSkillRuntime(request.skills ?? []);
+      // sub-agents, are authored in the frontend and travel with each turn. The agent's built-in
+      // default skills are merged underneath so they are pre-added and always available, unless
+      // the user provides their own skill with the same name (which overrides the default).
+      const defaultSkills = await resolveDefaultSkills();
+      const skillRuntime = createSkillRuntime(mergeDefaultSkills(defaultSkills, request.skills ?? []));
 
       // Todo runtime for this turn — a browser-backed snapshot of the user's todo list that the
       // TodoWrite / read_todos tools read and update. Present only for main-agent tool calls.
