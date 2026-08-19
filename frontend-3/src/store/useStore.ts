@@ -153,7 +153,7 @@ const defaultSettings: Settings = {
   model: "",
   apiKeys: {},
   baseUrl: "",
-  searchProvider: "tavily",
+  searchProvider: "duckduckgo",
   tavilyApiKey: "",
   exaApiKey: "",
   serpapiApiKey: "",
@@ -619,15 +619,19 @@ export const useStore = create<AppState>()(
 
           // If a key is entered for a search provider while the currently selected
           // provider has no key, auto-select the provider being configured so the
-          // agent never falls back to a provider without a key.
+          // agent never falls back to a provider without a key. DuckDuckGo is free
+          // and always "has" a key, so entering a paid key never overrides an
+          // intentional DuckDuckGo selection.
           if (provider !== "firecrawl" && key.trim()) {
-            const selected = s.settings.searchProvider ?? "tavily";
+            const selected = s.settings.searchProvider ?? "duckduckgo";
             const selectedHasKey =
-              selected === "tavily"
-                ? Boolean(s.settings.tavilyApiKey?.trim())
-                : selected === "exa"
-                  ? Boolean(s.settings.exaApiKey?.trim())
-                  : Boolean(s.settings.serpapiApiKey?.trim());
+              selected === "duckduckgo"
+                ? true
+                : selected === "tavily"
+                  ? Boolean(s.settings.tavilyApiKey?.trim())
+                  : selected === "exa"
+                    ? Boolean(s.settings.exaApiKey?.trim())
+                    : Boolean(s.settings.serpapiApiKey?.trim());
             if (!selectedHasKey) patch.searchProvider = provider;
           }
 

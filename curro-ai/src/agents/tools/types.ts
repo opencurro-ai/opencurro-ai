@@ -11,12 +11,17 @@ export interface ToolResult {
   };
 }
 
-/** Web search providers supported by the web_search tool. */
-export type SearchProvider = "tavily" | "exa" | "serpapi";
+/**
+ * Web search providers supported by the web_search / image_search tools.
+ * "duckduckgo" is free and keyless — it never requires an API key and is the
+ * default. The paid providers (tavily, exa, serpapi) each require a key that
+ * the user can add in Settings.
+ */
+export type SearchProvider = "duckduckgo" | "tavily" | "exa" | "serpapi";
 
 /** API keys + provider selection for the web_search and fatch_web_urls tools. */
 export interface WebToolsConfig {
-  /** Active search provider; tavily is the default. */
+  /** Active search provider; duckduckgo (free, keyless) is the default. */
   searchProvider: SearchProvider;
   tavilyApiKey?: string;
   exaApiKey?: string;

@@ -211,7 +211,7 @@ export interface FileNode {
   children?: FileNode[];
 }
 
-export type SearchProvider = "tavily" | "exa" | "serpapi";
+export type SearchProvider = "duckduckgo" | "tavily" | "exa" | "serpapi";
 
 /** Status a todo can be in. */
 export type TodoStatus = "pending" | "in_progress" | "completed";

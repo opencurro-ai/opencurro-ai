@@ -37,7 +37,7 @@ export interface RunAgentRequest {
   tavilyApiKey?: string;
   exaApiKey?: string;
   serpapiApiKey?: string;
-  searchProvider?: "tavily" | "exa" | "serpapi";
+  searchProvider?: "duckduckgo" | "tavily" | "exa" | "serpapi";
   firecrawlApiKey?: string;
   /** User-defined sub-agents (from the frontend, stored in the browser) available this turn. */
   subAgents?: SubAgentDefinition[];
