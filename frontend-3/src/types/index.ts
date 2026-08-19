@@ -245,6 +245,52 @@ export interface TodoToolResult {
   error?: { code?: string; message?: string };
 }
 
+/** One file attached to the conversation by the attach_files tool (for preview/download). */
+export interface AttachedFile {
+  /** The backend-issued unique id for the attachment (used as a React key). */
+  id: string;
+  /** Display name (basename) of the file. */
+  name: string;
+  /** Workspace-relative path used to build the preview/download URL. */
+  path: string;
+  /** File size in bytes. */
+  size: number;
+  /** Best-effort MIME type derived from the file extension. */
+  content_type: string;
+  /** Human friendly size label, e.g. "2.4 KB". */
+  size_label?: string;
+}
+
+/** Structured result streamed back for the embed_url tool. */
+export interface EmbedUrlToolResult {
+  ok?: boolean;
+  data?: {
+    url?: string;
+    message?: string;
+  };
+  error?: { code?: string; message?: string; url?: string };
+}
+
+/** Structured result streamed back for the attach_files tool. */
+export interface AttachFilesToolResult {
+  ok?: boolean;
+  data?: {
+    files?: AttachedFile[];
+    file_count?: number;
+    errors?: Array<{ path?: string; error?: string }>;
+    message?: string;
+  };
+  error?: { code?: string; message?: string; errors?: Array<{ path?: string; error?: string }> };
+}
+
+/** Live browser preview state driven by the embed_url tool. */
+export interface BrowserPreview {
+  /** The URL currently shown in the browser preview panel. */
+  url: string;
+  /** Whether the preview panel is open. */
+  open: boolean;
+}
+
 export interface Settings {
   provider: string;
   model: string;
@@ -322,4 +368,9 @@ export interface SSEEventData {
   questions?: Array<{ question?: string; context?: string; options?: string[] }>;
   // todo_updated (TodoWrite) fields
   todos?: TodoItem[];
+  // embed_url fields
+  url?: string;
+  // attach_files fields
+  files?: AttachedFile[];
+  file_count?: number;
 }

@@ -3,6 +3,7 @@ import { abortChat, streamChat } from "@/lib/api";
 import { useStore } from "@/store/useStore";
 import { CUSTOM_PROVIDER_PREFIX, toCustomProviderConfig } from "@/lib/providers";
 import type {
+  AttachedFile,
   BackendMessage,
   BackendSkill,
   BackendSubAgent,
@@ -11,6 +12,45 @@ import type {
   TodoItem,
 } from "@/types";
 import { uid } from "@/utils/id";
+
+/**
+ * Convert the file objects the backend streams (AttachedFileInfo shape) into the frontend
+ * AttachedFile shape, assigning a stable id and dropping anything that lacks a usable path.
+ */
+function normalizeAttachedFiles(
+  raw: unknown,
+  prefix = "att",
+): AttachedFile[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AttachedFile[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const path = typeof record.path === "string" && record.path.trim().length > 0 ? record.path.trim() : "";
+    if (!path) continue;
+    const name =
+      typeof record.name === "string" && record.name.trim().length > 0
+        ? record.name.trim()
+        : path.split("/").pop() ?? path;
+    out.push({
+      id: uid(prefix),
+      name,
+      path,
+      size: typeof record.size === "number" ? record.size : 0,
+      content_type: typeof record.content_type === "string" ? record.content_type : "application/octet-stream",
+      size_label: typeof record.size_label === "string" ? record.size_label : undefined,
+    });
+  }
+  return out;
+}
+
+/** Pull the url out of an embed_url tool result / event payload, or "" when absent. */
+function extractUrl(raw: unknown): string {
+  if (!raw || typeof raw !== "object") return "";
+  const record = raw as Record<string, unknown>;
+  const url = typeof record.url === "string" ? record.url : "";
+  return /^https?:\/\//i.test(url.trim()) ? url.trim() : "";
+}
 
 /**
  * Persist an LLM-created sub-agent (create_sub_agent result) into the browser-local store so it
@@ -326,6 +366,22 @@ export function useChatStream(onFilesChanged?: () => void) {
                   if ((name === "TodoWrite" || name === "read_todos") && Array.isArray(payload?.todos)) {
                     s.setTodos(payload.todos as TodoItem[]);
                   }
+                  // embed_url — reflect the URL in the browser preview panel (backup to the event).
+                  if (name === "embed_url") {
+                    const url = extractUrl(data.result);
+                    if (url) {
+                      s.setPreview(url);
+                      s.setPreviewOpen(true);
+                    }
+                  }
+                  // attach_files — surface the attached files in the popup (backup to the event).
+                  if (name === "attach_files") {
+                    const files = normalizeAttachedFiles(payload?.files, "att");
+                    if (files.length > 0) {
+                      s.addAttachedFiles(files);
+                      s.setFilesOpen(true);
+                    }
+                  }
                   if (name === "submit_plan" && result?.decision) {
                     const statusMap: Record<string, "approved" | "canceled" | "edited" | "timeout"> = {
                       approved: "approved",
@@ -352,6 +408,24 @@ export function useChatStream(onFilesChanged?: () => void) {
                   // reloads and stays in sync with the popup and future turns.
                   if (Array.isArray(data.todos)) {
                     s.setTodos(data.todos as TodoItem[]);
+                  }
+                  break;
+                }
+                case "embed_url": {
+                  // The embed_url tool opened the browser preview panel — render the URL live.
+                  const url = extractUrl(data);
+                  if (url) {
+                    s.setPreview(url);
+                    s.setPreviewOpen(true);
+                  }
+                  break;
+                }
+                case "attach_files": {
+                  // The attach_files tool surfaced files — add them to the popup and open it.
+                  const files = normalizeAttachedFiles(data.files, "att");
+                  if (files.length > 0) {
+                    s.addAttachedFiles(files);
+                    s.setFilesOpen(true);
                   }
                   break;
                 }
