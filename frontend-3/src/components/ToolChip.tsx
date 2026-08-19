@@ -132,10 +132,24 @@ interface FileReadToolResult {
   error?: { code?: string; message?: string };
 }
 
+interface WebFetchToolResult {
+  ok?: boolean;
+  data?: {
+    provider?: string;
+    url?: string;
+    title?: string;
+    description?: string;
+    content?: string;
+  };
+  error?: { code?: string; message?: string; url?: string };
+}
+
 const PROVIDER_LABELS: Record<string, string> = {
   tavily: "Tavily",
   exa: "Exa",
   serpapi: "SerpAPI",
+  builtin: "Built-in scraper",
+  firecrawl: "Firecrawl",
 };
 
 function StatusIcon({ status }: { status: ToolActivity["status"] }) {
@@ -197,6 +211,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "image_search") {
     return <ImageSearchChip tool={tool} />;
+  }
+  if (tool.name === "fatch_web_urls") {
+    return <FetchChip tool={tool} />;
   }
   if (tool.name === "str_replace") {
     return <StrReplaceChip tool={tool} />;
@@ -1571,6 +1588,94 @@ function RegularChip({ tool }: { tool: ToolActivity }) {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FetchChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as WebFetchToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = !result?.ok ? result?.error : undefined;
+  const provider = result?.ok ? result.data?.provider : undefined;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Globe className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {hasResult && (
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 text-[var(--color-muted)] transition-transform", open && "rotate-180")}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  const truncated = (data?.content ?? "").includes("... [truncated");
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="text-red-300">
+              Fetch failed: {error.message ?? error.code ?? "unknown error"}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex min-w-0 items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <Globe className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                  <span className="truncate">{data?.title || data?.url}</span>
+                </span>
+                <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                  {PROVIDER_LABELS[provider ?? ""] ?? provider ?? "fetch"}
+                </span>
+                {truncated && (
+                  <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+                    content truncated
+                  </span>
+                )}
+              </div>
+              {data?.url && data?.title && (
+                <div className="min-w-0 text-[var(--color-muted)]">
+                  <a
+                    href={data.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex max-w-full items-center gap-1 truncate break-all text-[var(--color-accent)] hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{data.url}</span>
+                  </a>
+                </div>
+              )}
+              {data?.description && (
+                <p className="leading-relaxed text-[var(--color-muted)]">{data.description}</p>
+              )}
+              {(data?.content ?? "").trim() ? (
+                <pre className="max-h-[400px] overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                  {data?.content}
+                </pre>
+              ) : (
+                <p className="text-[var(--color-muted)]">No content returned.</p>
+              )}
             </div>
           )}
         </div>
