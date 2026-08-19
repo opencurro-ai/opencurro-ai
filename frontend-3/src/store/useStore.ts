@@ -22,6 +22,10 @@ import type {
 } from "@/types";
 import { uid } from "@/utils/id";
 import { CUSTOM_PROVIDER_PREFIX } from "@/lib/providers";
+import {
+  DEFAULT_SUB_AGENTS,
+  mergeSubAgentsWithDefaults,
+} from "@/lib/defaultSubAgents";
 
 interface AppState {
   // Persisted
@@ -228,7 +232,7 @@ export const useStore = create<AppState>()(
       conversations: [],
       currentId: null,
       settings: defaultSettings,
-      subAgents: [],
+      subAgents: [...DEFAULT_SUB_AGENTS],
       skills: [],
       todos: [],
       customProviders: [],
@@ -690,7 +694,9 @@ export const useStore = create<AppState>()(
           ...current,
           ...p,
           settings: { ...current.settings, ...(p.settings ?? {}) },
-          subAgents: Array.isArray(p.subAgents) ? p.subAgents : current.subAgents,
+          subAgents: mergeSubAgentsWithDefaults(
+            Array.isArray(p.subAgents) ? p.subAgents : current.subAgents,
+          ),
           skills: Array.isArray(p.skills) ? p.skills : current.skills,
           todos: Array.isArray(p.todos) ? p.todos : current.todos,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,

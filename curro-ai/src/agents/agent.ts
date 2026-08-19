@@ -20,6 +20,7 @@ import { safeJsonParse } from "../utils/json.js";
 import { SubAgentSessionStore, createSubAgentRuntime } from "./subagents.js";
 import { createSkillRuntime } from "./skills.js";
 import { mergeDefaultSkills, resolveDefaultSkills } from "./skills/index.js";
+import { resolveDefaultSubAgents, mergeDefaultSubAgents } from "./sub-agents/index.js";
 import { createTodoRuntime } from "./todos.js";
 import type { TodoItem } from "./tools/types.js";
 
@@ -99,14 +100,18 @@ export class AgentRunner {
 
       // Sub-agent runtime for this turn — a separate LLM call per sub-agent, using the same
       // provider/model/credentials the user chose for the main agent. Streams `sub_agent_*`
-      // side-channel events onto the same buffer so the UI can show live progress.
+      // side-channel events onto the same buffer so the UI can show live progress. The agent's
+      // built-in default sub-agents are merged underneath so they are pre-added and always
+      // available, unless the user provides their own sub-agent with the same name (which
+      // overrides the default).
+      const defaultSubAgents = await resolveDefaultSubAgents();
       const subAgentRuntime = createSubAgentRuntime({
         provider,
         tools: this.tools,
         config: this.config,
         sessions: this.subAgentSessions,
         chatId: request.chatId,
-        definitions: request.subAgents ?? [],
+        definitions: mergeDefaultSubAgents(defaultSubAgents, request.subAgents ?? []),
         model: request.model,
         apiKey: request.apiKey,
         baseUrl: request.baseUrl,
