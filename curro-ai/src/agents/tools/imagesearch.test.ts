@@ -1,6 +1,7 @@
 import { describe, it, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
+  IMAGE_SEARCH_PROVIDER_DUCKDUCKGO,
   IMAGE_SEARCH_PROVIDER_EXA,
   IMAGE_SEARCH_PROVIDER_SERPAPI,
   IMAGE_SEARCH_PROVIDER_TAVILY,
@@ -74,14 +75,30 @@ describe("image_search tool", () => {
     assert.equal((result.error as { code: string }).code, "invalid_arguments");
   });
 
-  it("returns a structured missing_api_key error when no search API key is configured", async () => {
+  it("falls back to the free DuckDuckGo provider when no search API key is configured", async () => {
+    const calls: CallLog[] = [];
+    mock.method(globalThis, "fetch", async (input: unknown) => {
+      calls.push({ url: String(input) });
+      const url = String(input);
+      // First call: the DuckDuckGo image page (extracts vqd). Next: the i.js JSON endpoint.
+      if (url.includes("i.js")) {
+        return new Response(
+          JSON.stringify({
+            results: [{ image: "https://cdn.example.com/ddg-1.jpg", title: "Ddg", url: "https://example.com/p" }],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response('<html>vqd="42-123456789"</html>', { status: 200 });
+    });
+
     const ctx = baseCtx({ web: { searchProvider: "serpapi" } });
     const result = await registry.execute("image_search", { query: "dogs" }, ctx);
-    assert.equal(result.ok, false);
-    assert.equal((result.error as { code: string }).code, "missing_api_key");
-    // With no keys set, the tool reports the default provider (tavily).
-    const err = result.error as { provider?: string };
-    assert.equal(err.provider, IMAGE_SEARCH_PROVIDER_TAVILY);
+    assert.equal(result.ok, true, JSON.stringify(result.error));
+    const data = result.data as { provider: string; results: Array<{ image_url: string }> };
+    assert.equal(data.provider, IMAGE_SEARCH_PROVIDER_DUCKDUCKGO);
+    assert.equal(data.results[0].image_url, "https://cdn.example.com/ddg-1.jpg");
+    mock.restoreAll();
   });
 
   it("performs a live image search and returns real direct image URLs", async () => {
@@ -248,7 +265,111 @@ describe("image_search tool", () => {
     mock.restoreAll();
   });
 
-  it("falls back to the first configured provider when the selected one lacks a key", async () => {
+  it("performs a free DuckDuckGo image search (vqd token flow) without any API key", async () => {
+    const calls: CallLog[] = [];
+    mock.method(globalThis, "fetch", async (input: unknown) => {
+      calls.push({ url: String(input) });
+      const url = String(input);
+      if (url.includes("i.js")) {
+        const parsed = new URL(url);
+        assert.equal(parsed.searchParams.get("q"), "cute cats");
+        assert.equal(parsed.searchParams.get("vqd"), "42-123456789");
+        return new Response(
+          JSON.stringify({
+            results: [
+              {
+                image: "https://cdn.example.com/ddg-cat.jpg",
+                thumbnail: "https://cdn.example.com/ddg-cat-thumb.jpg",
+                title: "Cute Cat",
+                url: "https://example.com/cat",
+              },
+              { thumbnail: "https://cdn.example.com/ddg-cat-thumb2.jpg", title: "No Full" },
+              { title: "No Image", url: "https://example.com/none" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      // Image results page used to obtain the vqd token.
+      return new Response('<html>vqd="42-123456789"</html>', { status: 200 });
+    });
+
+    const ctx = baseCtx({ web: { searchProvider: "duckduckgo" } });
+    const result = await registry.execute("image_search", { query: "cute cats" }, ctx);
+
+    assert.equal(result.ok, true, JSON.stringify(result.error));
+    const data = result.data as {
+      provider: string;
+      result_count: number;
+      results: Array<{ image_url: string; source_url?: string; title?: string }>;
+    };
+    assert.equal(data.provider, IMAGE_SEARCH_PROVIDER_DUCKDUCKGO);
+    assert.equal(data.result_count, 2); // "No Image" filtered out
+    assert.equal(data.results[0].image_url, "https://cdn.example.com/ddg-cat.jpg");
+    assert.equal(data.results[0].source_url, "https://example.com/cat");
+    assert.equal(data.results[1].image_url, "https://cdn.example.com/ddg-cat-thumb2.jpg");
+    assert.equal(calls.length, 2); // page token fetch + i.js
+    mock.restoreAll();
+  });
+
+  it("performs a free DuckDuckGo web search without any API key", async () => {
+    const calls: CallLog[] = [];
+    mock.method(globalThis, "fetch", async (input: unknown) => {
+      calls.push({ url: String(input) });
+      const url = String(input);
+      if (url.includes("html.duckduckgo.com")) {
+        return new Response(
+          `<html>
+            <div class="result">
+              <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=${encodeURIComponent("https://example.com/widgets")}&rut=xyz">The &amp; Great Widget</a>
+              <a class="result__snippet">Here is a short widget description.</a>
+            </div>
+            <div class="result result--mouse">
+              <a rel="nofollow" class="result__a" href="https://example.org/plain">Plain Site</a>
+            </div>
+          </html>`,
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ AbstractText: "", RelatedTopics: [] }), { status: 200 });
+    });
+
+    const ctx = baseCtx({ web: { searchProvider: "duckduckgo" } });
+    const result = await registry.execute("web_search", { query: "widgets" }, ctx);
+
+    assert.equal(result.ok, true, JSON.stringify(result.error));
+    const data = result.data as {
+      provider: string;
+      result_count: number;
+      results: Array<{ title: string; url: string; Description: string }>;
+    };
+    assert.equal(data.provider, "duckduckgo");
+    assert.equal(data.result_count, 2);
+    assert.equal(data.results[0].url, "https://example.com/widgets"); // redirect decoded
+    assert.equal(data.results[0].title, "The & Great Widget"); // entity decoded
+    assert.equal(data.results[1].url, "https://example.org/plain");
+    assert.equal(calls.length, 1); // only the HTML endpoint (no need for the fallback API)
+    mock.restoreAll();
+  });
+
+  it("uses DuckDuckGo (free) as the web search fallback when a keyed provider lacks a key", async () => {
+    const calls: CallLog[] = [];
+    mock.method(globalThis, "fetch", async (input: unknown) => {
+      calls.push({ url: String(input) });
+      return new Response(`<html><div class="result"><a rel="nofollow" class="result__a" href="https://example.com/x">X</a></div></html>`, { status: 200 });
+    });
+
+    // Selected exa, but exa has no key and no other keyed provider is configured.
+    const ctx = baseCtx({ web: { searchProvider: "exa" } });
+    const result = await registry.execute("web_search", { query: "test" }, ctx);
+    assert.equal(result.ok, true, JSON.stringify(result.error));
+    const data = result.data as { provider: string };
+    assert.equal(data.provider, "duckduckgo");
+    assert.equal(calls.length, 1);
+    mock.restoreAll();
+  });
+
+  it("falls back to the first configured keyed provider when the selected one lacks a key", async () => {
     const calls: CallLog[] = [];
     mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
       calls.push({ url: String(input), init });
@@ -299,11 +420,20 @@ describe("image_search tool", () => {
   });
 
   it("never throws and always returns a structured result", async () => {
+    const calls: CallLog[] = [];
+    mock.method(globalThis, "fetch", async (input: unknown) => {
+      calls.push({ url: String(input) });
+      if (String(input).includes("i.js")) {
+        return new Response(JSON.stringify({ results: [] }), { status: 200 });
+      }
+      return new Response('<html></html>', { status: 200 });
+    });
     for (const args of [{ query: "a" }, {}, { query: "" }]) {
       const ctx = baseCtx({ web: { searchProvider: "serpapi" } });
       const result = await registry.execute("image_search", args, ctx);
       assert.equal(typeof result.ok, "boolean");
       if (!result.ok) assert.ok(result.error);
     }
+    mock.restoreAll();
   });
 });

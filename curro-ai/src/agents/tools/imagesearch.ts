@@ -2,29 +2,38 @@ import { z } from "zod";
 import { defineTool, type ToolContext, type ToolResult } from "./types.js";
 
 /**
- * Live image search that reuses the project's existing web-search providers: Tavily, Exa and
- * SerpAPI. The provider is chosen from ctx.web.searchProvider (falling back to the first
- * configured provider), mirroring the web_search tool's provider selection. Every image URL
- * returned is a real, live URL supplied by the provider — nothing is fabricated.
+ * Live image search that supports DuckDuckGo (free, no API key — the default) plus the
+ * project's paid web-search providers: Tavily, Exa and SerpAPI. The provider is chosen from
+ * ctx.web.searchProvider (falling back to free DuckDuckGo so image search never breaks),
+ * mirroring the web_search tool's provider selection. Every image URL returned is a real,
+ * live URL supplied by the provider — nothing is fabricated.
  *
  * Provider support:
- *  - Tavily  : POST /search with include_images=true -> query-level `images` array plus
- *              source-linked `results[].images`.
- *  - Exa     : POST /search results carry an `image` (hero) URL; requesting
- *              `contents.extras.imageLinks` also extracts page images per result.
- *  - SerpAPI : GET /search.json?engine=google_images -> images_results with direct `original`.
+ *  - DuckDuckGo : free image search via the keyless `vqd`-token flow
+ *                 (https://duckduckgo.com/i.js?q=...&vqd=...) -> results[] with direct image.
+ *  - Tavily     : POST /search with include_images=true -> query-level `images` array plus
+ *                 source-linked `results[].images`.
+ *  - Exa        : POST /search results carry an `image` (hero) URL; requesting
+ *                 `contents.extras.imageLinks` also extracts page images per result.
+ *  - SerpAPI    : GET /search.json?engine=google_images -> images_results with direct `original`.
  */
 
 const MAX_IMAGE_RESULTS = 20;
 const REQUEST_TIMEOUT_MS = 30_000;
 
+export const IMAGE_SEARCH_PROVIDER_DUCKDUCKGO = "duckduckgo";
 export const IMAGE_SEARCH_PROVIDER_TAVILY = "tavily";
 export const IMAGE_SEARCH_PROVIDER_EXA = "exa";
 export const IMAGE_SEARCH_PROVIDER_SERPAPI = "serpapi";
-export const IMAGE_SEARCH_PROVIDERS: readonly string[] = [
+/** Keyed image search providers (require an API key); DuckDuckGo is free and keyless. */
+const KEYED_IMAGE_SEARCH_PROVIDERS: readonly string[] = [
   IMAGE_SEARCH_PROVIDER_TAVILY,
   IMAGE_SEARCH_PROVIDER_EXA,
   IMAGE_SEARCH_PROVIDER_SERPAPI,
+] as const;
+export const IMAGE_SEARCH_PROVIDERS: readonly string[] = [
+  IMAGE_SEARCH_PROVIDER_DUCKDUCKGO,
+  ...KEYED_IMAGE_SEARCH_PROVIDERS,
 ] as const;
 
 const schema = z
@@ -68,6 +77,27 @@ async function postJson(
       body: JSON.stringify(body),
       signal,
     });
+    const text = await response.text();
+    let parsed: unknown = {};
+    try {
+      parsed = text ? JSON.parse(text) : {};
+    } catch {
+      parsed = { raw: text.slice(0, 500) };
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}: ${text.slice(0, 500)}`);
+    }
+    return parsed;
+  } finally {
+    cleanup();
+  }
+}
+
+/** GET a URL and return the parsed JSON on a 2xx response; throws otherwise. */
+async function fetchJson(url: string, init: RequestInit, ctx: ToolContext): Promise<unknown> {
+  const { signal, cleanup } = timeoutSignal(ctx);
+  try {
+    const response = await fetch(url, { ...init, signal });
     const text = await response.text();
     let parsed: unknown = {};
     try {
@@ -186,12 +216,100 @@ async function searchExaImages(
   return results.slice(0, MAX_IMAGE_RESULTS);
 }
 
+/** Fetch the raw text of a URL, throwing on a non-2xx response. */
+async function fetchText(url: string, init: RequestInit, ctx: ToolContext): Promise<string> {
+  const { signal, cleanup } = timeoutSignal(ctx);
+  try {
+    const response = await fetch(url, { ...init, signal });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}: ${text.slice(0, 500)}`);
+    }
+    return text;
+  } finally {
+    cleanup();
+  }
+}
+
 interface SerpApiImageItem {
   title?: string;
   link?: string;
   original?: string;
   thumbnail?: string;
   thumbnails?: Array<{ url?: string }>;
+}
+
+/**
+ * DuckDuckGo image search — completely free, no API key required. It uses the same
+ * keyless `vqd`-token flow that DuckDuckGo's own image page uses: first it loads the
+ * image search page to obtain a session token, then it hits the public
+ * `https://duckduckgo.com/i.js` JSON endpoint. Every `image` URL returned is a real
+ * direct image URL supplied by DuckDuckGo — nothing is fabricated.
+ */
+async function searchDuckDuckGoImages(query: string, ctx: ToolContext): Promise<ImageSearchResult[]> {
+  const results: ImageSearchResult[] = [];
+
+  const extractVqd = (page: string): string | null => {
+    const m = page.match(/vqd="([0-9-]+)"/) || page.match(/vqd='([0-9-]+)'/);
+    return m ? m[1] : null;
+  };
+
+  // 1) Obtain a DuckDuckGo session token (vqd) from the image search page.
+  let vqd: string | null = null;
+  try {
+    const page = await fetchText(
+      `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`,
+      {
+        method: "GET",
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; CurroAI/1.0)" },
+      },
+      ctx,
+    );
+    vqd = extractVqd(page);
+  } catch {
+    // Continue without a vqd token — i.js may still answer.
+  }
+
+  // 2) Query the public JSON image endpoint.
+  try {
+    const url = new URL("https://duckduckgo.com/i.js");
+    url.searchParams.set("q", query);
+    url.searchParams.set("o", "json");
+    url.searchParams.set("l", "us-en");
+    url.searchParams.set("p", "1");
+    url.searchParams.set("f", ",,,,,");
+    if (vqd) url.searchParams.set("vqd", vqd);
+
+    const data = (await fetchJson(
+      url.toString(),
+      {
+        method: "GET",
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; CurroAI/1.0)" },
+      },
+      ctx,
+    )) as {
+      results?: Array<{
+        image?: string;
+        thumbnail?: string;
+        title?: string;
+        url?: string;
+      }>;
+    };
+
+    for (const item of (data.results ?? []).slice(0, MAX_IMAGE_RESULTS)) {
+      const imageUrl = item.image ?? item.thumbnail ?? "";
+      if (!imageUrl) continue;
+      results.push({
+        title: item.title ?? undefined,
+        image_url: imageUrl,
+        source_url: item.url ?? undefined,
+      });
+    }
+  } catch {
+    // No DuckDuckGo image results available — return whatever we have.
+  }
+
+  return results.slice(0, MAX_IMAGE_RESULTS);
 }
 
 /** Run a live Google Images search through SerpAPI and return up to MAX_IMAGE_RESULTS images. */
@@ -256,27 +374,45 @@ export const imageSearchTool = defineTool({
     }
 
     const keys: Record<string, string | undefined> = {
+      [IMAGE_SEARCH_PROVIDER_DUCKDUCKGO]: undefined,
       [IMAGE_SEARCH_PROVIDER_TAVILY]: ctx.web?.tavilyApiKey,
       [IMAGE_SEARCH_PROVIDER_EXA]: ctx.web?.exaApiKey,
       [IMAGE_SEARCH_PROVIDER_SERPAPI]: ctx.web?.serpapiApiKey,
     };
 
-    // Use the selected provider when its key is set; otherwise fall back to the first
-    // provider that has a key so a stale/missing selection never breaks image search.
+    // Resolve the active provider, falling back to free DuckDuckGo so image
+    // search works out of the box without any API key.
     const selected = ctx.web?.searchProvider;
-    const provider: string = keys[selected ?? ""]
-      ? (selected as string)
-      : (IMAGE_SEARCH_PROVIDERS.find((p) => keys[p]) ?? IMAGE_SEARCH_PROVIDER_TAVILY);
-    const apiKey = keys[provider];
+    let provider: string;
+    let apiKey: string | undefined;
+    if (selected === IMAGE_SEARCH_PROVIDER_DUCKDUCKGO) {
+      // Free, keyless provider selected.
+      provider = IMAGE_SEARCH_PROVIDER_DUCKDUCKGO;
+    } else if (keys[selected ?? ""]) {
+      // Selected keyed provider has a key set.
+      provider = selected as string;
+      apiKey = keys[selected as string];
+    } else {
+      // Selected keyed provider lacks a key: fall to the first keyed provider
+      // with a key, else to free DuckDuckGo so image search never breaks.
+      const keyedFallback = KEYED_IMAGE_SEARCH_PROVIDERS.find((p) => keys[p]);
+      if (keyedFallback) {
+        provider = keyedFallback;
+        apiKey = keys[keyedFallback];
+      } else {
+        provider = IMAGE_SEARCH_PROVIDER_DUCKDUCKGO;
+      }
+    }
 
-    if (!apiKey) {
+    // DuckDuckGo is free and needs no key; the keyed providers all require one.
+    if (provider !== IMAGE_SEARCH_PROVIDER_DUCKDUCKGO && !apiKey) {
       return {
         ok: false,
         error: {
           code: "missing_api_key",
           message:
             "No search API key configured for image search. " +
-            "Add a Tavily, Exa or SerpAPI key in Settings.",
+            "Use the free DuckDuckGo provider (no key needed) or add a Tavily, Exa or SerpAPI key in Settings.",
           provider,
         },
       };
@@ -284,11 +420,13 @@ export const imageSearchTool = defineTool({
 
     try {
       const results =
-        provider === IMAGE_SEARCH_PROVIDER_EXA
-          ? await searchExaImages(query, apiKey, ctx)
-          : provider === IMAGE_SEARCH_PROVIDER_SERPAPI
-            ? await searchSerpApiImages(query, apiKey, ctx)
-            : await searchTavilyImages(query, apiKey, ctx);
+        provider === IMAGE_SEARCH_PROVIDER_DUCKDUCKGO
+          ? await searchDuckDuckGoImages(query, ctx)
+          : provider === IMAGE_SEARCH_PROVIDER_EXA
+            ? await searchExaImages(query, apiKey!, ctx)
+            : provider === IMAGE_SEARCH_PROVIDER_SERPAPI
+              ? await searchSerpApiImages(query, apiKey!, ctx)
+              : await searchTavilyImages(query, apiKey!, ctx);
 
       return {
         ok: true,

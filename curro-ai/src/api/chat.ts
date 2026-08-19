@@ -40,7 +40,8 @@ interface StreamBody {
   tavily_api_key?: string;
   exa_api_key?: string;
   serpapi_api_key?: string;
-  search_provider?: "tavily" | "exa" | "serpapi";
+  search_provider?: "duckduckgo" | "tavily" | "exa" | "serpapi";
+  fetch_provider?: "builtin" | "firecrawl";
   firecrawl_api_key?: string;
   sub_agents?: unknown;
   skills?: unknown;
@@ -239,6 +240,7 @@ export function buildChatRouter(
         exaApiKey: body.exa_api_key,
         serpapiApiKey: body.serpapi_api_key,
         searchProvider: body.search_provider,
+        fetchProvider: body.fetch_provider,
         firecrawlApiKey: body.firecrawl_api_key,
         subAgents: normalizeSubAgents(body.sub_agents),
         skills: normalizeSkills(body.skills),

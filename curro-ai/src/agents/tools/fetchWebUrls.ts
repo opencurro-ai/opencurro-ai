@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool, type ToolContext, type ToolResult } from "./types.js";
+import { scrapePage } from "../../scraper/scraper.js";
 
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_CONTENT_CHARS = 200_000;
@@ -22,18 +23,46 @@ function timeoutSignal(ctx: ToolContext): { signal: AbortSignal; cleanup: () => 
   };
 }
 
+/** Fetch a page through the free Firecrawl API (requires an API key). */
+async function scrapeWithFirecrawl(url: string, apiKey: string, ctx: ToolContext) {
+  const { signal, cleanup } = timeoutSignal(ctx);
+  try {
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ url, formats: ["markdown"] }),
+      signal,
+    });
+    const text = await response.text();
+    const data = JSON.parse(text || "{}") as {
+      success?: boolean;
+      data?: { markdown?: string | null; rawHtml?: string | null; url?: string | null };
+    };
+    if (!response.ok || data.success === false) {
+      return { ok: false, error: { code: "fetch_failed", message: `Firecrawl HTTP ${response.status}: ${text.slice(0, 500)}`, url } };
+    }
+    const content = data.data?.markdown ?? data.data?.rawHtml ?? "";
+    return { ok: true, data: { provider: "firecrawl", url: data.data?.url ?? url, content: truncate(content) } };
+  } catch (error) {
+    return { ok: false, error: { code: "fetch_failed", message: error instanceof Error ? error.message : String(error), url } };
+  } finally {
+    cleanup();
+  }
+}
+
 function truncate(text: string): string {
   if (text.length <= MAX_CONTENT_CHARS) return text;
-  return (
-    text.slice(0, MAX_CONTENT_CHARS) +
-    `\n... [truncated ${text.length - MAX_CONTENT_CHARS} chars]`
-  );
+  return text.slice(0, MAX_CONTENT_CHARS) + `\n... [truncated ${text.length - MAX_CONTENT_CHARS} chars]`;
 }
 
 export const fetchWebUrlsTool = defineTool({
   name: "fatch_web_urls",
   description:
-    "Fetch and extract clean content from a single URL using Firecrawl. " +
+    "Fetch and extract clean content from a single URL. Uses the built-in free " +
+    "scraper by default (no API key needed), or Firecrawl when configured. " +
     "Use this to get the full content of a webpage beyond search snippets.",
   schema,
   label: (args) => `Fetch: ${args.url}`,
@@ -44,49 +73,30 @@ export const fetchWebUrlsTool = defineTool({
     }
 
     const apiKey = ctx.web?.firecrawlApiKey;
-    if (!apiKey) {
-      return {
-        ok: false,
-        error: {
-          code: "missing_api_key",
-          message: "Firecrawl API key is not configured. Add it in Settings.",
-        },
-      };
+    const fetchProvider: "builtin" | "firecrawl" = ctx.web?.fetchProvider ?? "builtin";
+
+    // Use Firecrawl only when explicitly selected AND a key is configured;
+    // otherwise always fall back to the free built-in scraper.
+    if (fetchProvider === "firecrawl" && apiKey) {
+      const res = await scrapeWithFirecrawl(url, apiKey, ctx);
+      if (res.ok) return res as ToolResult;
     }
 
-    const { signal, cleanup } = timeoutSignal(ctx);
     try {
-      const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({ url, formats: ["markdown"] }),
-        signal,
+      const result = await scrapePage({
+        url,
+        format: "markdown",
+        maxChars: MAX_CONTENT_CHARS,
+        signal: ctx.signal,
       });
-      const text = await response.text();
-      const data = JSON.parse(text || "{}") as {
-        success?: boolean;
-        data?: { markdown?: string | null; rawHtml?: string | null; url?: string | null };
-      };
-      if (!response.ok || data.success === false) {
-        return {
-          ok: false,
-          error: {
-            code: "fetch_failed",
-            message: `Firecrawl HTTP ${response.status}: ${text.slice(0, 500)}`,
-            url,
-          },
-        };
-      }
-
-      const content = data.data?.markdown ?? data.data?.rawHtml ?? "";
       return {
         ok: true,
         data: {
-          url: data.data?.url ?? url,
-          content: truncate(content),
+          provider: "builtin",
+          url: result.url,
+          title: result.title,
+          description: result.description,
+          content: truncate(result.content),
         },
       };
     } catch (error) {
@@ -98,8 +108,6 @@ export const fetchWebUrlsTool = defineTool({
           url,
         },
       };
-    } finally {
-      cleanup();
     }
   },
 });

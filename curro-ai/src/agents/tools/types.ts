@@ -11,13 +11,26 @@ export interface ToolResult {
   };
 }
 
-/** Web search providers supported by the web_search tool. */
-export type SearchProvider = "tavily" | "exa" | "serpapi";
+/**
+ * Web search providers supported by the web_search / image_search tools.
+ * "duckduckgo" is free and keyless — it never requires an API key and is the
+ * default. The paid providers (tavily, exa, serpapi) each require a key that
+ * the user can add in Settings.
+ */
+export type SearchProvider = "duckduckgo" | "tavily" | "exa" | "serpapi";
+
+/**
+ * Web fetching/scraping provider. "builtin" is our free, keyless scraper (the
+ * default). "firecrawl" uses the paid Firecrawl API and requires a key.
+ */
+export type FetchProvider = "builtin" | "firecrawl";
 
 /** API keys + provider selection for the web_search and fatch_web_urls tools. */
 export interface WebToolsConfig {
-  /** Active search provider; tavily is the default. */
+  /** Active search provider; duckduckgo (free, keyless) is the default. */
   searchProvider: SearchProvider;
+  /** Active web fetch/scrape provider; builtin (free, keyless) is the default. */
+  fetchProvider?: FetchProvider;
   tavilyApiKey?: string;
   exaApiKey?: string;
   serpapiApiKey?: string;

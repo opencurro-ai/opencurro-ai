@@ -37,7 +37,8 @@ export interface RunAgentRequest {
   tavilyApiKey?: string;
   exaApiKey?: string;
   serpapiApiKey?: string;
-  searchProvider?: "tavily" | "exa" | "serpapi";
+  searchProvider?: "duckduckgo" | "tavily" | "exa" | "serpapi";
+  fetchProvider?: "builtin" | "firecrawl";
   firecrawlApiKey?: string;
   /** User-defined sub-agents (from the frontend, stored in the browser) available this turn. */
   subAgents?: SubAgentDefinition[];
@@ -88,6 +89,7 @@ export class AgentRunner {
       const visionCapable = isVisionCapableModel(request.model, this.config);
       const web: WebToolsConfig = {
         searchProvider: request.searchProvider ?? this.config.searchProvider,
+        fetchProvider: request.fetchProvider ?? this.config.fetchProvider,
         tavilyApiKey: request.tavilyApiKey || this.config.tavilyApiKey || undefined,
         exaApiKey: request.exaApiKey || this.config.exaApiKey || undefined,
         serpapiApiKey: request.serpapiApiKey || this.config.serpapiApiKey || undefined,

@@ -2,8 +2,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKEND_DIR="$SCRIPT_DIR/backend"
-FRONTEND_DIR="$SCRIPT_DIR/frontend"
+BACKEND_DIR="$SCRIPT_DIR/curro-ai"
+FRONTEND_DIR="$SCRIPT_DIR/frontend-3"
 
 cleanup() {
   echo ""
@@ -14,21 +14,28 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-echo "Starting backend…"
+echo "Installing backend dependencies (curro-ai)…"
 cd "$BACKEND_DIR"
-pip install -q -r requirements.txt
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 &
-BACKEND_PID=$!
+npm install --silent
 
-echo "Starting frontend…"
+echo "Installing frontend dependencies (frontend-3)…"
 cd "$FRONTEND_DIR"
 npm install --silent
-npm run dev &
+
+echo "Starting backend (curro-ai)…"
+cd "$BACKEND_DIR"
+npm run dev > "$SCRIPT_DIR/.curro-backend.log" 2>&1 &
+BACKEND_PID=$!
+
+echo "Starting frontend (frontend-3)…"
+cd "$FRONTEND_DIR"
+npm run dev > "$SCRIPT_DIR/.curro-frontend.log" 2>&1 &
 FRONTEND_PID=$!
 
 echo ""
-echo "Backend  → http://localhost:8000"
-echo "Frontend → http://localhost:5173"
+echo "Backend  → http://localhost:8787  (health: http://localhost:8787/health)"
+echo "Frontend → http://localhost:5173  (proxies /api → backend)"
+echo ""
 echo "Press Ctrl+C to stop both."
 echo ""
 
