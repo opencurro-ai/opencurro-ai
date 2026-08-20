@@ -146,14 +146,26 @@ interface FileReadToolResult {
   error?: { code?: string; message?: string };
 }
 
+interface WebFetchPage {
+  url?: string;
+  status?: number;
+  title?: string;
+  description?: string;
+  lang?: string;
+  content?: string;
+}
+
 interface WebFetchToolResult {
   ok?: boolean;
   data?: {
     provider?: string;
+    mode?: "single" | "crawl";
     url?: string;
     title?: string;
     description?: string;
     content?: string;
+    page_count?: number;
+    pages?: WebFetchPage[];
   };
   error?: { code?: string; message?: string; url?: string };
 }
@@ -1837,6 +1849,7 @@ function FetchChip({ tool }: { tool: ToolActivity }) {
   const data = result?.ok ? result.data : undefined;
   const error = !result?.ok ? result?.error : undefined;
   const provider = result?.ok ? result.data?.provider : undefined;
+  const isCrawl = result?.ok && (result.data?.mode === "crawl" || Array.isArray(result.data?.pages));
 
   const chip = (
     <button
@@ -1881,34 +1894,96 @@ function FetchChip({ tool }: { tool: ToolActivity }) {
                 <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
                   {PROVIDER_LABELS[provider ?? ""] ?? provider ?? "fetch"}
                 </span>
+                {isCrawl && data?.page_count != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    {data.page_count} page{data.page_count === 1 ? "" : "s"}
+                  </span>
+                )}
                 {truncated && (
                   <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
                     content truncated
                   </span>
                 )}
               </div>
-              {data?.url && data?.title && (
-                <div className="min-w-0 text-[var(--color-muted)]">
-                  <a
-                    href={data.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex max-w-full items-center gap-1 truncate break-all text-[var(--color-accent)] hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{data.url}</span>
-                  </a>
+              {isCrawl && data?.pages ? (
+                <div className="space-y-2">
+                  {data.pages.length === 0 ? (
+                    <p className="text-[var(--color-muted)]">No pages crawled.</p>
+                  ) : (
+                    data.pages.map((page, i) => (
+                      <div
+                        key={`${page.url ?? "page"}-${i}`}
+                        className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                          <span className="flex min-w-0 items-center gap-1.5 font-medium text-[var(--color-fg)]">
+                            <Globe className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                            <span className="truncate">{page.title || page.url}</span>
+                          </span>
+                          {page.status != null && (
+                            <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                              {page.status}
+                            </span>
+                          )}
+                          {page.lang && (
+                            <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                              {page.lang}
+                            </span>
+                          )}
+                        </div>
+                        {page.url && (
+                          <div className="mt-1 min-w-0 text-[var(--color-muted)]">
+                            <a
+                              href={page.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex max-w-full items-center gap-1 truncate break-all text-[var(--color-accent)] hover:underline"
+                            >
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{page.url}</span>
+                            </a>
+                          </div>
+                        )}
+                        {page.description && (
+                          <p className="mt-1 leading-relaxed text-[var(--color-muted)]">
+                            {page.description}
+                          </p>
+                        )}
+                        {(page.content ?? "").trim() ? (
+                          <pre className="mt-1 max-h-60 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                            {page.content}
+                          </pre>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
                 </div>
-              )}
-              {data?.description && (
-                <p className="leading-relaxed text-[var(--color-muted)]">{data.description}</p>
-              )}
-              {(data?.content ?? "").trim() ? (
-                <pre className="max-h-[400px] overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
-                  {data?.content}
-                </pre>
               ) : (
-                <p className="text-[var(--color-muted)]">No content returned.</p>
+                <>
+                  {data?.url && data?.title && (
+                    <div className="min-w-0 text-[var(--color-muted)]">
+                      <a
+                        href={data.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex max-w-full items-center gap-1 truncate break-all text-[var(--color-accent)] hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{data.url}</span>
+                      </a>
+                    </div>
+                  )}
+                  {data?.description && (
+                    <p className="leading-relaxed text-[var(--color-muted)]">{data.description}</p>
+                  )}
+                  {(data?.content ?? "").trim() ? (
+                    <pre className="max-h-[400px] overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                      {data?.content}
+                    </pre>
+                  ) : (
+                    <p className="text-[var(--color-muted)]">No content returned.</p>
+                  )}
+                </>
               )}
             </div>
           )}

@@ -19,7 +19,7 @@ autonomously and are evaluated on the accuracy, relevance, and currency of the i
 1. Interpret the question and break it into the specific facts or areas you need to confirm.
 2. Run focused web searches (web_search) with well-chosen queries. Rephrase and refine queries
    across multiple attempts to cover official sources, recent coverage, and expert discussion.
-3. Fetch likely authoritative pages (fatch_web_urls) or scrape pages (scrape_webpage) and read
+3. Fetch likely authoritative pages (fatch_web_urls) and read
    them fully; base your analysis on content, not just snippets.
 4. Cross-check important facts across independent sources. Distinguish established facts from
    opinion, marketing, or speculation. Prioritize official documentation, primary sources, and

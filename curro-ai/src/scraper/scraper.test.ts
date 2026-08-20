@@ -132,8 +132,12 @@ describe("scraper: integration with the web tools", () => {
     mock.restoreAll();
   });
 
-  it("scrape_webpage tool is registered and uses the built-in scraper", async () => {
-    assert.equal(registry.has("scrape_webpage"), true);
+  it("fatch_web_urls is the single web fetch tool (scrape_webpage removed)", () => {
+    assert.equal(registry.has("fatch_web_urls"), true);
+    assert.equal(registry.has("scrape_webpage"), false);
+  });
+
+  it("fatch_web_urls uses the built-in free scraper for a single page", async () => {
     mock.method(globalThis, "fetch", async () => {
       return new Response(SAMPLE_HTML, {
         status: 200,
@@ -141,12 +145,30 @@ describe("scraper: integration with the web tools", () => {
       });
     });
     const ctx = baseCtx({ web: { fetchProvider: "builtin", searchProvider: "duckduckgo" } });
-    const result = await registry.execute("scrape_webpage", { url: "https://example.com/", format: "markdown" }, ctx);
+    const result = await registry.execute("fatch_web_urls", { url: "https://example.com/", format: "markdown" }, ctx);
     assert.equal(result.ok, true, JSON.stringify(result.error));
     const data = result.data as { provider: string; mode: string; title: string };
     assert.equal(data.provider, "builtin");
     assert.equal(data.mode, "single");
     assert.equal(data.title, "Curro AI Test Page");
+    mock.restoreAll();
+  });
+
+  it("fatch_web_urls supports the built-in crawl mode", async () => {
+    mock.method(globalThis, "fetch", async () => {
+      return new Response(SAMPLE_HTML, {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    });
+    const ctx = baseCtx({ web: { fetchProvider: "builtin", searchProvider: "duckduckgo" } });
+    const result = await registry.execute("fatch_web_urls", { url: "https://example.com/", crawl: true, maxPages: 2, maxDepth: 1 }, ctx);
+    assert.equal(result.ok, true, JSON.stringify(result.error));
+    const data = result.data as { provider: string; mode: string; page_count: number; pages: Array<{ title: string }> };
+    assert.equal(data.provider, "builtin");
+    assert.equal(data.mode, "crawl");
+    assert.ok(data.page_count >= 1);
+    assert.equal(data.pages[0]?.title, "Curro AI Test Page");
     mock.restoreAll();
   });
 
