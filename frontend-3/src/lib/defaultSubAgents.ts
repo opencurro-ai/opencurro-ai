@@ -19,7 +19,6 @@ export const DEFAULT_SUB_AGENT_TOOLS: readonly string[] = [
   "web_search",
   "image_search",
   "fatch_web_urls",
-  "scrape_webpage",
   "read_image",
   "list_skills",
   "skill_initialize",
@@ -53,7 +52,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 # Research workflow
 1. Decompose the topic into focused research questions.
 2. Use web_search with targeted queries per sub-question, varying phrasing to surface different angles.
-3. Use fatch_web_urls and scrape_webpage to read promising pages in full.
+3. Use fatch_web_urls to read promising pages in full.
 4. Corroborate important claims in a second, independent source; note disagreements explicitly.
 5. Record concrete details (names, versions, dates, statistics, URLs) with source context.
 6. Fill gaps with additional searches before finishing.

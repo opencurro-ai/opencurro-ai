@@ -10,7 +10,6 @@ import { bashWriteToProcessTool } from "./bashWriteToProcess.js";
 import { webSearchTool } from "./webSearch.js";
 import { imageSearchTool } from "./imagesearch.js";
 import { fetchWebUrlsTool } from "./fetchWebUrls.js";
-import { scrapeWebpageTool } from "./scrapeWebpage.js";
 import { readImageTool } from "./readImage.js";
 import { callSubAgentTool } from "./call_sub_agent.js";
 import { listSubAgentsTool } from "./list_sub_agents.js";
@@ -51,7 +50,6 @@ export {
   IMAGE_SEARCH_PROVIDER_SERPAPI,
 } from "./imagesearch.js";
 export { fetchWebUrlsTool } from "./fetchWebUrls.js";
-export { scrapeWebpageTool } from "./scrapeWebpage.js";
 export { applyMultipleEditsTool } from "./applyMultipleEdits.js";
 export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";
 export { callSubAgentTool } from "./call_sub_agent.js";
@@ -91,7 +89,6 @@ export function createToolRegistry(): ToolRegistry {
     webSearchTool,
     imageSearchTool,
     fetchWebUrlsTool,
-    scrapeWebpageTool,
     readImageTool,
     callSubAgentTool,
     listSubAgentsTool,
@@ -120,7 +117,6 @@ export const tools = {
   webSearchTool,
   imageSearchTool,
   fetchWebUrlsTool,
-  scrapeWebpageTool,
   readImageTool,
   callSubAgentTool,
   listSubAgentsTool,

@@ -42,7 +42,6 @@ const ALL_AGENT_TOOLS: readonly string[] = [
   "web_search",
   "image_search",
   "fatch_web_urls",
-  "scrape_webpage",
   "read_image",
   "call_sub_agent",
   "list_sub_agents",
