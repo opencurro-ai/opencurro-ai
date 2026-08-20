@@ -26,6 +26,7 @@ import {
   DEFAULT_SUB_AGENTS,
   mergeSubAgentsWithDefaults,
 } from "@/lib/defaultSubAgents";
+import { DEFAULT_SKILLS, mergeSkillsWithDefaults } from "@/lib/defaultSkills";
 
 interface AppState {
   // Persisted
@@ -233,7 +234,7 @@ export const useStore = create<AppState>()(
       currentId: null,
       settings: defaultSettings,
       subAgents: [...DEFAULT_SUB_AGENTS],
-      skills: [],
+      skills: [...DEFAULT_SKILLS],
       todos: [],
       customProviders: [],
 
@@ -697,7 +698,9 @@ export const useStore = create<AppState>()(
           subAgents: mergeSubAgentsWithDefaults(
             Array.isArray(p.subAgents) ? p.subAgents : current.subAgents,
           ),
-          skills: Array.isArray(p.skills) ? p.skills : current.skills,
+          skills: mergeSkillsWithDefaults(
+            Array.isArray(p.skills) ? p.skills : current.skills,
+          ),
           todos: Array.isArray(p.todos) ? p.todos : current.todos,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,
         };
