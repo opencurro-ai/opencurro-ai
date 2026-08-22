@@ -1,4 +1,4 @@
-import { Paperclip, PanelLeftOpen, Settings, Sparkles, PanelRight, ListTodo } from "lucide-react";
+import { Paperclip, PanelLeftOpen, Settings, Sparkles, PanelRight, ListTodo, Brain } from "lucide-react";
 import { useStore } from "@/store/useStore";
 
 export function TopBar({ onToggleFiles }: { onToggleFiles: () => void }) {
@@ -6,9 +6,11 @@ export function TopBar({ onToggleFiles }: { onToggleFiles: () => void }) {
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const setTodosOpen = useStore((s) => s.setTodosOpen);
+  const setMemoryOpen = useStore((s) => s.setMemoryOpen);
   const setFilesOpen = useStore((s) => s.setFilesOpen);
   const settings = useStore((s) => s.settings);
   const todos = useStore((s) => s.todos);
+  const memory = useStore((s) => s.memory);
   const attachedFiles = useStore((s) => s.attachedFiles);
 
   return (
@@ -41,6 +43,18 @@ export function TopBar({ onToggleFiles }: { onToggleFiles: () => void }) {
           {todos.length > 0 && (
             <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] font-semibold text-white">
               <span className="tabular-nums">{todos.length}</span>
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setMemoryOpen(true)}
+          className="relative flex h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-2.5 text-[var(--color-muted)] transition hover:border-[var(--color-accent)]/50 hover:text-[var(--color-fg)]"
+          title="Agent memory"
+        >
+          <Brain className="h-4 w-4" />
+          {memory.length > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] font-semibold text-white">
+              <span className="tabular-nums">{memory.length}</span>
             </span>
           )}
         </button>

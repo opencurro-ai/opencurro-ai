@@ -258,7 +258,8 @@ class MemoryRunner {
   // ---- Internal helpers ---------------------------------------------------
 
   private emit(ctx: ToolContext): void {
-    ctx.emit?.("memory_updated", { files: this.list() });
+    // `memoryFiles` (not `files`) so the SSE payload never collides with attach_files' `files`.
+    ctx.emit?.("memory_updated", { memoryFiles: this.list() });
   }
 
   private find(path: string): MemoryFile | undefined {

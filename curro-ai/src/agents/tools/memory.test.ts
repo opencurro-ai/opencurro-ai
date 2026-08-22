@@ -90,7 +90,7 @@ describe("memory tool", () => {
     );
     assert.equal(result.ok, false);
     assert.equal((result.error as { code: string }).code, "memory_char_limit_exceeded");
-    assert.equal((result.error as { over_by: number }).over_by, 1);
+    assert.equal((result.error as unknown as { over_by: number }).over_by, 1);
 
     // The file must remain unchanged (empty).
     const read = await registry.execute("memory", { operation: "memory_read", path: "SOUL.md" }, ctx);
@@ -163,7 +163,7 @@ describe("memory tool", () => {
     const result = await registry.execute("memory", { operation: "memory_read", path: "ghost.md" }, ctx);
     assert.equal(result.ok, false);
     assert.equal((result.error as { code: string }).code, "memory_not_found");
-    assert.ok(Array.isArray((result.error as { available_paths: string[] }).available_paths));
+    assert.ok(Array.isArray((result.error as unknown as { available_paths: string[] }).available_paths));
   });
 
   it("rejects path traversal", async () => {

@@ -7,6 +7,7 @@ import { FileExplorer } from "@/components/FileExplorer";
 import { SettingsModal } from "@/components/SettingsModal";
 import { SubAgentsManager } from "@/components/SubAgentsManager";
 import { SkillsManager } from "@/components/SkillsManager";
+import { MemoryManager } from "@/components/MemoryManager";
 import { TodoPanel } from "@/components/TodoPanel";
 import { PreviewPanel } from "@/components/PreviewPanel";
 import { FilesPanel } from "@/components/FilesPanel";
@@ -75,6 +76,7 @@ export function App() {
       <SettingsModal />
       <SubAgentsManager />
       <SkillsManager />
+      <MemoryManager />
       <TodoPanel />
       <FilesPanel />
       <PreviewPanel />

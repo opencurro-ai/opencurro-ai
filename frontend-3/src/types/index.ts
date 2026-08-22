@@ -245,6 +245,47 @@ export interface TodoToolResult {
   error?: { code?: string; message?: string };
 }
 
+/**
+ * A single persistent memory file, stored in the browser (localStorage) — never on the server.
+ * `path` is relative to the virtual memory root (/memory/): a bare name ("MEMORY.md") or a nested
+ * path ("projects/app.md"). The agent reads/maintains these via the `memory` tool to self-evolve
+ * across chat sessions. Three files are always pre-added and permanent: MEMORY.md, SOUL.md, USER.md.
+ */
+export interface MemoryFile {
+  path: string;
+  content: string;
+}
+
+/** Structured result streamed back for the `memory` tool (any of its five operations). */
+export interface MemoryToolResult {
+  ok?: boolean;
+  data?: {
+    // memory_list
+    count?: number;
+    files?: Array<{ path?: string; chars?: number; char_limit?: number; preadded?: boolean }>;
+    tree?: string;
+    // memory_read
+    path?: string;
+    content?: string;
+    chars?: number;
+    char_limit?: number;
+    preadded?: boolean;
+    // memory_write / memory_edit / memory_delete
+    deleted?: boolean;
+    created?: boolean;
+    message?: string;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    available_paths?: string[];
+    attempted_chars?: number;
+    char_limit?: number;
+    over_by?: number;
+    preadded_files?: string[];
+  };
+}
+
 /** One file attached to the conversation by the attach_files tool (for preview/download). */
 export interface AttachedFile {
   /** The backend-issued unique id for the attachment (used as a React key). */
@@ -332,6 +373,7 @@ export interface StreamRequest {
   sub_agents?: BackendSubAgent[];
   skills?: BackendSkill[];
   todos?: TodoItem[];
+  memory?: MemoryFile[];
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */
@@ -368,6 +410,8 @@ export interface SSEEventData {
   questions?: Array<{ question?: string; context?: string; options?: string[] }>;
   // todo_updated (TodoWrite) fields
   todos?: TodoItem[];
+  // memory_updated (memory tool) fields
+  memoryFiles?: MemoryFile[];
   // embed_url fields
   url?: string;
   // attach_files fields

@@ -31,11 +31,16 @@ import {
   ClipboardList,
   Paperclip,
   Download,
+  Brain,
+  FileEdit,
+  Trash2,
+  List,
 } from "lucide-react";
 import type {
   AttachFilesToolResult,
   AttachedFile,
   EmbedUrlToolResult,
+  MemoryToolResult,
   ReadImageToolResult,
   SubAgentRun,
   TodoToolResult,
@@ -68,6 +73,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   create_skill: Wand2,
   TodoWrite: ListTodo,
   read_todos: ClipboardList,
+  memory: Brain,
   embed_url: Link2,
   attach_files: Paperclip,
 };
@@ -258,6 +264,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "read_todos") {
     return <TodoReadChip tool={tool} />;
+  }
+  if (tool.name === "memory") {
+    return <MemoryChip tool={tool} />;
   }
   if (tool.name === "embed_url") {
     return <EmbedUrlChip tool={tool} />;
@@ -1523,6 +1532,213 @@ function TodoReadChip({ tool }: { tool: ToolActivity }) {
                 <TodoSummaryCard todos={todos} />
               )}
             </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MEMORY_OP_META: Record<
+  string,
+  { label: string; icon: React.ComponentType<{ className?: string }> }
+> = {
+  memory_list: { label: "list", icon: List },
+  memory_read: { label: "read", icon: FileText },
+  memory_write: { label: "write", icon: FilePlus2 },
+  memory_edit: { label: "edit", icon: FileEdit },
+  memory_delete: { label: "delete", icon: Trash2 },
+};
+
+function MemoryChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as MemoryToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+
+  const operation = typeof tool.args?.operation === "string" ? tool.args.operation : "";
+  const meta = MEMORY_OP_META[operation];
+  const argsPath = typeof tool.args?.path === "string" ? tool.args.path : undefined;
+
+  const files = data?.files ?? [];
+  const OpIcon = meta?.icon ?? Brain;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Brain className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {operation === "memory_list" && data?.count != null && (
+        <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+          {data.count}
+        </span>
+      )}
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <div className="space-y-1.5">
+              <p className="whitespace-pre-wrap text-red-300">
+                {error.message ?? error.code ?? "Memory operation failed"}
+              </p>
+              {error.code === "memory_char_limit_exceeded" && error.char_limit != null && (
+                <p className="text-[var(--color-muted)]">
+                  {error.attempted_chars} chars attempted · {error.char_limit} limit ·{" "}
+                  {error.over_by} over. Summarize &amp; condense the whole file, then write again.
+                </p>
+              )}
+              {error.available_paths && error.available_paths.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {error.available_paths.map((p) => (
+                    <span
+                      key={p}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-muted)]"
+                    >
+                      <FileText className="h-2.5 w-2.5" />
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <OpIcon className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                  {meta?.label ?? "memory"}
+                </span>
+                {(data?.path ?? argsPath) && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] font-mono">
+                    memory/{(data?.path ?? argsPath)!.replace(/^memory\//i, "")}
+                  </span>
+                )}
+                {data?.preadded && (
+                  <span className="rounded-full border border-[var(--color-accent)]/40 px-1.5 py-0.5 text-[10px] text-[var(--color-accent)]">
+                    core
+                  </span>
+                )}
+                {data?.chars != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    {data.chars}
+                    {data.char_limit != null ? ` / ${data.char_limit}` : ""} chars
+                  </span>
+                )}
+              </div>
+
+              {/* memory_list — file tree + per-file sizes */}
+              {operation === "memory_list" && (
+                files.length === 0 ? (
+                  <p className="text-[var(--color-muted)]">No memory files.</p>
+                ) : (
+                  <>
+                    {data?.tree && (
+                      <pre className="max-h-60 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                        {data.tree}
+                      </pre>
+                    )}
+                    <ul className="space-y-1">
+                      {files.map((f, i) => (
+                        <li
+                          key={`${f.path ?? "file"}-${i}`}
+                          className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                          <span className="min-w-0 flex-1 truncate font-mono text-[var(--color-fg)]">
+                            {f.path}
+                          </span>
+                          {f.preadded && (
+                            <span className="rounded-full border border-[var(--color-accent)]/40 px-1.5 py-0.5 text-[10px] text-[var(--color-accent)]">
+                              core
+                            </span>
+                          )}
+                          <span className="shrink-0 text-[10px] text-[var(--color-muted)]">
+                            {f.chars ?? 0}
+                            {f.char_limit != null ? `/${f.char_limit}` : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )
+              )}
+
+              {/* memory_read — the file's contents */}
+              {operation === "memory_read" && (
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                  {data?.content && data.content.length > 0 ? data.content : "(empty file)"}
+                </pre>
+              )}
+
+              {/* memory_write / memory_edit — before/after snippet from the args */}
+              {(operation === "memory_write" || operation === "memory_edit") && (
+                <>
+                  {operation === "memory_write" && typeof tool.args?.content === "string" && (
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                        Saved content
+                      </div>
+                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                        {(tool.args.content as string) || "(empty)"}
+                      </pre>
+                    </div>
+                  )}
+                  {operation === "memory_edit" && (
+                    <div className="space-y-2">
+                      <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                          Old string
+                        </div>
+                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                          {(tool.args?.old_str as string) || "(empty)"}
+                        </pre>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                          New string
+                        </div>
+                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                          {(tool.args?.new_str as string) || "(empty — deletes matched text)"}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                  {data?.message && (
+                    <p className="text-[var(--color-muted)]">{data.message}</p>
+                  )}
+                </>
+              )}
+
+              {/* memory_delete — confirmation */}
+              {operation === "memory_delete" && (
+                <p className="text-[var(--color-muted)]">
+                  {data?.message ?? `Deleted memory/${data?.path ?? argsPath ?? ""}.`}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
