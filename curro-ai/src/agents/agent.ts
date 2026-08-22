@@ -22,7 +22,8 @@ import { createSkillRuntime } from "./skills.js";
 import { mergeDefaultSkills, resolveDefaultSkills } from "./skills/index.js";
 import { resolveDefaultSubAgents, mergeDefaultSubAgents } from "./sub-agents/index.js";
 import { createTodoRuntime } from "./todos.js";
-import type { TodoItem } from "./tools/types.js";
+import { createMemoryRuntime } from "./memory.js";
+import type { MemoryFile, TodoItem } from "./tools/types.js";
 
 export interface RunAgentRequest {
   chatId: string;
@@ -48,6 +49,8 @@ export interface RunAgentRequest {
   skills?: SkillDefinition[];
   /** User-defined todos (from the frontend, stored in the browser) available this turn. */
   todos?: TodoItem[];
+  /** The user's memory files (from the frontend, stored in the browser) available this turn. */
+  memory?: MemoryFile[];
 }
 
 export class AgentRunner {
@@ -85,7 +88,21 @@ export class AgentRunner {
         return;
       }
 
-      session.messages.push({ role: "user", content: request.userMessage });
+      // Memory runtime for this turn — a browser-backed snapshot of the user's memory files that
+      // the `memory` tool reads and mutates. Present only for main-agent tool calls. The three
+      // pre-added files (MEMORY.md, SOUL.md, USER.md) are auto-appended to the user's FIRST message
+      // of a chat so the agent starts every conversation already knowing its accumulated context.
+      const memoryRuntime = createMemoryRuntime(request.memory ?? []);
+
+      // "First user input" = no prior user turn exists in this session's history. On that first
+      // message (and only then) we prepend the pre-added memory files so the model has its
+      // persistent context; later turns rely on the `memory` tool to read anything it needs.
+      const isFirstUserMessage = !session.messages.some((m) => m.role === "user");
+      const userContent = isFirstUserMessage
+        ? withFirstMessageMemory(request.userMessage, memoryRuntime.firstMessageContext())
+        : request.userMessage;
+
+      session.messages.push({ role: "user", content: userContent });
       const systemPrompt = buildSystemPrompt(this.config.workspaceRoot);
       const maxIterations = clampIterations(request.maxIterations, this.config.maxIterations);
       const visionCapable = isVisionCapableModel(request.model, this.config);
@@ -229,6 +246,7 @@ export class AgentRunner {
               subAgents: subAgentRuntime,
               skills: skillRuntime,
               todos: todoRuntime,
+              memory: memoryRuntime,
               toolCallId: toolCall.id ?? undefined,
               chatId: request.chatId,
               emit: send,
@@ -320,6 +338,16 @@ export class AgentRunner {
     }
     return built;
   }
+}
+
+/**
+ * Prepend the pre-added memory context block (MEMORY.md/SOUL.md/USER.md) to the user's first
+ * message of a chat. Returns the raw message unchanged when there is no memory context to add.
+ */
+function withFirstMessageMemory(userMessage: string, memoryContext: string): string {
+  const context = memoryContext.trim();
+  if (context.length === 0) return userMessage;
+  return `${context}\n\n${userMessage}`;
 }
 
 function clampIterations(requested: number, max: number): number {

@@ -9,6 +9,7 @@ import type {
   Conversation,
   CustomProvider,
   FetchProvider,
+  MemoryFile,
   ModelInfo,
   PlanApprovalStatus,
   ProviderMeta,
@@ -27,6 +28,12 @@ import {
   mergeSubAgentsWithDefaults,
 } from "@/lib/defaultSubAgents";
 import { DEFAULT_SKILLS, mergeSkillsWithDefaults } from "@/lib/defaultSkills";
+import {
+  DEFAULT_MEMORY_FILES,
+  canonicalMemoryPath,
+  isPreaddedMemory,
+  mergeMemoryWithDefaults,
+} from "@/lib/defaultMemory";
 
 interface AppState {
   // Persisted
@@ -36,6 +43,7 @@ interface AppState {
   subAgents: SubAgent[];
   skills: Skill[];
   todos: TodoItem[];
+  memory: MemoryFile[];
   customProviders: CustomProvider[];
 
   // Ephemeral UI
@@ -47,6 +55,7 @@ interface AppState {
   subAgentsOpen: boolean;
   skillsOpen: boolean;
   todosOpen: boolean;
+  memoryOpen: boolean;
   filesOpen: boolean;
   streaming: boolean;
   filesVersion: number;
@@ -135,6 +144,11 @@ interface AppState {
   // Actions — todo list (persisted in the browser; owned by the TodoWrite/read_todos tools)
   setTodos: (todos: TodoItem[]) => void;
 
+  // Actions — memory files (persisted in the browser; owned by the `memory` tool)
+  setMemory: (files: MemoryFile[]) => void;
+  saveMemoryFile: (path: string, content: string, originalPath?: string) => string | null;
+  deleteMemoryFile: (path: string) => void;
+
   // Actions — browser preview (embed_url) & attached files (attach_files)
   setPreview: (url: string) => void;
   setPreviewOpen: (open: boolean) => void;
@@ -164,6 +178,7 @@ interface AppState {
   setSubAgentsOpen: (v: boolean) => void;
   setSkillsOpen: (v: boolean) => void;
   setTodosOpen: (v: boolean) => void;
+  setMemoryOpen: (v: boolean) => void;
   setStreaming: (v: boolean) => void;
   bumpFiles: () => void;
 }
@@ -236,6 +251,7 @@ export const useStore = create<AppState>()(
       subAgents: [...DEFAULT_SUB_AGENTS],
       skills: [...DEFAULT_SKILLS],
       todos: [],
+      memory: DEFAULT_MEMORY_FILES.map((f) => ({ ...f })),
       customProviders: [],
 
       providers: [],
@@ -246,6 +262,7 @@ export const useStore = create<AppState>()(
       subAgentsOpen: false,
       skillsOpen: false,
       todosOpen: false,
+      memoryOpen: false,
       filesOpen: false,
       streaming: false,
       filesVersion: 0,
@@ -584,6 +601,67 @@ export const useStore = create<AppState>()(
             : s.todos,
         })),
 
+      // Replace the whole memory set (used when the `memory` tool emits memory_updated). Defends
+      // against malformed input and always keeps the three pre-added files present + first.
+      setMemory: (files) =>
+        set((s) => ({
+          memory: Array.isArray(files)
+            ? mergeMemoryWithDefaults(
+                files.filter(
+                  (f) => f && typeof f === "object" && typeof f.path === "string" && f.path.trim().length > 0,
+                ),
+              )
+            : s.memory,
+        })),
+
+      // Create or update a single memory file from the UI (Settings memory editor). Enforces
+      // unique paths (case-insensitive), canonicalizes pre-added names, and renames when
+      // originalPath differs. Returns an error string, or null on success.
+      saveMemoryFile: (path, content, originalPath) => {
+        const cleanPath = canonicalMemoryPath(path.trim().replace(/^[\\/]+/, "").replace(/\/+/g, "/"));
+        if (!cleanPath) return "A file path is required.";
+        if (/(^|\/)\.\.?(\/|$)/.test(cleanPath)) return "Path cannot contain '.' or '..' segments.";
+
+        const original = originalPath ? canonicalMemoryPath(originalPath) : "";
+        // Renaming a pre-added file is not allowed (they are permanent, fixed names).
+        if (original && isPreaddedMemory(original) && original.toLowerCase() !== cleanPath.toLowerCase()) {
+          return "The three core files (MEMORY.md, SOUL.md, USER.md) cannot be renamed.";
+        }
+
+        const clash = get().memory.some(
+          (f) =>
+            f.path.toLowerCase() === cleanPath.toLowerCase() &&
+            (!original || f.path.toLowerCase() !== original.toLowerCase()),
+        );
+        if (clash) return `A memory file named "${cleanPath}" already exists.`;
+
+        set((s) => {
+          const exists = s.memory.some(
+            (f) => f.path.toLowerCase() === (original || cleanPath).toLowerCase(),
+          );
+          const memory = exists
+            ? s.memory.map((f) =>
+                f.path.toLowerCase() === (original || cleanPath).toLowerCase()
+                  ? { path: cleanPath, content }
+                  : f,
+              )
+            : [...s.memory, { path: cleanPath, content }];
+          return { memory: mergeMemoryWithDefaults(memory) };
+        });
+        return null;
+      },
+
+      // Delete a custom memory file. Pre-added files are permanent and silently ignored.
+      deleteMemoryFile: (path) =>
+        set((s) => {
+          if (isPreaddedMemory(path)) return {};
+          return {
+            memory: mergeMemoryWithDefaults(
+              s.memory.filter((f) => f.path.toLowerCase() !== canonicalMemoryPath(path).toLowerCase()),
+            ),
+          };
+        }),
+
       addCustomProvider: (input) => {
         const now = Date.now();
         const provider: CustomProvider = {
@@ -670,6 +748,7 @@ export const useStore = create<AppState>()(
       setSubAgentsOpen: (subAgentsOpen) => set({ subAgentsOpen }),
       setSkillsOpen: (skillsOpen) => set({ skillsOpen }),
       setTodosOpen: (todosOpen) => set({ todosOpen }),
+      setMemoryOpen: (memoryOpen) => set({ memoryOpen }),
       setFilesOpen: (filesOpen) => set({ filesOpen }),
       setPreview: (url) =>
         set((s) => ({ preview: { url, open: s.preview.url !== url || s.preview.open } })),
@@ -702,6 +781,9 @@ export const useStore = create<AppState>()(
             Array.isArray(p.skills) ? p.skills : current.skills,
           ),
           todos: Array.isArray(p.todos) ? p.todos : current.todos,
+          memory: mergeMemoryWithDefaults(
+            Array.isArray(p.memory) ? p.memory : current.memory,
+          ),
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,
         };
       },
@@ -712,6 +794,7 @@ export const useStore = create<AppState>()(
         subAgents: s.subAgents,
         skills: s.skills,
         todos: s.todos,
+        memory: s.memory,
         customProviders: s.customProviders,
       }),
     },

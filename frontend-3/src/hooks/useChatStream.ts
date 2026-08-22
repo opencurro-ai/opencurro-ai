@@ -8,6 +8,7 @@ import type {
   BackendSkill,
   BackendSubAgent,
   ChatMessage,
+  MemoryFile,
   SSEEventData,
   TodoItem,
 } from "@/types";
@@ -222,6 +223,12 @@ export function useChatStream(onFilesChanged?: () => void) {
       // the authoritative task list the LLM reads/writes via the TodoWrite / read_todos tools.
       const todos: TodoItem[] = store.todos;
 
+      // Memory files live in the browser (localStorage) and travel with each turn. They are the
+      // agent's persistent, self-maintained memory read/written via the `memory` tool. The three
+      // pre-added files (MEMORY.md, SOUL.md, USER.md) are auto-loaded by the backend into the
+      // first message of a chat.
+      const memory: MemoryFile[] = store.memory;
+
       const userMsg: ChatMessage = {
         id: uid("msg"),
         role: "user",
@@ -277,6 +284,7 @@ export function useChatStream(onFilesChanged?: () => void) {
             sub_agents: subAgents,
             skills,
             todos,
+            memory,
           },
           controller.signal,
         );
@@ -408,6 +416,14 @@ export function useChatStream(onFilesChanged?: () => void) {
                   // reloads and stays in sync with the popup and future turns.
                   if (Array.isArray(data.todos)) {
                     s.setTodos(data.todos as TodoItem[]);
+                  }
+                  break;
+                }
+                case "memory_updated": {
+                  // The memory tool wrote/edited/deleted a file — persist the full current set to
+                  // the browser so it survives reloads and travels with future turns/sessions.
+                  if (Array.isArray(data.memoryFiles)) {
+                    s.setMemory(data.memoryFiles as MemoryFile[]);
                   }
                   break;
                 }

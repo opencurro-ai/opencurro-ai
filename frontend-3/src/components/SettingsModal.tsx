@@ -7,6 +7,7 @@ import {
   Globe,
   Bot,
   Blocks,
+  Brain,
   ChevronRight,
   Plus,
   Trash2,
@@ -38,6 +39,8 @@ export function SettingsModal() {
   const subAgentCount = useStore((s) => s.subAgents.length);
   const setSkillsOpen = useStore((s) => s.setSkillsOpen);
   const skillCount = useStore((s) => s.skills.length);
+  const setMemoryOpen = useStore((s) => s.setMemoryOpen);
+  const memoryCount = useStore((s) => s.memory.length);
 
   const customProviders = useStore((s) => s.customProviders);
   const updateCustomProvider = useStore((s) => s.updateCustomProvider);
@@ -525,6 +528,35 @@ export function SettingsModal() {
                     Manage skills
                     <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
                       {skillCount}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-[var(--color-muted)]" />
+                </button>
+              </div>
+
+              <div className="border-t border-[var(--color-border)] pt-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-[var(--color-accent)]" />
+                  <h3 className="text-sm font-semibold">Agent Memory</h3>
+                </div>
+                <p className="mb-3 text-xs text-[var(--color-muted)]">
+                  The agent's persistent, self-maintained memory. It reads and updates these files
+                  with its memory tool to evolve for you across chats. The three core files
+                  (MEMORY.md, SOUL.md, USER.md) auto-load at the start of every conversation. Stored
+                  only in this browser.
+                </p>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setMemoryOpen(true);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2.5 text-sm transition hover:border-[var(--color-accent)]/50"
+                >
+                  <span className="flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-[var(--color-accent)]" />
+                    Manage memory
+                    <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+                      {memoryCount}
                     </span>
                   </span>
                   <ChevronRight className="h-4 w-4 text-[var(--color-muted)]" />
