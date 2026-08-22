@@ -7,6 +7,7 @@ import type { PlanApprovalStore } from "../services/planApprovalStore.js";
 import type { QuestionStore } from "../services/questionStore.js";
 import type { SkillDefinition, SkillFileDefinition, SubAgentDefinition } from "../agents/tools/types.js";
 import { normalizeTodos } from "../agents/todos.js";
+import { normalizeMemoryFiles } from "../agents/memory.js";
 import { initSSE, formatSSE } from "../utils/sse.js";
 
 /** Extract a string field from an untrusted object (used on the custom_provider payload). */
@@ -46,6 +47,7 @@ interface StreamBody {
   sub_agents?: unknown;
   skills?: unknown;
   todos?: unknown;
+  memory?: unknown;
 }
 
 /** Defensively coerce the client-provided sub-agent definitions into safe, well-typed values. */
@@ -245,6 +247,7 @@ export function buildChatRouter(
         subAgents: normalizeSubAgents(body.sub_agents),
         skills: normalizeSkills(body.skills),
         todos: normalizeTodos(body.todos),
+        memory: normalizeMemoryFiles(body.memory),
       };
 
       // Fire-and-forget the autonomous agent loop; the response streams from the buffer.

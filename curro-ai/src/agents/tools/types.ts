@@ -125,6 +125,36 @@ export interface FailedSkill {
   error: string;
 }
 
+/**
+ * A single memory file. `path` is relative to the virtual memory root ("/memory/") — a bare name
+ * ("MEMORY.md") or a nested path ("projects/app.md"). Memory files are authored/maintained by the
+ * agent via the `memory` tool and stored in the user's browser (localStorage); they travel with
+ * each turn. Three files are always pre-added and permanent: MEMORY.md, SOUL.md, USER.md.
+ */
+export interface MemoryFile {
+  path: string;
+  content: string;
+}
+
+/**
+ * Runtime bridge injected into the ToolContext for the main agent's turn so the `memory` tool can
+ * list/read/write/edit/delete memory files. Absent from the sub-agent tool context. Every mutation
+ * emits a `memory_updated` SSE event so the frontend persists the change back to the user's browser.
+ * Each operation returns a fully structured ToolResult (including structured errors for char-limit
+ * overflows, missing files, and attempts to delete a pre-added file).
+ */
+export interface MemoryRuntime {
+  /** The current memory files received from the user's browser at turn start. */
+  readonly files: MemoryFile[];
+  /** The MEMORY.md/SOUL.md/USER.md context block appended to the user's FIRST message of a chat. */
+  firstMessageContext(): string;
+  list(): ToolResult;
+  read(path: string): ToolResult;
+  write(path: string, content: unknown, ctx: ToolContext): ToolResult;
+  edit(path: string, oldStr: unknown, newStr: unknown, ctx: ToolContext): ToolResult;
+  remove(path: string, ctx: ToolContext): ToolResult;
+}
+
 /** Status a todo can be in. */
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
@@ -229,6 +259,8 @@ export interface ToolContext {
   skills?: SkillRuntime;
   /** Todo runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
   todos?: TodoRuntime;
+  /** Memory runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  memory?: MemoryRuntime;
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
   /**

@@ -1,0 +1,462 @@
+import type { MemoryFile, MemoryRuntime, ToolContext, ToolResult } from "./tools/types.js";
+
+/**
+ * The three memory files that are always pre-added for every user and can never be deleted. Their
+ * contents are the agent's long-term self: MEMORY.md (durable facts/knowledge), SOUL.md (the
+ * agent's evolving persona/principles) and USER.md (who the user is and how they like to work).
+ * These three — and only these three — are auto-appended to the user's FIRST message of a chat so
+ * the agent starts every conversation already knowing its accumulated context.
+ */
+export const PREADDED_MEMORY_FILES = ["MEMORY.md", "SOUL.md", "USER.md"] as const;
+
+/** Per-file character limits. Pre-added files are capped; custom files have no limit. */
+export const MEMORY_CHAR_LIMITS: Readonly<Record<string, number>> = {
+  "MEMORY.md": 8000,
+  "SOUL.md": 2000,
+  "USER.md": 2000,
+};
+
+/** Virtual root every memory path lives under (used only for display/labels). */
+export const MEMORY_ROOT = "/memory/";
+
+/**
+ * Build the MemoryRuntime bound to a single main-agent turn. Injected into the ToolContext so the
+ * `memory` tool can list/read/write/edit/delete memory files. Memory lives in the user's browser
+ * (localStorage) and travels with each turn; the runtime keeps a per-turn mutable snapshot so
+ * reads/writes within the same turn stay consistent, and emits `memory_updated` on every mutation
+ * so the frontend persists the change back to the browser.
+ */
+export function createMemoryRuntime(initial: MemoryFile[]): MemoryRuntime {
+  const runner = new MemoryRunner(initial);
+  return {
+    get files(): MemoryFile[] {
+      return runner.list();
+    },
+    firstMessageContext: () => runner.firstMessageContext(),
+    list: () => runner.opList(),
+    read: (path) => runner.opRead(path),
+    write: (path, content, ctx) => runner.opWrite(path, content, ctx),
+    edit: (path, oldStr, newStr, ctx) => runner.opEdit(path, oldStr, newStr, ctx),
+    remove: (path, ctx) => runner.opDelete(path, ctx),
+  };
+}
+
+class MemoryRunner {
+  private current: MemoryFile[];
+
+  constructor(initial: MemoryFile[]) {
+    this.current = normalizeMemoryFiles(initial);
+  }
+
+  /** Immutable copy of the current memory files. */
+  list(): MemoryFile[] {
+    return this.current.map((file) => ({ ...file }));
+  }
+
+  /**
+   * The context block appended to the user's FIRST message of the conversation. Contains only the
+   * three pre-added files (MEMORY.md, SOUL.md, USER.md). Returns "" if none carry content.
+   */
+  firstMessageContext(): string {
+    const sections: string[] = [];
+    for (const name of PREADDED_MEMORY_FILES) {
+      const file = this.find(name);
+      const content = (file?.content ?? "").trim();
+      sections.push(`## ${name}\n${content.length > 0 ? content : "(empty)"}`);
+    }
+    return [
+      "<persistent_memory>",
+      "The following is your persistent, self-maintained memory for this user, loaded automatically",
+      "at the start of this conversation. Use it to personalize your help and stay consistent with",
+      "what you have already learned. As the conversation progresses, keep it accurate and useful by",
+      "calling the `memory` tool to write/edit these files (and create new ones) whenever you learn a",
+      "durable fact, preference, decision, or context worth remembering. This block is shown only",
+      "once, here at the start — later turns will not repeat it, so rely on the `memory` tool to",
+      "read anything you need again.",
+      "",
+      sections.join("\n\n"),
+      "</persistent_memory>",
+    ].join("\n");
+  }
+
+  // ---- Operations ---------------------------------------------------------
+
+  opList(): ToolResult {
+    const files = this.current.map((file) => ({
+      path: file.path,
+      chars: file.content.length,
+      char_limit: charLimitFor(file.path),
+      preadded: isPreadded(file.path),
+    }));
+    return {
+      ok: true,
+      data: {
+        count: files.length,
+        files,
+        tree: buildTree(this.current.map((f) => f.path)),
+        message:
+          "Use memory_read with an exact path to load a file's contents. MEMORY.md, SOUL.md and " +
+          "USER.md are auto-loaded on the first message of a chat; all other files must be read " +
+          "explicitly.",
+      },
+    };
+  }
+
+  opRead(rawPath: string): ToolResult {
+    const norm = normalizeMemoryPath(rawPath);
+    if (norm.error) return invalidPath(norm.error);
+    const file = this.find(norm.path);
+    if (!file) return notFound(norm.path, this.current);
+    return {
+      ok: true,
+      data: {
+        path: file.path,
+        content: file.content,
+        chars: file.content.length,
+        char_limit: charLimitFor(file.path),
+        preadded: isPreadded(file.path),
+      },
+    };
+  }
+
+  opWrite(rawPath: string, content: unknown, ctx: ToolContext): ToolResult {
+    const norm = normalizeMemoryPath(rawPath);
+    if (norm.error) return invalidPath(norm.error);
+    if (typeof content !== "string") {
+      return {
+        ok: false,
+        error: {
+          code: "memory_content_required",
+          message:
+            "memory_write requires a string `content` field containing the complete file contents.",
+        },
+      };
+    }
+
+    const canonical = canonicalPath(norm.path);
+    const limit = charLimitFor(canonical);
+    if (limit !== undefined && content.length > limit) {
+      return charLimitError(canonical, content.length, limit, "write");
+    }
+
+    this.upsert(canonical, content);
+    this.emit(ctx);
+    const existed = this.findIndex(canonical) !== -1;
+    return {
+      ok: true,
+      data: {
+        path: canonical,
+        chars: content.length,
+        char_limit: limit,
+        preadded: isPreadded(canonical),
+        created: !existed ? false : true,
+        message: `Memory file "${MEMORY_ROOT}${canonical}" saved (${content.length} chars${
+          limit !== undefined ? ` / ${limit} limit` : ""
+        }).`,
+      },
+    };
+  }
+
+  opEdit(rawPath: string, oldStr: unknown, newStr: unknown, ctx: ToolContext): ToolResult {
+    const norm = normalizeMemoryPath(rawPath);
+    if (norm.error) return invalidPath(norm.error);
+    if (typeof oldStr !== "string" || oldStr.length === 0) {
+      return {
+        ok: false,
+        error: {
+          code: "memory_old_str_required",
+          message: "memory_edit requires a non-empty `old_str` that matches text in the file exactly.",
+        },
+      };
+    }
+    const replacement = typeof newStr === "string" ? newStr : "";
+
+    const file = this.find(norm.path);
+    if (!file) return notFound(norm.path, this.current);
+
+    const occurrences = countOccurrences(file.content, oldStr);
+    if (occurrences === 0) {
+      return {
+        ok: false,
+        error: {
+          code: "memory_old_str_not_found",
+          message:
+            `The provided old_str was not found in "${MEMORY_ROOT}${file.path}". It must match the ` +
+            "existing text exactly, including whitespace and line breaks. Read the file again with " +
+            "memory_read and retry with an exact snippet.",
+        },
+      };
+    }
+    if (occurrences > 1) {
+      return {
+        ok: false,
+        error: {
+          code: "memory_old_str_not_unique",
+          message:
+            `The provided old_str appears ${occurrences} times in "${MEMORY_ROOT}${file.path}". Provide a ` +
+            "larger, unique snippet so exactly one location is replaced.",
+          occurrences,
+        },
+      };
+    }
+
+    const nextContent = file.content.replace(oldStr, replacement);
+    const limit = charLimitFor(file.path);
+    if (limit !== undefined && nextContent.length > limit) {
+      return charLimitError(file.path, nextContent.length, limit, "edit");
+    }
+
+    this.upsert(file.path, nextContent);
+    this.emit(ctx);
+    return {
+      ok: true,
+      data: {
+        path: file.path,
+        chars: nextContent.length,
+        char_limit: limit,
+        preadded: isPreadded(file.path),
+        message: `Memory file "${MEMORY_ROOT}${file.path}" edited (${nextContent.length} chars${
+          limit !== undefined ? ` / ${limit} limit` : ""
+        }).`,
+      },
+    };
+  }
+
+  opDelete(rawPath: string, ctx: ToolContext): ToolResult {
+    const norm = normalizeMemoryPath(rawPath);
+    if (norm.error) return invalidPath(norm.error);
+
+    if (isPreadded(norm.path)) {
+      return {
+        ok: false,
+        error: {
+          code: "memory_delete_forbidden",
+          message:
+            `"${MEMORY_ROOT}${canonicalPath(norm.path)}" is a pre-added core memory file and cannot be ` +
+            "deleted. These three files (MEMORY.md, SOUL.md, USER.md) are permanent. If you want to " +
+            "clear it, use memory_write with an empty or summarized content instead of deleting it.",
+          preadded_files: [...PREADDED_MEMORY_FILES],
+        },
+      };
+    }
+
+    const index = this.findIndex(norm.path);
+    if (index === -1) return notFound(norm.path, this.current);
+
+    const [removed] = this.current.splice(index, 1);
+    this.emit(ctx);
+    return {
+      ok: true,
+      data: {
+        path: removed?.path ?? norm.path,
+        deleted: true,
+        message: `Memory file "${MEMORY_ROOT}${removed?.path ?? norm.path}" deleted.`,
+      },
+    };
+  }
+
+  // ---- Internal helpers ---------------------------------------------------
+
+  private emit(ctx: ToolContext): void {
+    ctx.emit?.("memory_updated", { files: this.list() });
+  }
+
+  private find(path: string): MemoryFile | undefined {
+    const key = path.toLowerCase();
+    return this.current.find((f) => f.path.toLowerCase() === key);
+  }
+
+  private findIndex(path: string): number {
+    const key = path.toLowerCase();
+    return this.current.findIndex((f) => f.path.toLowerCase() === key);
+  }
+
+  private upsert(path: string, content: string): void {
+    const index = this.findIndex(path);
+    if (index === -1) this.current.push({ path, content });
+    else this.current[index] = { path, content };
+  }
+}
+
+// ---- Pure helpers ---------------------------------------------------------
+
+/** True when the (normalized) path is one of the three permanent pre-added files. */
+export function isPreadded(path: string): boolean {
+  const key = canonicalPath(path).toLowerCase();
+  return PREADDED_MEMORY_FILES.some((name) => name.toLowerCase() === key);
+}
+
+/** Canonicalize the case of pre-added file names (e.g. "memory.md" -> "MEMORY.md"). */
+export function canonicalPath(path: string): string {
+  const match = PREADDED_MEMORY_FILES.find((name) => name.toLowerCase() === path.toLowerCase());
+  return match ?? path;
+}
+
+/** The character limit for a path, or undefined when the file is uncapped (custom files). */
+export function charLimitFor(path: string): number | undefined {
+  return MEMORY_CHAR_LIMITS[canonicalPath(path)];
+}
+
+function countOccurrences(haystack: string, needle: string): number {
+  if (needle.length === 0) return 0;
+  let count = 0;
+  let index = haystack.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = haystack.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+/**
+ * Validate and normalize a client/LLM-supplied memory path to a clean relative path under the
+ * memory root. Accepts "MEMORY.md", "/memory/MEMORY.md", "memory/projects/a.md", etc. Rejects
+ * empty paths, "." / ".." segments (traversal), and absolute escapes.
+ */
+export function normalizeMemoryPath(raw: unknown): { path: string; error?: undefined } | { path: ""; error: string } {
+  let p = String(raw ?? "").trim().replace(/\\/g, "/");
+  if (!p) return { path: "", error: "A memory `path` is required (e.g. \"MEMORY.md\" or \"projects/app.md\")." };
+  p = p.replace(/^\.\//, "").replace(/^\/+/, "");
+  if (/^memory\//i.test(p)) p = p.slice("memory/".length);
+  p = p.replace(/^\/+/, "").replace(/\/+/g, "/").replace(/\/+$/, "");
+  if (!p) return { path: "", error: "The memory `path` cannot be empty or the memory root itself." };
+
+  const segments = p.split("/");
+  for (const seg of segments) {
+    if (seg === "" || seg === "." || seg === "..") {
+      return {
+        path: "",
+        error:
+          "Invalid memory path. Use a simple relative path under /memory/ such as \"USER.md\" or " +
+          "\"projects/app.md\" — no \"..\", \".\", or absolute segments are allowed.",
+      };
+    }
+  }
+  return { path: p };
+}
+
+/**
+ * Defensively coerce arbitrary client input into a well-typed memory file list. Non-arrays become
+ * an empty list; invalid/duplicate/traversing paths are dropped; the three pre-added files are
+ * guaranteed to be present (added empty if missing) so they always exist to read and to append to
+ * the first message. Never throws.
+ */
+export function normalizeMemoryFiles(raw: unknown): MemoryFile[] {
+  const out: MemoryFile[] = [];
+  const seen = new Set<string>();
+
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      const norm = normalizeMemoryPath(record.path);
+      if (norm.error) continue;
+      const canonical = canonicalPath(norm.path);
+      const key = canonical.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        path: canonical,
+        content: typeof record.content === "string" ? record.content : "",
+      });
+    }
+  }
+
+  // Guarantee the three permanent files always exist.
+  for (const name of PREADDED_MEMORY_FILES) {
+    if (!seen.has(name.toLowerCase())) {
+      seen.add(name.toLowerCase());
+      out.push({ path: name, content: "" });
+    }
+  }
+
+  return out;
+}
+
+/** A structured error for a path that failed validation. */
+function invalidPath(message: string): ToolResult {
+  return { ok: false, error: { code: "memory_invalid_path", message } };
+}
+
+/** A structured "file not found" error listing what IS available so the model can self-correct. */
+function notFound(path: string, files: MemoryFile[]): ToolResult {
+  return {
+    ok: false,
+    error: {
+      code: "memory_not_found",
+      message:
+        `No memory file exists at "${MEMORY_ROOT}${path}". Call memory_list to see the exact ` +
+        "available paths, then retry with one of them (or use memory_write to create it).",
+      available_paths: files.map((f) => f.path),
+    },
+  };
+}
+
+/**
+ * A structured char-limit error. Tells the model exactly how far over it is and that the correct
+ * recovery is to summarize/condense the whole file (via memory_write) rather than appending more.
+ */
+function charLimitError(
+  path: string,
+  attempted: number,
+  limit: number,
+  op: "write" | "edit",
+): ToolResult {
+  return {
+    ok: false,
+    error: {
+      code: "memory_char_limit_exceeded",
+      message:
+        `This ${op} would make "${MEMORY_ROOT}${path}" ${attempted} characters, which exceeds its ` +
+        `${limit}-character limit by ${attempted - limit}. The write was NOT applied. To fix this, ` +
+        "summarize and condense the ENTIRE file into a shorter version that includes the important " +
+        "existing information plus your new content, then call memory_write with that full " +
+        "rewritten content so the result stays within the limit. Do not simply retry the same content.",
+      path,
+      attempted_chars: attempted,
+      char_limit: limit,
+      over_by: attempted - limit,
+    },
+  };
+}
+
+/** Build a compact ASCII tree of the memory folder from a flat list of relative paths. */
+export function buildTree(paths: string[]): string {
+  interface Node {
+    children: Map<string, Node>;
+    isFile: boolean;
+  }
+  const root: Node = { children: new Map(), isFile: false };
+
+  for (const path of [...paths].sort((a, b) => a.localeCompare(b))) {
+    const segments = path.split("/");
+    let node = root;
+    segments.forEach((seg, i) => {
+      let child = node.children.get(seg);
+      if (!child) {
+        child = { children: new Map(), isFile: false };
+        node.children.set(seg, child);
+      }
+      if (i === segments.length - 1) child.isFile = true;
+      node = child;
+    });
+  }
+
+  const lines: string[] = ["memory/"];
+  const walk = (node: Node, prefix: string): void => {
+    const entries = [...node.children.entries()].sort((a, b) => {
+      const aDir = a[1].children.size > 0 || !a[1].isFile;
+      const bDir = b[1].children.size > 0 || !b[1].isFile;
+      if (aDir !== bDir) return aDir ? -1 : 1;
+      return a[0].localeCompare(b[0]);
+    });
+    entries.forEach(([name, child], i) => {
+      const last = i === entries.length - 1;
+      const isDir = child.children.size > 0;
+      lines.push(`${prefix}${last ? "└── " : "├── "}${name}${isDir ? "/" : ""}`);
+      if (isDir) walk(child, `${prefix}${last ? "    " : "│   "}`);
+    });
+  };
+  walk(root, "");
+  return lines.join("\n");
+}
