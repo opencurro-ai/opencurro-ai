@@ -256,7 +256,7 @@ export interface MemoryFile {
   content: string;
 }
 
-/** Structured result streamed back for the `memory` tool (any of its five operations). */
+/** Structured result streamed back for any of the five memory tools. */
 export interface MemoryToolResult {
   ok?: boolean;
   data?: {
@@ -270,6 +270,11 @@ export interface MemoryToolResult {
     chars?: number;
     char_limit?: number;
     preadded?: boolean;
+    line_count?: number;
+    total_lines?: number;
+    first_line?: number | null;
+    last_line?: number | null;
+    truncated?: boolean;
     // memory_write / memory_edit / memory_delete
     deleted?: boolean;
     created?: boolean;

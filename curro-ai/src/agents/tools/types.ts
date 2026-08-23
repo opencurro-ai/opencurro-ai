@@ -136,8 +136,18 @@ export interface MemoryFile {
   content: string;
 }
 
+/** Options for a memory_read call — incremental reads and optional line-number annotation. */
+export interface MemoryReadOptions {
+  /** Maximum number of lines to return. */
+  limit?: number;
+  /** 1-based line number from which reading begins. */
+  offset?: number;
+  /** When true, prefix each returned line with its line number. */
+  returnLineNumber?: boolean;
+}
+
 /**
- * Runtime bridge injected into the ToolContext for the main agent's turn so the `memory` tool can
+ * Runtime bridge injected into the ToolContext for the main agent's turn so the memory_* tools can
  * list/read/write/edit/delete memory files. Absent from the sub-agent tool context. Every mutation
  * emits a `memory_updated` SSE event so the frontend persists the change back to the user's browser.
  * Each operation returns a fully structured ToolResult (including structured errors for char-limit
@@ -149,7 +159,7 @@ export interface MemoryRuntime {
   /** The MEMORY.md/SOUL.md/USER.md context block appended to the user's FIRST message of a chat. */
   firstMessageContext(): string;
   list(): ToolResult;
-  read(path: string): ToolResult;
+  read(path: string, options?: MemoryReadOptions): ToolResult;
   write(path: string, content: unknown, ctx: ToolContext): ToolResult;
   edit(path: string, oldStr: unknown, newStr: unknown, ctx: ToolContext): ToolResult;
   remove(path: string, ctx: ToolContext): ToolResult;
