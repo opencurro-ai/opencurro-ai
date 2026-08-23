@@ -23,7 +23,8 @@ import { mergeDefaultSkills, resolveDefaultSkills } from "./skills/index.js";
 import { resolveDefaultSubAgents, mergeDefaultSubAgents } from "./sub-agents/index.js";
 import { createTodoRuntime } from "./todos.js";
 import { createMemoryRuntime } from "./memory.js";
-import type { MemoryFile, TodoItem } from "./tools/types.js";
+import { createKnowledgeRuntime } from "./knowledge.js";
+import type { KnowledgeFile, MemoryFile, TodoItem } from "./tools/types.js";
 
 export interface RunAgentRequest {
   chatId: string;
@@ -51,6 +52,8 @@ export interface RunAgentRequest {
   todos?: TodoItem[];
   /** The user's memory files (from the frontend, stored in the browser) available this turn. */
   memory?: MemoryFile[];
+  /** The user's knowledge base files (from the frontend, stored in the browser) available this turn. */
+  knowledge?: KnowledgeFile[];
 }
 
 export class AgentRunner {
@@ -94,12 +97,25 @@ export class AgentRunner {
       // of a chat so the agent starts every conversation already knowing its accumulated context.
       const memoryRuntime = createMemoryRuntime(request.memory ?? []);
 
+      // Knowledge runtime for this turn — a browser-backed snapshot of the user's knowledge base
+      // (a file-tree of durable reference material) that the knowledge_* tools read and mutate.
+      // Present only for main-agent tool calls. Unlike memory it has no pre-added files; a one-time
+      // notice is appended to the user's FIRST message ONLY when the user actually has knowledge
+      // files, telling the agent to discover/read them with the knowledge tools.
+      const knowledgeRuntime = createKnowledgeRuntime(request.knowledge ?? []);
+
       // "First user input" = no prior user turn exists in this session's history. On that first
       // message (and only then) we prepend the pre-added memory files so the model has its
-      // persistent context; later turns rely on the `memory` tool to read anything it needs.
+      // persistent context; later turns rely on the `memory` tool to read anything it needs. The
+      // knowledge-base notice is likewise appended only on this first message (and only if any
+      // knowledge files exist).
       const isFirstUserMessage = !session.messages.some((m) => m.role === "user");
       const userContent = isFirstUserMessage
-        ? withFirstMessageMemory(request.userMessage, memoryRuntime.firstMessageContext())
+        ? withFirstMessageContext(
+            request.userMessage,
+            memoryRuntime.firstMessageContext(),
+            knowledgeRuntime.firstMessageContext(),
+          )
         : request.userMessage;
 
       session.messages.push({ role: "user", content: userContent });
@@ -247,6 +263,7 @@ export class AgentRunner {
               skills: skillRuntime,
               todos: todoRuntime,
               memory: memoryRuntime,
+              knowledge: knowledgeRuntime,
               toolCallId: toolCall.id ?? undefined,
               chatId: request.chatId,
               emit: send,
@@ -341,13 +358,19 @@ export class AgentRunner {
 }
 
 /**
- * Prepend the pre-added memory context block (MEMORY.md/SOUL.md/USER.md) to the user's first
- * message of a chat. Returns the raw message unchanged when there is no memory context to add.
+ * Prepend the one-time context blocks to the user's FIRST message of a chat: the pre-added memory
+ * files (MEMORY.md/SOUL.md/USER.md), then the knowledge-base notice (only present when the user has
+ * knowledge files). Each block is added only when non-empty; the raw message is returned unchanged
+ * when there is nothing to add.
  */
-function withFirstMessageMemory(userMessage: string, memoryContext: string): string {
-  const context = memoryContext.trim();
-  if (context.length === 0) return userMessage;
-  return `${context}\n\n${userMessage}`;
+function withFirstMessageContext(
+  userMessage: string,
+  memoryContext: string,
+  knowledgeContext: string,
+): string {
+  const blocks = [memoryContext.trim(), knowledgeContext.trim()].filter((b) => b.length > 0);
+  if (blocks.length === 0) return userMessage;
+  return `${blocks.join("\n\n")}\n\n${userMessage}`;
 }
 
 function clampIterations(requested: number, max: number): number {

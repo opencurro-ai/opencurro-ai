@@ -155,6 +155,47 @@ export interface MemoryRuntime {
   remove(path: string, ctx: ToolContext): ToolResult;
 }
 
+/**
+ * A single knowledge file. `path` is relative to the virtual knowledge root ("/knowledge/") — a bare
+ * name ("docs.md") or a nested path ("api/reference.md"). Knowledge files are curated by the user
+ * (manual creation, file/folder upload, or URL fetch) and maintained by the agent via the
+ * knowledge_* tools; they are stored in the user's browser (localStorage) and travel with each turn.
+ * Unlike memory, the knowledge base has NO pre-added files and NO character limits — it starts empty.
+ */
+export interface KnowledgeFile {
+  path: string;
+  content: string;
+}
+
+/** Options for a knowledge_read call — incremental reads and optional line-number annotation. */
+export interface KnowledgeReadOptions {
+  /** Maximum number of lines to return. */
+  limit?: number;
+  /** 1-based line number from which reading begins. */
+  offset?: number;
+  /** When true, prefix each returned line with its line number. */
+  returnLineNumber?: boolean;
+}
+
+/**
+ * Runtime bridge injected into the ToolContext for the main agent's turn so the knowledge_* tools can
+ * list/read/create/edit/delete knowledge files. Absent from the sub-agent tool context. Every
+ * mutation emits a `knowledge_updated` SSE event so the frontend persists the change back to the
+ * user's browser. Each operation returns a fully structured ToolResult (including structured errors
+ * for missing files, invalid paths, duplicate creates, and non-unique edit matches).
+ */
+export interface KnowledgeRuntime {
+  /** The current knowledge files received from the user's browser at turn start (may be empty). */
+  readonly files: KnowledgeFile[];
+  /** The one-time notice appended to the user's FIRST message — only when knowledge files exist. */
+  firstMessageContext(): string;
+  list(): ToolResult;
+  read(path: string, options?: KnowledgeReadOptions): ToolResult;
+  create(path: string, content: unknown, ctx: ToolContext): ToolResult;
+  edit(path: string, oldStr: unknown, newStr: unknown, ctx: ToolContext): ToolResult;
+  remove(path: string, ctx: ToolContext): ToolResult;
+}
+
 /** Status a todo can be in. */
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
@@ -261,6 +302,8 @@ export interface ToolContext {
   todos?: TodoRuntime;
   /** Memory runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
   memory?: MemoryRuntime;
+  /** Knowledge runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  knowledge?: KnowledgeRuntime;
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
   /**
