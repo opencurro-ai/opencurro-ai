@@ -10,6 +10,7 @@ import { QuestionStore } from "./services/questionStore.js";
 import { buildChatRouter } from "./api/chat.js";
 import { buildProviderRouter } from "./api/providers.js";
 import { buildFilesRouter } from "./api/files.js";
+import { buildScrapeRouter } from "./api/scrape.js";
 
 function main(): void {
   ensureWorkspace();
@@ -44,6 +45,7 @@ function main(): void {
   app.use("/api/providers", buildProviderRouter(providers));
   app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals, askQuestions));
   app.use("/api/files", buildFilesRouter(config));
+  app.use("/api/scrape", buildScrapeRouter(config));
 
   const server = app.listen(config.port, () => {
     // eslint-disable-next-line no-console

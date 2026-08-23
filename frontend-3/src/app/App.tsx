@@ -8,6 +8,7 @@ import { SettingsModal } from "@/components/SettingsModal";
 import { SubAgentsManager } from "@/components/SubAgentsManager";
 import { SkillsManager } from "@/components/SkillsManager";
 import { MemoryManager } from "@/components/MemoryManager";
+import { KnowledgeManager } from "@/components/KnowledgeManager";
 import { TodoPanel } from "@/components/TodoPanel";
 import { PreviewPanel } from "@/components/PreviewPanel";
 import { FilesPanel } from "@/components/FilesPanel";
@@ -77,6 +78,7 @@ export function App() {
       <SubAgentsManager />
       <SkillsManager />
       <MemoryManager />
+      <KnowledgeManager />
       <TodoPanel />
       <FilesPanel />
       <PreviewPanel />

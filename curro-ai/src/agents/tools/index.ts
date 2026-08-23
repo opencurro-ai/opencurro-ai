@@ -22,6 +22,11 @@ import { createSkillTool } from "./createskill.js";
 import { todoWriteTool } from "./todowrite.js";
 import { readTodosTool } from "./todoread.js";
 import { memoryTool } from "./memory.js";
+import { knowledgeListTool } from "./knowledge_list.js";
+import { knowledgeReadTool } from "./knowledge_read.js";
+import { knowledgeCreateTool } from "./knowledge_create.js";
+import { knowledgeEditTool } from "./knowledge_edit.js";
+import { knowledgeDeleteTool } from "./knowledge_delete.js";
 import { embedUrlTool } from "./embedUrl.js";
 import { attachFilesTool } from "./attachFiles.js";
 
@@ -41,6 +46,9 @@ export type {
   TodoRuntime,
   MemoryFile,
   MemoryRuntime,
+  KnowledgeFile,
+  KnowledgeRuntime,
+  KnowledgeReadOptions,
 } from "./types.js";
 export { defineTool } from "./types.js";
 export { webSearchTool, SEARCH_PROVIDERS } from "./webSearch.js";
@@ -64,6 +72,11 @@ export { createSkillTool } from "./createskill.js";
 export { todoWriteTool } from "./todowrite.js";
 export { readTodosTool } from "./todoread.js";
 export { memoryTool, MEMORY_OPERATIONS } from "./memory.js";
+export { knowledgeListTool } from "./knowledge_list.js";
+export { knowledgeReadTool } from "./knowledge_read.js";
+export { knowledgeCreateTool } from "./knowledge_create.js";
+export { knowledgeEditTool } from "./knowledge_edit.js";
+export { knowledgeDeleteTool } from "./knowledge_delete.js";
 export { submitPlanTool } from "./submit_plan.js";
 export { askUserTool, ASK_ANSWERED, ASK_TIMEOUT } from "./askuser.js";
 export { embedUrlTool } from "./embedUrl.js";
@@ -105,6 +118,11 @@ export function createToolRegistry(): ToolRegistry {
     todoWriteTool,
     readTodosTool,
     memoryTool,
+    knowledgeListTool,
+    knowledgeReadTool,
+    knowledgeCreateTool,
+    knowledgeEditTool,
+    knowledgeDeleteTool,
     embedUrlTool,
     attachFilesTool,
   ]);
@@ -134,6 +152,11 @@ export const tools = {
   todoWriteTool,
   readTodosTool,
   memoryTool,
+  knowledgeListTool,
+  knowledgeReadTool,
+  knowledgeCreateTool,
+  knowledgeEditTool,
+  knowledgeDeleteTool,
   embedUrlTool,
   attachFilesTool,
 };

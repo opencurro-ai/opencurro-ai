@@ -286,6 +286,77 @@ export interface MemoryToolResult {
   };
 }
 
+/**
+ * A single persistent knowledge file, stored in the browser (localStorage) — never on the server.
+ * `path` is relative to the virtual knowledge root (knowledge/): a bare name ("docs.md") or a nested
+ * path ("api/reference.md"). The user curates the knowledge base (manual creation, file/folder
+ * upload, or URL fetch); the agent reads/maintains it via the knowledge_* tools. Unlike memory, the
+ * knowledge base has NO pre-added files and NO character limits — it starts empty.
+ */
+export interface KnowledgeFile {
+  path: string;
+  content: string;
+}
+
+/**
+ * Where a knowledge file was fetched from (the URL method). Persisted per-path so reopening a
+ * URL-sourced file offers a "Refetch" action that re-runs the same request and refreshes its content.
+ */
+export interface KnowledgeSource {
+  /** The fetched URL (empty when the source was a pasted curl command). */
+  url: string;
+  format?: "markdown" | "text" | "json" | "autodetect";
+  headers?: Array<{ key: string; value: string }>;
+  apiKey?: string;
+  /** Original pasted curl command, when the fetch was curl-based. */
+  curl?: string;
+  /** Epoch ms of the last successful fetch. */
+  fetchedAt: number;
+}
+
+/** Structured result streamed back for any of the five knowledge tools. */
+export interface KnowledgeToolResult {
+  ok?: boolean;
+  data?: {
+    // knowledge_list
+    count?: number;
+    files?: Array<{ path?: string; chars?: number; lines?: number }>;
+    tree?: string;
+    // knowledge_read
+    path?: string;
+    content?: string;
+    chars?: number;
+    line_count?: number;
+    total_lines?: number;
+    first_line?: number | null;
+    last_line?: number | null;
+    truncated?: boolean;
+    // knowledge_create / knowledge_edit / knowledge_delete
+    created?: boolean;
+    deleted?: boolean;
+    message?: string;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    available_paths?: string[];
+    occurrences?: number;
+    path?: string;
+  };
+}
+
+/** Result returned by the URL → knowledge fetch endpoint (POST /api/scrape). */
+export interface ScrapeResult {
+  ok?: boolean;
+  url: string;
+  status: number;
+  format: string;
+  title: string;
+  description: string;
+  content: string;
+  content_type: string;
+}
+
 /** One file attached to the conversation by the attach_files tool (for preview/download). */
 export interface AttachedFile {
   /** The backend-issued unique id for the attachment (used as a React key). */
@@ -374,6 +445,7 @@ export interface StreamRequest {
   skills?: BackendSkill[];
   todos?: TodoItem[];
   memory?: MemoryFile[];
+  knowledge?: KnowledgeFile[];
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */
@@ -412,6 +484,8 @@ export interface SSEEventData {
   todos?: TodoItem[];
   // memory_updated (memory tool) fields
   memoryFiles?: MemoryFile[];
+  // knowledge_updated (knowledge tools) fields
+  knowledgeFiles?: KnowledgeFile[];
   // embed_url fields
   url?: string;
   // attach_files fields

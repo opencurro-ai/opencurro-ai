@@ -35,11 +35,13 @@ import {
   FileEdit,
   Trash2,
   List,
+  Library,
 } from "lucide-react";
 import type {
   AttachFilesToolResult,
   AttachedFile,
   EmbedUrlToolResult,
+  KnowledgeToolResult,
   MemoryToolResult,
   ReadImageToolResult,
   SubAgentRun,
@@ -74,6 +76,11 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   TodoWrite: ListTodo,
   read_todos: ClipboardList,
   memory: Brain,
+  knowledge_list: Library,
+  knowledge_read: FileText,
+  knowledge_create: FilePlus2,
+  knowledge_edit: FileEdit,
+  knowledge_delete: Trash2,
   embed_url: Link2,
   attach_files: Paperclip,
 };
@@ -267,6 +274,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "memory") {
     return <MemoryChip tool={tool} />;
+  }
+  if (KNOWLEDGE_TOOLS.has(tool.name)) {
+    return <KnowledgeChip tool={tool} />;
   }
   if (tool.name === "embed_url") {
     return <EmbedUrlChip tool={tool} />;
@@ -1738,6 +1748,205 @@ function MemoryChip({ tool }: { tool: ToolActivity }) {
                   {data?.message ?? `Deleted memory/${data?.path ?? argsPath ?? ""}.`}
                 </p>
               )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const KNOWLEDGE_TOOLS = new Set([
+  "knowledge_list",
+  "knowledge_read",
+  "knowledge_create",
+  "knowledge_edit",
+  "knowledge_delete",
+]);
+
+const KNOWLEDGE_OP_META: Record<
+  string,
+  { label: string; icon: React.ComponentType<{ className?: string }> }
+> = {
+  knowledge_list: { label: "list", icon: List },
+  knowledge_read: { label: "read", icon: FileText },
+  knowledge_create: { label: "create", icon: FilePlus2 },
+  knowledge_edit: { label: "edit", icon: FileEdit },
+  knowledge_delete: { label: "delete", icon: Trash2 },
+};
+
+/**
+ * Renders any of the five knowledge tools as a chip with a drop-down showing the operation output:
+ * the file tree + sizes (list), the file contents (read), the created/saved content (create), the
+ * old/new strings (edit), or a deletion confirmation (delete). Mirrors MemoryChip.
+ */
+function KnowledgeChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const result = tool.result as KnowledgeToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+
+  const operation = tool.name;
+  const meta = KNOWLEDGE_OP_META[operation];
+  const argsPath =
+    typeof tool.args?.knowledge_path === "string" ? tool.args.knowledge_path : undefined;
+  const files = data?.files ?? [];
+  const OpIcon = meta?.icon ?? Library;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Library className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {operation === "knowledge_list" && data?.count != null && (
+        <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+          {data.count}
+        </span>
+      )}
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <div className="space-y-1.5">
+              <p className="whitespace-pre-wrap text-red-300">
+                {error.message ?? error.code ?? "Knowledge operation failed"}
+              </p>
+              {error.available_paths && error.available_paths.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {error.available_paths.map((p) => (
+                    <span
+                      key={p}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-muted)]"
+                    >
+                      <FileText className="h-2.5 w-2.5" />
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <OpIcon className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                  {meta?.label ?? "knowledge"}
+                </span>
+                {(data?.path ?? argsPath) && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] font-mono">
+                    knowledge/{(data?.path ?? argsPath)!.replace(/^knowledge\//i, "")}
+                  </span>
+                )}
+                {data?.chars != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    {data.chars} chars
+                  </span>
+                )}
+                {data?.total_lines != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    {data.total_lines} lines
+                  </span>
+                )}
+              </div>
+
+              {/* knowledge_list — file tree + per-file sizes */}
+              {operation === "knowledge_list" &&
+                (files.length === 0 ? (
+                  <p className="text-[var(--color-muted)]">The knowledge base is empty.</p>
+                ) : (
+                  <>
+                    {data?.tree && (
+                      <pre className="max-h-60 overflow-auto whitespace-pre rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                        {data.tree}
+                      </pre>
+                    )}
+                    <ul className="space-y-1">
+                      {files.map((f, i) => (
+                        <li
+                          key={`${f.path ?? "file"}-${i}`}
+                          className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                          <span className="min-w-0 flex-1 truncate font-mono text-[var(--color-fg)]">
+                            {f.path}
+                          </span>
+                          <span className="shrink-0 text-[10px] text-[var(--color-muted)]">
+                            {f.chars ?? 0} chars
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ))}
+
+              {/* knowledge_read — the file's contents */}
+              {operation === "knowledge_read" && (
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                  {data?.content && data.content.length > 0 ? data.content : "(empty file)"}
+                </pre>
+              )}
+
+              {/* knowledge_create — the saved content */}
+              {operation === "knowledge_create" && typeof tool.args?.content === "string" && (
+                <div>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                    Created content
+                  </div>
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                    {(tool.args.content as string) || "(empty)"}
+                  </pre>
+                </div>
+              )}
+
+              {/* knowledge_edit — before/after strings */}
+              {operation === "knowledge_edit" && (
+                <div className="space-y-2">
+                  <div>
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                      Old string
+                    </div>
+                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                      {(tool.args?.old_str as string) || "(empty)"}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                      New string
+                    </div>
+                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                      {(tool.args?.new_str as string) || "(empty — deletes matched text)"}
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+              {/* create / edit / delete — trailing message */}
+              {operation !== "knowledge_list" &&
+                operation !== "knowledge_read" &&
+                data?.message && <p className="text-[var(--color-muted)]">{data.message}</p>}
             </div>
           )}
         </div>
