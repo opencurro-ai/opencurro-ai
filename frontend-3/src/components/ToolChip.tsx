@@ -36,6 +36,8 @@ import {
   Trash2,
   List,
   Library,
+  Search,
+  Hash,
 } from "lucide-react";
 import type {
   AttachFilesToolResult,
@@ -44,6 +46,7 @@ import type {
   KnowledgeToolResult,
   MemoryToolResult,
   ReadImageToolResult,
+  SearchLocatorToolResult,
   SubAgentRun,
   TodoToolResult,
   ToolActivity,
@@ -76,6 +79,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   TodoWrite: ListTodo,
   read_todos: ClipboardList,
   memory: Brain,
+  memory_search: Search,
+  knowledge_search: Search,
   knowledge_list: Library,
   knowledge_read: FileText,
   knowledge_create: FilePlus2,
@@ -271,6 +276,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   }
   if (tool.name === "read_todos") {
     return <TodoReadChip tool={tool} />;
+  }
+  if (tool.name === "memory_search" || tool.name === "knowledge_search") {
+    return <SearchLocatorChip tool={tool} />;
   }
   if (MEMORY_TOOLS.has(tool.name)) {
     return <MemoryChip tool={tool} />;
@@ -1543,6 +1551,184 @@ function TodoReadChip({ tool }: { tool: ToolActivity }) {
               )}
             </>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SEARCH_LOCATOR_META: Record<
+  string,
+  { label: string; scope: "memory" | "knowledge" }
+> = {
+  memory_search: { label: "memory search", scope: "memory" },
+  knowledge_search: { label: "knowledge search", scope: "knowledge" },
+};
+
+/**
+ * Renders the memory_search / knowledge_search tools. The body shows each matched file path with the
+ * 1-based line numbers where the query was found (locations only — no file contents), and two
+ * collapsible sections expose the raw tool call (arguments) and the raw tool result (JSON) so the
+ * user can inspect exactly what the LLM sent and received.
+ */
+function SearchLocatorChip({ tool }: { tool: ToolActivity }) {
+  const [open, setOpen] = useState(false);
+  const [showRawCall, setShowRawCall] = useState(false);
+  const [showRawResult, setShowRawResult] = useState(false);
+  const result = tool.result as SearchLocatorToolResult | undefined;
+  const hasResult = tool.status !== "running" && Boolean(result);
+  const data = result?.ok ? result.data : undefined;
+  const error = result && !result.ok ? result.error : undefined;
+
+  const meta = SEARCH_LOCATOR_META[tool.name] ?? { label: "search", scope: "memory" as const };
+  const query =
+    (typeof data?.query === "string" && data.query) ||
+    (typeof tool.args?.query === "string" ? (tool.args.query as string) : "");
+  const results = data?.results ?? [];
+  const resultCount = data?.result_count ?? results.length;
+  const matchCount = data?.match_count;
+
+  const chip = (
+    <button
+      type="button"
+      disabled={!hasResult}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={hasResult ? open : undefined}
+      className={chipClasses(tool.status, hasResult)}
+      title={tool.label}
+    >
+      <Search className="h-3.5 w-3.5 opacity-80" />
+      <span className="max-w-[280px] truncate font-medium">{tool.label}</span>
+      {hasResult && !error && (
+        <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+          {resultCount} file{resultCount === 1 ? "" : "s"}
+        </span>
+      )}
+      {hasResult && (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      )}
+      <StatusIcon status={tool.status} />
+    </button>
+  );
+
+  if (!hasResult) return chip;
+
+  return (
+    <div className="w-full">
+      {chip}
+      {open && (
+        <div className="mt-1.5 w-full space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 p-3 text-xs fade-in">
+          {error ? (
+            <p className="whitespace-pre-wrap text-red-300">
+              {error.message ?? error.code ?? "Search failed"}
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--color-muted)]">
+                <span className="flex items-center gap-1 font-medium text-[var(--color-fg)]">
+                  <Search className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                  {meta.label}
+                </span>
+                {query && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] font-mono">
+                    “{query}”
+                  </span>
+                )}
+                <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                  {resultCount} file{resultCount === 1 ? "" : "s"}
+                </span>
+                {matchCount != null && (
+                  <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px]">
+                    {matchCount} line{matchCount === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+
+              {results.length === 0 ? (
+                <p className="text-[var(--color-muted)]">No matches found.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {results.map((r, i) => (
+                    <li
+                      key={`${r.path ?? "file"}-${i}`}
+                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
+                        <span className="min-w-0 flex-1 truncate font-mono text-[var(--color-fg)]">
+                          {r.path}
+                        </span>
+                        <span className="shrink-0 text-[10px] text-[var(--color-muted)]">
+                          {(r.lines?.length ?? 0)} match{(r.lines?.length ?? 0) === 1 ? "" : "es"}
+                        </span>
+                      </div>
+                      {r.lines && r.lines.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {r.lines.map((line, j) => (
+                            <span
+                              key={`${line}-${j}`}
+                              className="inline-flex items-center gap-0.5 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-muted)]"
+                              title={`Line ${line}`}
+                            >
+                              <Hash className="h-2.5 w-2.5" />
+                              {line}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+
+          {/* Raw tool call — exactly what the LLM sent */}
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60">
+            <button
+              type="button"
+              onClick={() => setShowRawCall((v) => !v)}
+              aria-expanded={showRawCall}
+              className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+            >
+              <Braces className="h-3 w-3" />
+              Raw tool call
+              <ChevronRight
+                className={cn("h-3.5 w-3.5 transition-transform", showRawCall && "rotate-90")}
+              />
+            </button>
+            {showRawCall && (
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-b-lg border-t border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                {JSON.stringify({ tool: tool.name, arguments: tool.args ?? {} }, null, 2)}
+              </pre>
+            )}
+          </div>
+
+          {/* Raw tool result — exactly what the tool returned to the LLM */}
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev)]/60">
+            <button
+              type="button"
+              onClick={() => setShowRawResult((v) => !v)}
+              aria-expanded={showRawResult}
+              className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+            >
+              <Braces className="h-3 w-3" />
+              Raw tool result
+              <ChevronRight
+                className={cn("h-3.5 w-3.5 transition-transform", showRawResult && "rotate-90")}
+              />
+            </button>
+            {showRawResult && (
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-b-lg border-t border-[var(--color-border)] bg-[var(--color-bg-elev2)]/60 p-2 font-mono text-[11px] leading-relaxed text-[var(--color-fg)]">
+                {JSON.stringify(tool.result ?? {}, null, 2)}
+              </pre>
+            )}
+          </div>
         </div>
       )}
     </div>

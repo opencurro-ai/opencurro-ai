@@ -159,6 +159,8 @@ export interface MemoryRuntime {
   /** The MEMORY.md/SOUL.md/USER.md context block appended to the user's FIRST message of a chat. */
   firstMessageContext(): string;
   list(): ToolResult;
+  /** Full-text search across all memory files; returns matching paths + 1-based line numbers only. */
+  search(query: string): ToolResult;
   read(path: string, options?: MemoryReadOptions): ToolResult;
   write(path: string, content: unknown, ctx: ToolContext): ToolResult;
   edit(path: string, oldStr: unknown, newStr: unknown, ctx: ToolContext): ToolResult;
@@ -200,6 +202,8 @@ export interface KnowledgeRuntime {
   /** The one-time notice appended to the user's FIRST message — only when knowledge files exist. */
   firstMessageContext(): string;
   list(): ToolResult;
+  /** Full-text search across all knowledge files; returns matching paths + 1-based line numbers only. */
+  search(query: string): ToolResult;
   read(path: string, options?: KnowledgeReadOptions): ToolResult;
   create(path: string, content: unknown, ctx: ToolContext): ToolResult;
   edit(path: string, oldStr: unknown, newStr: unknown, ctx: ToolContext): ToolResult;
