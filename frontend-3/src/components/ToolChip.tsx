@@ -272,7 +272,7 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   if (tool.name === "read_todos") {
     return <TodoReadChip tool={tool} />;
   }
-  if (tool.name === "memory") {
+  if (MEMORY_TOOLS.has(tool.name)) {
     return <MemoryChip tool={tool} />;
   }
   if (KNOWLEDGE_TOOLS.has(tool.name)) {
@@ -1549,6 +1549,14 @@ function TodoReadChip({ tool }: { tool: ToolActivity }) {
   );
 }
 
+const MEMORY_TOOLS = new Set([
+  "memory_list",
+  "memory_read",
+  "memory_write",
+  "memory_edit",
+  "memory_delete",
+]);
+
 const MEMORY_OP_META: Record<
   string,
   { label: string; icon: React.ComponentType<{ className?: string }> }
@@ -1560,6 +1568,11 @@ const MEMORY_OP_META: Record<
   memory_delete: { label: "delete", icon: Trash2 },
 };
 
+/**
+ * Renders any of the five memory tools as a chip with a drop-down showing the operation output: the
+ * file tree + sizes/limits (list), the file contents (read), the saved content (write), the old/new
+ * strings (edit), or a deletion confirmation (delete). The operation is derived from the tool name.
+ */
 function MemoryChip({ tool }: { tool: ToolActivity }) {
   const [open, setOpen] = useState(false);
   const result = tool.result as MemoryToolResult | undefined;
@@ -1567,7 +1580,7 @@ function MemoryChip({ tool }: { tool: ToolActivity }) {
   const data = result?.ok ? result.data : undefined;
   const error = result && !result.ok ? result.error : undefined;
 
-  const operation = typeof tool.args?.operation === "string" ? tool.args.operation : "";
+  const operation = tool.name;
   const meta = MEMORY_OP_META[operation];
   const argsPath = typeof tool.args?.path === "string" ? tool.args.path : undefined;
 

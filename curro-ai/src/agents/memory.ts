@@ -1,4 +1,10 @@
-import type { MemoryFile, MemoryRuntime, ToolContext, ToolResult } from "./tools/types.js";
+import type {
+  MemoryFile,
+  MemoryReadOptions,
+  MemoryRuntime,
+  ToolContext,
+  ToolResult,
+} from "./tools/types.js";
 
 /**
  * The three memory files that are always pre-added for every user and can never be deleted. Their
@@ -34,7 +40,7 @@ export function createMemoryRuntime(initial: MemoryFile[]): MemoryRuntime {
     },
     firstMessageContext: () => runner.firstMessageContext(),
     list: () => runner.opList(),
-    read: (path) => runner.opRead(path),
+    read: (path, options) => runner.opRead(path, options),
     write: (path, content, ctx) => runner.opWrite(path, content, ctx),
     edit: (path, oldStr, newStr, ctx) => runner.opEdit(path, oldStr, newStr, ctx),
     remove: (path, ctx) => runner.opDelete(path, ctx),
@@ -102,19 +108,47 @@ class MemoryRunner {
     };
   }
 
-  opRead(rawPath: string): ToolResult {
+  opRead(rawPath: string, options?: MemoryReadOptions): ToolResult {
     const norm = normalizeMemoryPath(rawPath);
     if (norm.error) return invalidPath(norm.error);
     const file = this.find(norm.path);
     if (!file) return notFound(norm.path, this.current);
+
+    const allLines = file.content.split("\n");
+    const totalLines = allLines.length;
+
+    // 1-based offset; default to the first line. Clamp defensively.
+    const offset =
+      typeof options?.offset === "number" && Number.isFinite(options.offset)
+        ? Math.max(1, Math.floor(options.offset))
+        : 1;
+    const startIndex = Math.min(offset - 1, totalLines);
+
+    const limit =
+      typeof options?.limit === "number" && Number.isFinite(options.limit) && options.limit > 0
+        ? Math.floor(options.limit)
+        : undefined;
+    const endIndex = limit !== undefined ? Math.min(startIndex + limit, totalLines) : totalLines;
+
+    const slice = allLines.slice(startIndex, endIndex);
+    const returnLineNumber = options?.returnLineNumber === true;
+    const content = returnLineNumber
+      ? slice.map((line, i) => `${startIndex + i + 1}\t${line}`).join("\n")
+      : slice.join("\n");
+
     return {
       ok: true,
       data: {
         path: file.path,
-        content: file.content,
+        content,
         chars: file.content.length,
         char_limit: charLimitFor(file.path),
         preadded: isPreadded(file.path),
+        line_count: slice.length,
+        total_lines: totalLines,
+        first_line: slice.length > 0 ? startIndex + 1 : null,
+        last_line: slice.length > 0 ? startIndex + slice.length : null,
+        truncated: endIndex < totalLines || startIndex > 0,
       },
     };
   }
