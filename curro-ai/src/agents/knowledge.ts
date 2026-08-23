@@ -28,6 +28,7 @@ export function createKnowledgeRuntime(initial: KnowledgeFile[]): KnowledgeRunti
     },
     firstMessageContext: () => runner.firstMessageContext(),
     list: () => runner.opList(),
+    search: (query) => runner.opSearch(query),
     read: (path, options) => runner.opRead(path, options),
     create: (path, content, ctx) => runner.opCreate(path, content, ctx),
     edit: (path, oldStr, newStr, ctx) => runner.opEdit(path, oldStr, newStr, ctx),
@@ -100,6 +101,50 @@ class KnowledgeRunner {
           files.length === 0
             ? "The knowledge base is empty. Use knowledge_create to add a new knowledge file."
             : "Use knowledge_read with an exact path to load a file's contents.",
+      },
+    };
+  }
+
+  /**
+   * knowledge_search — scan every knowledge file for the natural-language query and return ONLY the
+   * matching file paths together with the 1-based line numbers where the query was found. It never
+   * returns file contents — just locations — so the agent can then knowledge_read the exact spots.
+   */
+  opSearch(rawQuery: unknown): ToolResult {
+    const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
+    if (query.length === 0) {
+      return {
+        ok: false,
+        error: {
+          code: "knowledge_search_query_required",
+          message: "knowledge_search requires a non-empty natural-language `query` string.",
+        },
+      };
+    }
+
+    const { terms, phrase } = parseSearchQuery(query);
+    const results: Array<{ path: string; lines: number[] }> = [];
+    let matchCount = 0;
+    for (const file of this.current) {
+      const lines = findMatchingLines(file.content, terms, phrase);
+      if (lines.length > 0) {
+        results.push({ path: `${KNOWLEDGE_ROOT}${file.path}`, lines });
+        matchCount += lines.length;
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        query,
+        result_count: results.length,
+        match_count: matchCount,
+        results,
+        message:
+          results.length === 0
+            ? "No knowledge files matched the query. Try knowledge_list to browse, or a broader query."
+            : "Each result lists the file path and the 1-based line numbers where the query was found. " +
+              "Use knowledge_read with a path (and offset/limit around those lines) to load the content.",
       },
     };
   }
@@ -294,6 +339,46 @@ class KnowledgeRunner {
 function countLines(content: string): number {
   if (content.length === 0) return 0;
   return content.split("\n").length;
+}
+
+/**
+ * Parse a natural-language search query into a case-insensitive full `phrase` plus its individual
+ * `terms` (tokens of 2+ chars, deduped). A line matches if it contains the whole phrase OR any term,
+ * which keeps single-word, multi-word, and partial-word queries all working. Exported for testing.
+ */
+export function parseSearchQuery(query: string): { terms: string[]; phrase: string } {
+  const phrase = query.trim().toLowerCase();
+  const terms = Array.from(
+    new Set(phrase.split(/[^\p{L}\p{N}_]+/u).filter((t) => t.length >= 2)),
+  );
+  return { terms, phrase };
+}
+
+/**
+ * Return the sorted, 1-based line numbers of every line in `content` that matches the query (either
+ * the full phrase or any single term, case-insensitively). Blank lines are skipped. Exported so both
+ * the knowledge_search runtime and its tests share one matcher.
+ */
+export function findMatchingLines(content: string, terms: string[], phrase: string): number[] {
+  const lines = content.split("\n");
+  const out: number[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const lower = lines[i].toLowerCase();
+    if (lower.length === 0) continue;
+    let matched = false;
+    if (phrase.length > 0 && lower.includes(phrase)) {
+      matched = true;
+    } else {
+      for (const term of terms) {
+        if (lower.includes(term)) {
+          matched = true;
+          break;
+        }
+      }
+    }
+    if (matched) out.push(i + 1);
+  }
+  return out;
 }
 
 function countOccurrences(haystack: string, needle: string): number {

@@ -22,11 +22,13 @@ import { createSkillTool } from "./createskill.js";
 import { todoWriteTool } from "./todowrite.js";
 import { readTodosTool } from "./todoread.js";
 import { memoryListTool } from "./memory_list.js";
+import { memorySearchTool } from "./memory_search.js";
 import { memoryReadTool } from "./memory_read.js";
 import { memoryWriteTool } from "./memory_write.js";
 import { memoryEditTool } from "./memory_edit.js";
 import { memoryDeleteTool } from "./memory_delete.js";
 import { knowledgeListTool } from "./knowledge_list.js";
+import { knowledgeSearchTool } from "./knowledge_search.js";
 import { knowledgeReadTool } from "./knowledge_read.js";
 import { knowledgeCreateTool } from "./knowledge_create.js";
 import { knowledgeEditTool } from "./knowledge_edit.js";
@@ -76,11 +78,13 @@ export { createSkillTool } from "./createskill.js";
 export { todoWriteTool } from "./todowrite.js";
 export { readTodosTool } from "./todoread.js";
 export { memoryListTool, requireMemory, memoryFailure } from "./memory_list.js";
+export { memorySearchTool } from "./memory_search.js";
 export { memoryReadTool } from "./memory_read.js";
 export { memoryWriteTool } from "./memory_write.js";
 export { memoryEditTool } from "./memory_edit.js";
 export { memoryDeleteTool } from "./memory_delete.js";
 export { knowledgeListTool } from "./knowledge_list.js";
+export { knowledgeSearchTool } from "./knowledge_search.js";
 export { knowledgeReadTool } from "./knowledge_read.js";
 export { knowledgeCreateTool } from "./knowledge_create.js";
 export { knowledgeEditTool } from "./knowledge_edit.js";
@@ -126,11 +130,13 @@ export function createToolRegistry(): ToolRegistry {
     todoWriteTool,
     readTodosTool,
     memoryListTool,
+    memorySearchTool,
     memoryReadTool,
     memoryWriteTool,
     memoryEditTool,
     memoryDeleteTool,
     knowledgeListTool,
+    knowledgeSearchTool,
     knowledgeReadTool,
     knowledgeCreateTool,
     knowledgeEditTool,
@@ -164,11 +170,13 @@ export const tools = {
   todoWriteTool,
   readTodosTool,
   memoryListTool,
+  memorySearchTool,
   memoryReadTool,
   memoryWriteTool,
   memoryEditTool,
   memoryDeleteTool,
   knowledgeListTool,
+  knowledgeSearchTool,
   knowledgeReadTool,
   knowledgeCreateTool,
   knowledgeEditTool,

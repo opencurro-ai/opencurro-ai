@@ -350,6 +350,23 @@ export interface KnowledgeToolResult {
   };
 }
 
+/**
+ * Structured result streamed back for the memory_search / knowledge_search tools. Each result is a
+ * matched file path plus the 1-based line numbers where the natural-language query was found — no
+ * file contents are returned, only locations.
+ */
+export interface SearchLocatorToolResult {
+  ok?: boolean;
+  data?: {
+    query?: string;
+    result_count?: number;
+    match_count?: number;
+    results?: Array<{ path?: string; lines?: number[] }>;
+    message?: string;
+  };
+  error?: { code?: string; message?: string };
+}
+
 /** Result returned by the URL → knowledge fetch endpoint (POST /api/scrape). */
 export interface ScrapeResult {
   ok?: boolean;
