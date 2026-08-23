@@ -8,6 +8,7 @@ import type {
   BackendSkill,
   BackendSubAgent,
   ChatMessage,
+  KnowledgeFile,
   MemoryFile,
   SSEEventData,
   TodoItem,
@@ -229,6 +230,11 @@ export function useChatStream(onFilesChanged?: () => void) {
       // first message of a chat.
       const memory: MemoryFile[] = store.memory;
 
+      // Knowledge base files also live in the browser (localStorage) and travel with each turn. They
+      // are the agent's curated reference material read/written via the knowledge_* tools. When any
+      // exist, the backend appends a one-time notice to the first message of a chat.
+      const knowledge: KnowledgeFile[] = store.knowledge;
+
       const userMsg: ChatMessage = {
         id: uid("msg"),
         role: "user",
@@ -285,6 +291,7 @@ export function useChatStream(onFilesChanged?: () => void) {
             skills,
             todos,
             memory,
+            knowledge,
           },
           controller.signal,
         );
@@ -424,6 +431,14 @@ export function useChatStream(onFilesChanged?: () => void) {
                   // the browser so it survives reloads and travels with future turns/sessions.
                   if (Array.isArray(data.memoryFiles)) {
                     s.setMemory(data.memoryFiles as MemoryFile[]);
+                  }
+                  break;
+                }
+                case "knowledge_updated": {
+                  // A knowledge tool created/edited/deleted a file — persist the full current set to
+                  // the browser so it survives reloads and travels with future turns/sessions.
+                  if (Array.isArray(data.knowledgeFiles)) {
+                    s.setKnowledge(data.knowledgeFiles as KnowledgeFile[]);
                   }
                   break;
                 }

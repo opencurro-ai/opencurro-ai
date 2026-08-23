@@ -1,5 +1,20 @@
 import { API_ROUTES, routeUrl } from "@/app/api/routes";
-import type { FileNode, ModelInfo, ProviderMeta, StreamRequest } from "@/types";
+import type { FileNode, ModelInfo, ProviderMeta, ScrapeResult, StreamRequest } from "@/types";
+
+/** Custom header pair the user can attach to a URL knowledge fetch. */
+export interface ScrapeHeader {
+  key: string;
+  value: string;
+}
+
+/** Options for a URL → knowledge fetch (all optional beyond the URL, or a pasted curl command). */
+export interface ScrapeUrlOptions {
+  url?: string;
+  format?: "markdown" | "text" | "json" | "autodetect";
+  headers?: ScrapeHeader[];
+  apiKey?: string;
+  curl?: string;
+}
 
 /**
  * Client API — every call goes to this app's own `/api/*` routes (defined in
@@ -120,6 +135,26 @@ export async function decidePlan(
   } catch {
     return false;
   }
+}
+
+/**
+ * Fetch a URL's content through the backend's built-in scraper so the user can review it and save it
+ * as a knowledge file. Supports optional custom headers, an API key (sent as a bearer token), and a
+ * pasted curl command (from which the URL and headers are parsed server-side). Throws on failure.
+ */
+export async function scrapeUrl(options: ScrapeUrlOptions, signal?: AbortSignal): Promise<ScrapeResult> {
+  return requestJson<ScrapeResult>(routeUrl(API_ROUTES.scrapeUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url: options.url,
+      format: options.format,
+      headers: options.headers?.filter((h) => h.key.trim().length > 0),
+      apiKey: options.apiKey,
+      curl: options.curl,
+    }),
+    signal,
+  });
 }
 
 export async function streamChat(body: StreamRequest, signal?: AbortSignal): Promise<Response> {

@@ -9,6 +9,8 @@ import type {
   Conversation,
   CustomProvider,
   FetchProvider,
+  KnowledgeFile,
+  KnowledgeSource,
   MemoryFile,
   ModelInfo,
   PlanApprovalStatus,
@@ -34,6 +36,11 @@ import {
   isPreaddedMemory,
   mergeMemoryWithDefaults,
 } from "@/lib/defaultMemory";
+import {
+  hasUnsafeSegment,
+  normalizeKnowledgePath,
+  sanitizeKnowledge,
+} from "@/lib/defaultKnowledge";
 
 interface AppState {
   // Persisted
@@ -44,6 +51,9 @@ interface AppState {
   skills: Skill[];
   todos: TodoItem[];
   memory: MemoryFile[];
+  knowledge: KnowledgeFile[];
+  /** Fetch metadata for URL-sourced knowledge files, keyed by file path (enables refetch). */
+  knowledgeSources: Record<string, KnowledgeSource>;
   customProviders: CustomProvider[];
 
   // Ephemeral UI
@@ -56,6 +66,7 @@ interface AppState {
   skillsOpen: boolean;
   todosOpen: boolean;
   memoryOpen: boolean;
+  knowledgeOpen: boolean;
   filesOpen: boolean;
   streaming: boolean;
   filesVersion: number;
@@ -149,6 +160,13 @@ interface AppState {
   saveMemoryFile: (path: string, content: string, originalPath?: string) => string | null;
   deleteMemoryFile: (path: string) => void;
 
+  // Actions — knowledge base files (persisted in the browser; owned by the knowledge_* tools + UI)
+  setKnowledge: (files: KnowledgeFile[]) => void;
+  saveKnowledgeFile: (path: string, content: string, originalPath?: string) => string | null;
+  deleteKnowledgeFile: (path: string) => void;
+  /** Attach or clear (source=null) the URL fetch metadata for a knowledge file path. */
+  setKnowledgeSource: (path: string, source: KnowledgeSource | null) => void;
+
   // Actions — browser preview (embed_url) & attached files (attach_files)
   setPreview: (url: string) => void;
   setPreviewOpen: (open: boolean) => void;
@@ -179,6 +197,7 @@ interface AppState {
   setSkillsOpen: (v: boolean) => void;
   setTodosOpen: (v: boolean) => void;
   setMemoryOpen: (v: boolean) => void;
+  setKnowledgeOpen: (v: boolean) => void;
   setStreaming: (v: boolean) => void;
   bumpFiles: () => void;
 }
@@ -252,6 +271,8 @@ export const useStore = create<AppState>()(
       skills: [...DEFAULT_SKILLS],
       todos: [],
       memory: DEFAULT_MEMORY_FILES.map((f) => ({ ...f })),
+      knowledge: [],
+      knowledgeSources: {},
       customProviders: [],
 
       providers: [],
@@ -263,6 +284,7 @@ export const useStore = create<AppState>()(
       skillsOpen: false,
       todosOpen: false,
       memoryOpen: false,
+      knowledgeOpen: false,
       filesOpen: false,
       streaming: false,
       filesVersion: 0,
@@ -662,6 +684,83 @@ export const useStore = create<AppState>()(
           };
         }),
 
+      // Replace the whole knowledge set (used when a knowledge tool emits knowledge_updated). Defends
+      // against malformed input; there are no defaults, so an empty/invalid input yields an empty base.
+      // Prunes source metadata whose file no longer exists so the two stay consistent.
+      setKnowledge: (files) =>
+        set((s) => {
+          const knowledge = sanitizeKnowledge(files);
+          const live = new Set(knowledge.map((f) => f.path.toLowerCase()));
+          const knowledgeSources = Object.fromEntries(
+            Object.entries(s.knowledgeSources).filter(([path]) => live.has(path.toLowerCase())),
+          );
+          return { knowledge, knowledgeSources };
+        }),
+
+      // Create or update a single knowledge file from the UI (Knowledge popup). Enforces unique paths
+      // (case-insensitive), rejects traversal, and renames when originalPath differs. Returns an error
+      // string, or null on success.
+      saveKnowledgeFile: (path, content, originalPath) => {
+        const cleanPath = normalizeKnowledgePath(path);
+        if (!cleanPath) return "A file path is required.";
+        if (hasUnsafeSegment(cleanPath)) return "Path cannot contain '.' or '..' segments.";
+
+        const original = originalPath ? normalizeKnowledgePath(originalPath) : "";
+        const clash = get().knowledge.some(
+          (f) =>
+            f.path.toLowerCase() === cleanPath.toLowerCase() &&
+            (!original || f.path.toLowerCase() !== original.toLowerCase()),
+        );
+        if (clash) return `A knowledge file named "${cleanPath}" already exists.`;
+
+        set((s) => {
+          const exists = s.knowledge.some(
+            (f) => f.path.toLowerCase() === (original || cleanPath).toLowerCase(),
+          );
+          const knowledge = exists
+            ? s.knowledge.map((f) =>
+                f.path.toLowerCase() === (original || cleanPath).toLowerCase()
+                  ? { path: cleanPath, content }
+                  : f,
+              )
+            : [...s.knowledge, { path: cleanPath, content }];
+
+          // Carry source metadata across a rename so a URL-sourced file keeps its refetch info.
+          let knowledgeSources = s.knowledgeSources;
+          if (original && original.toLowerCase() !== cleanPath.toLowerCase() && knowledgeSources[original]) {
+            const { [original]: moved, ...rest } = knowledgeSources;
+            knowledgeSources = { ...rest, [cleanPath]: moved };
+          }
+          return { knowledge: sanitizeKnowledge(knowledge), knowledgeSources };
+        });
+        return null;
+      },
+
+      // Delete a knowledge file by path. No files are protected — any file can be removed.
+      deleteKnowledgeFile: (path) =>
+        set((s) => {
+          const target = normalizeKnowledgePath(path).toLowerCase();
+          const knowledgeSources = Object.fromEntries(
+            Object.entries(s.knowledgeSources).filter(([p]) => p.toLowerCase() !== target),
+          );
+          return {
+            knowledge: s.knowledge.filter((f) => f.path.toLowerCase() !== target),
+            knowledgeSources,
+          };
+        }),
+
+      setKnowledgeSource: (path, source) =>
+        set((s) => {
+          const clean = normalizeKnowledgePath(path);
+          if (!clean) return {};
+          if (source === null) {
+            const rest = { ...s.knowledgeSources };
+            delete rest[clean];
+            return { knowledgeSources: rest };
+          }
+          return { knowledgeSources: { ...s.knowledgeSources, [clean]: source } };
+        }),
+
       addCustomProvider: (input) => {
         const now = Date.now();
         const provider: CustomProvider = {
@@ -749,6 +848,7 @@ export const useStore = create<AppState>()(
       setSkillsOpen: (skillsOpen) => set({ skillsOpen }),
       setTodosOpen: (todosOpen) => set({ todosOpen }),
       setMemoryOpen: (memoryOpen) => set({ memoryOpen }),
+      setKnowledgeOpen: (knowledgeOpen) => set({ knowledgeOpen }),
       setFilesOpen: (filesOpen) => set({ filesOpen }),
       setPreview: (url) =>
         set((s) => ({ preview: { url, open: s.preview.url !== url || s.preview.open } })),
@@ -784,6 +884,11 @@ export const useStore = create<AppState>()(
           memory: mergeMemoryWithDefaults(
             Array.isArray(p.memory) ? p.memory : current.memory,
           ),
+          knowledge: sanitizeKnowledge(Array.isArray(p.knowledge) ? p.knowledge : current.knowledge),
+          knowledgeSources:
+            p.knowledgeSources && typeof p.knowledgeSources === "object"
+              ? (p.knowledgeSources as Record<string, KnowledgeSource>)
+              : current.knowledgeSources,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,
         };
       },
@@ -795,6 +900,8 @@ export const useStore = create<AppState>()(
         skills: s.skills,
         todos: s.todos,
         memory: s.memory,
+        knowledge: s.knowledge,
+        knowledgeSources: s.knowledgeSources,
         customProviders: s.customProviders,
       }),
     },

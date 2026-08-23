@@ -80,6 +80,12 @@ export const API_ROUTES = {
     path: "/api/files/download",
     description: "Download a workspace file as an attachment.",
   },
+  scrapeUrl: {
+    name: "scrape.url",
+    method: "POST",
+    path: "/api/scrape",
+    description: "Fetch a URL's content via the built-in scraper for the URL→knowledge flow.",
+  },
 } as const satisfies Record<string, ApiRoute>;
 
 export type ApiRouteName = keyof typeof API_ROUTES;

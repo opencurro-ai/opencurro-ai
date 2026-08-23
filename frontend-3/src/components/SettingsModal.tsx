@@ -8,6 +8,7 @@ import {
   Bot,
   Blocks,
   Brain,
+  Library,
   ChevronRight,
   Plus,
   Trash2,
@@ -41,6 +42,8 @@ export function SettingsModal() {
   const skillCount = useStore((s) => s.skills.length);
   const setMemoryOpen = useStore((s) => s.setMemoryOpen);
   const memoryCount = useStore((s) => s.memory.length);
+  const setKnowledgeOpen = useStore((s) => s.setKnowledgeOpen);
+  const knowledgeCount = useStore((s) => s.knowledge.length);
 
   const customProviders = useStore((s) => s.customProviders);
   const updateCustomProvider = useStore((s) => s.updateCustomProvider);
@@ -557,6 +560,34 @@ export function SettingsModal() {
                     Manage memory
                     <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
                       {memoryCount}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-[var(--color-muted)]" />
+                </button>
+              </div>
+
+              <div className="border-t border-[var(--color-border)] pt-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Library className="h-4 w-4 text-[var(--color-accent)]" />
+                  <h3 className="text-sm font-semibold">Knowledge Base</h3>
+                </div>
+                <p className="mb-3 text-xs text-[var(--color-muted)]">
+                  A file-tree of durable reference material the agent reads and maintains with its
+                  knowledge tools. Add knowledge by creating files manually, uploading files/folders,
+                  or fetching a URL. Starts empty; stored only in this browser.
+                </p>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setKnowledgeOpen(true);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elev2)] px-3 py-2.5 text-sm transition hover:border-[var(--color-accent)]/50"
+                >
+                  <span className="flex items-center gap-2">
+                    <Library className="h-4 w-4 text-[var(--color-accent)]" />
+                    Manage knowledge
+                    <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+                      {knowledgeCount}
                     </span>
                   </span>
                   <ChevronRight className="h-4 w-4 text-[var(--color-muted)]" />
