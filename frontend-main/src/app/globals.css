@@ -1,0 +1,346 @@
+@import "tailwindcss";
+
+/*
+ * Haku design system.
+ * The visual language (palette, radii, shadows, easing, typography) is lifted verbatim
+ * from the reference design so the app reads as one calm, quiet surface. Tokens are
+ * exposed as CSS variables AND as Tailwind theme colors so both `var(--fg)` and
+ * `text-[color:var(--fg)]` utilities resolve consistently.
+ */
+
+@theme {
+  --color-bg: #ffffff;
+  --color-rail: #f6f6f2;
+  --color-fg: #1c1c19;
+  --color-muted: #6f6f68;
+  --color-subtle: #9a9a93;
+  --color-secondary: #3c3d38;
+  --color-secondary-fg: #f7f7f4;
+  --color-border: #e6e6e0;
+  --color-chip: #f3f3ef;
+  --color-chip-hover: #ecece6;
+
+  --color-danger: #b3261e;
+  --color-danger-soft: #fbeceb;
+  --color-success: #2f7d52;
+  --color-success-soft: #eaf4ee;
+  --color-warning: #9a6a00;
+  --color-warning-soft: #fbf1dc;
+
+  --font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+}
+
+:root {
+  --bg: #ffffff;
+  --rail: #f6f6f2;
+  --fg: #1c1c19;
+  --muted: #6f6f68;
+  --subtle: #9a9a93;
+  --secondary: #3c3d38;
+  --secondary-fg: #f7f7f4;
+  --border: #e6e6e0;
+  --chip: #f3f3ef;
+  --chip-hover: #ecece6;
+
+  --danger: #b3261e;
+  --danger-soft: #fbeceb;
+  --success: #2f7d52;
+  --success-soft: #eaf4ee;
+  --warning: #9a6a00;
+  --warning-soft: #fbf1dc;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 28px;
+  --rail-w: 4.5rem;
+
+  --shadow-card:
+    0 0 0 1px rgba(28, 28, 25, 0.08),
+    0 1px 2px -1px rgba(28, 28, 25, 0.07),
+    0 14px 40px -16px rgba(28, 28, 25, 0.18);
+  --shadow-card-focus:
+    0 0 0 1px rgba(60, 61, 56, 0.28),
+    0 1px 2px -1px rgba(28, 28, 25, 0.06),
+    0 10px 32px -12px rgba(28, 28, 25, 0.16);
+  --shadow-chip: 0 0 0 1px rgba(28, 28, 25, 0.06);
+  --shadow-pop:
+    0 0 0 1px rgba(28, 28, 25, 0.08),
+    0 24px 60px -20px rgba(28, 28, 25, 0.35);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+
+#root {
+  height: 100%;
+}
+
+button,
+label,
+a,
+input,
+textarea,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+}
+
+button:focus,
+label:focus,
+input:focus,
+textarea:focus {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled),
+label {
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+
+.font-serif-display {
+  font-family: var(--font-serif);
+  font-style: italic;
+  letter-spacing: -0.025em;
+}
+
+/* Scrollbars — quiet and thin to match the calm surface. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d8d8d0 transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #dcdcd4;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #cbcbc1;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- Motion ---- */
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.panel-in {
+  animation: panel-in 280ms var(--ease) both;
+}
+.fade-in {
+  animation: fade-in 250ms var(--ease) both;
+}
+.overlay-in {
+  animation: overlay-in 180ms var(--ease) both;
+}
+.pop-in {
+  animation: pop-in 240ms var(--ease) both;
+}
+.stagger-in > * {
+  animation: rise-in 420ms var(--ease) both;
+}
+.stagger-in > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.stagger-in > *:nth-child(2) {
+  animation-delay: 70ms;
+}
+.stagger-in > *:nth-child(3) {
+  animation-delay: 140ms;
+}
+.stagger-in > *:nth-child(4) {
+  animation-delay: 210ms;
+}
+
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--subtle) 0%,
+    var(--subtle) 35%,
+    var(--fg) 50%,
+    var(--subtle) 65%,
+    var(--subtle) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+
+.dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+.dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.caret::after {
+  content: "▍";
+  margin-left: 1px;
+  color: var(--secondary);
+  animation: blink 1s step-end infinite;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger-in > *,
+  .panel-in,
+  .fade-in,
+  .pop-in,
+  .overlay-in {
+    animation: none;
+  }
+  .dot,
+  .shimmer-text,
+  .caret::after {
+    animation: none;
+  }
+}
