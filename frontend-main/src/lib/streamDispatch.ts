@@ -262,9 +262,22 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
 
     case "sub_agent_start":
       s.startSubAgent(convId, msgId, String(data.id ?? ""), {
-        session: String(data.session ?? ""),
         agent: String(data.agent ?? ""),
         task: String(data.task ?? ""),
+        background: data.background === true,
+        outputFile: data.output_file != null ? String(data.output_file) : undefined,
+      });
+      break;
+
+    case "sub_agent_background_started":
+      // A background (wait_for_output=false) sub-agent was launched and detached from the turn.
+      // Register the run so the chip renders even though no further sub_agent_* events may arrive
+      // once the main turn ends (the sub-agent writes its result to the output_file instead).
+      s.startSubAgent(convId, msgId, String(data.id ?? ""), {
+        agent: String(data.agent ?? ""),
+        task: String(data.task ?? ""),
+        background: true,
+        outputFile: data.output_file != null ? String(data.output_file) : undefined,
       });
       break;
 

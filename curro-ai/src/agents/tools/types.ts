@@ -68,11 +68,14 @@ export interface SubAgentRuntime {
   /** Names + descriptions of the sub-agents that can currently be called (enabled only). */
   available(): Array<{ name: string; description: string }>;
   /**
-   * Execute a sub-agent for the given task and return ONLY its final output.
+   * Execute a sub-agent for the given task. When `wait_for_output` is true (default) the sub-agent
+   * runs to completion and its final output is returned directly. When false the sub-agent is
+   * launched in the background — fully detached from the main turn — and the tool returns
+   * immediately with the ".curro/sub-agent" file path where the output will be written.
    * Streams live progress (tokens, reasoning, nested tool calls) via SSE side-channel events.
    */
   run(
-    params: { session: string; agent: string; task: string },
+    params: { agent: string; task: string; wait_for_output?: boolean },
     ctx: ToolContext,
   ): Promise<ToolResult>;
 }

@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { AppConfig } from "../config.js";
 import type { ToolRegistry } from "./tools/registry.js";
 import type { Provider } from "./providers/types.js";
@@ -15,6 +17,7 @@ import type {
   ToolResult,
 } from "./tools/types.js";
 import { safeJsonParse } from "../utils/json.js";
+import { safeResolve } from "../utils/paths.js";
 
 /**
  * Tools a sub-agent may never use: the sub-agent meta tools (prevents recursive delegation) and
@@ -29,46 +32,14 @@ export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
   "read_todos",
 ];
 
-/**
- * Persistent (process-lifetime) store of sub-agent conversation memory, keyed by
- * `${chatId}::${sessionName}`. Reusing a session name preserves the sub-agent's context so the
- * main agent can ask follow-up questions; a new session name starts a fresh conversation.
- *
- * Serverless note: this is in-memory (no queue, no external store) exactly like the main
- * SessionStore. Within a single request/turn — where the main agent may call a sub-agent
- * several times — memory is fully preserved. Across cold starts it resets, which is the
- * expected trade-off for a stateless serverless deployment.
- */
-export class SubAgentSessionStore {
-  private readonly sessions = new Map<string, StoredMessage[]>();
-
-  private key(chatId: string, session: string): string {
-    return `${chatId}::${session}`;
-  }
-
-  /** Whether a session already exists (used to decide new vs. reuse). */
-  has(chatId: string, session: string): boolean {
-    return this.sessions.has(this.key(chatId, session));
-  }
-
-  /** Return the message array for a session, creating an empty one if missing. */
-  ensure(chatId: string, session: string): StoredMessage[] {
-    const key = this.key(chatId, session);
-    let messages = this.sessions.get(key);
-    if (!messages) {
-      messages = [];
-      this.sessions.set(key, messages);
-    }
-    return messages;
-  }
-}
+/** Directory (relative to the workspace root) where background sub-agent outputs are written. */
+export const SUB_AGENT_OUTPUT_DIR = ".curro/sub-agent";
 
 export interface SubAgentRuntimeDeps {
   /** The resolved provider serving this turn (built-in or custom). */
   provider: Provider;
   tools: ToolRegistry;
   config: AppConfig;
-  sessions: SubAgentSessionStore;
   chatId: string;
   definitions: SubAgentDefinition[];
   /** Provider/model/credentials — identical to the main agent's, but a separate API call. */
@@ -93,6 +64,14 @@ export function createSubAgentRuntime(deps: SubAgentRuntimeDeps): SubAgentRuntim
   };
 }
 
+/** Internal result of running a sub-agent's Thought -> Action -> Observation loop to completion. */
+interface SubAgentLoopResult {
+  ok: boolean;
+  aborted: boolean;
+  output: string;
+  error?: string;
+}
+
 class SubAgentRunner {
   constructor(private readonly deps: SubAgentRuntimeDeps) {}
 
@@ -111,17 +90,16 @@ class SubAgentRunner {
   }
 
   /**
-   * Execute a sub-agent to completion and return ONLY its final natural-language output.
-   * Runs an unbounded Thought -> Action -> Observation loop (no iteration cap), streaming
-   * progress as `sub_agent_*` events correlated to the parent tool-call id.
+   * Dispatch a sub-agent invocation. When `wait_for_output` is true (the default) the sub-agent
+   * runs to completion and its final report is returned directly to the main agent. When it is
+   * false the sub-agent is launched in the BACKGROUND — fully detached from the main agent's turn
+   * (its own abort signal, so aborting/ending the main turn never stops it) — and the tool returns
+   * immediately with the path of the ".curro/sub-agent" file where its output will be written.
    */
   async run(
-    params: { session: string; agent: string; task: string },
+    params: { agent: string; task: string; wait_for_output?: boolean },
     ctx: ToolContext,
   ): Promise<ToolResult> {
-    const { send, provider, tools, config, sessions, chatId } = this.deps;
-    const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
-    const session = (params.session ?? "").trim() || "default";
     const task = (params.task ?? "").trim();
 
     const definition = this.find(params.agent ?? "");
@@ -147,6 +125,170 @@ class SubAgentRunner {
       };
     }
 
+    // Default to waiting: only run in the background when explicitly asked to.
+    const waitForOutput = params.wait_for_output !== false;
+
+    return waitForOutput
+      ? this.runForeground(definition, task, ctx)
+      : this.runBackground(definition, task, ctx);
+  }
+
+  /**
+   * Run the sub-agent to completion within the main agent's turn and return its final output.
+   * The sub-agent shares the main turn's abort signal, so cancelling the turn cancels it too.
+   */
+  private async runForeground(
+    definition: SubAgentDefinition,
+    task: string,
+    ctx: ToolContext,
+  ): Promise<ToolResult> {
+    const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
+    const result = await this.runLoop(definition, task, parentId, ctx, ctx.signal, {
+      background: false,
+    });
+
+    if (result.aborted) {
+      return { ok: false, error: { code: "aborted", message: "The sub-agent run was aborted." } };
+    }
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: { code: "sub_agent_failed", message: result.error ?? "The sub-agent failed." },
+      };
+    }
+    return {
+      ok: true,
+      data: {
+        agent: definition.name,
+        wait_for_output: true,
+        background: false,
+        output: result.output,
+      },
+    };
+  }
+
+  /**
+   * Launch the sub-agent in the background and return immediately. The run is fully detached from
+   * the main agent's turn: it uses its own AbortController (never the turn's signal), so aborting,
+   * stopping, or losing the connection to the main agent does NOT stop the sub-agent. Its final
+   * report is written to a ".curro/sub-agent/<name>-output-<id>.md" file the main agent reads later.
+   */
+  private async runBackground(
+    definition: SubAgentDefinition,
+    task: string,
+    ctx: ToolContext,
+  ): Promise<ToolResult> {
+    const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
+    const fileName = `${slugifyName(definition.name)}-output-${random5()}.md`;
+    const relPath = `${SUB_AGENT_OUTPUT_DIR}/${fileName}`;
+
+    let outputAbs: string;
+    try {
+      outputAbs = safeResolve(ctx.workspaceRoot, relPath);
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          code: "sub_agent_output_path_error",
+          message: `Could not resolve the background output file path: ${messageOf(error)}`,
+        },
+      };
+    }
+
+    // Write an initial "running" placeholder so the main agent can read the file immediately and
+    // see the sub-agent is still working, even before it finishes.
+    try {
+      await fs.mkdir(path.dirname(outputAbs), { recursive: true });
+      await fs.writeFile(
+        outputAbs,
+        renderOutputFile({ definition, task, status: "running", output: "" }),
+        "utf8",
+      );
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          code: "sub_agent_output_write_error",
+          message: `Could not create the background output file "${relPath}": ${messageOf(error)}`,
+        },
+      };
+    }
+
+    // A dedicated controller detached from the main turn. It is intentionally never aborted from
+    // here, so the background sub-agent keeps running after the main agent aborts, stops, or the
+    // connection drops. It only exists to satisfy tools that expect a signal in their context.
+    const backgroundController = new AbortController();
+
+    // The background context must NOT carry the main turn's abort signal.
+    const backgroundCtx: ToolContext = {
+      ...ctx,
+      signal: backgroundController.signal,
+      toolCallId: parentId,
+    };
+
+    this.deps.send("sub_agent_background_started", {
+      id: parentId,
+      agent: definition.name,
+      task,
+      output_file: relPath,
+    });
+
+    // Fire-and-forget: the loop runs independently of this tool call's returned promise.
+    void this.runLoop(definition, task, parentId, backgroundCtx, backgroundController.signal, {
+      background: true,
+    })
+      .then((result) =>
+        writeOutputFile(outputAbs, {
+          definition,
+          task,
+          status: result.aborted ? "aborted" : result.ok ? "completed" : "failed",
+          output: result.output,
+          error: result.error,
+        }),
+      )
+      .catch((error) =>
+        writeOutputFile(outputAbs, {
+          definition,
+          task,
+          status: "failed",
+          output: "",
+          error: messageOf(error),
+        }),
+      );
+
+    return {
+      ok: true,
+      data: {
+        agent: definition.name,
+        wait_for_output: false,
+        background: true,
+        output_file: relPath,
+        message:
+          `Sub-agent "${definition.name}" has started in the background. You can keep doing other ` +
+          `work now — you do not need to wait. Its final output will be written to the file ` +
+          `"${relPath}". Read that file with file_read when you need the result; while the sub-agent ` +
+          `is still working the file shows a "running" status, and it is replaced with the complete ` +
+          `report once the sub-agent finishes.`,
+      },
+    };
+  }
+
+  /**
+   * Execute a sub-agent's unbounded Thought -> Action -> Observation loop to completion, streaming
+   * progress as `sub_agent_*` events correlated to the parent tool-call id. Returns a structured
+   * result (ok / aborted / output / error) rather than a ToolResult so both the foreground and
+   * background callers can shape their own response.
+   */
+  private async runLoop(
+    definition: SubAgentDefinition,
+    task: string,
+    parentId: string,
+    outerCtx: ToolContext,
+    signal: AbortSignal | undefined,
+    options: { background: boolean },
+  ): Promise<SubAgentLoopResult> {
+    const { send, provider, tools, config } = this.deps;
+
     // Allowed tools = the sub-agent's chosen tools, minus the sub-agent meta tools, that
     // actually exist in the registry. This is the tool set both advertised and enforced.
     const allowed = new Set(
@@ -156,29 +298,27 @@ class SubAgentRunner {
     );
     const toolSchemas = tools.schemasFor(allowed);
 
-    const isNewSession = !sessions.has(chatId, session);
-    const history = sessions.ensure(chatId, session);
-    history.push({ role: "user", content: task });
+    // Each call_sub_agent invocation is an independent, fresh sub-agent conversation.
+    const history: StoredMessage[] = [{ role: "user", content: task }];
 
     const systemPrompt = buildSubAgentSystemPrompt(definition, config.workspaceRoot);
 
     send("sub_agent_start", {
       id: parentId,
-      session,
       agent: definition.name,
       task,
-      new_session: isNewSession,
+      background: options.background,
     });
 
     // Tool executions for a sub-agent must NOT see the sub-agent runtime (no recursion) and
-    // must not carry the parent tool-call id.
+    // carry the sub-agent's own signal (the background signal when detached).
     const subToolCtx: ToolContext = {
-      workspaceRoot: ctx.workspaceRoot,
-      shellTimeoutMs: ctx.shellTimeoutMs,
-      signal: ctx.signal,
-      web: ctx.web,
+      workspaceRoot: outerCtx.workspaceRoot,
+      shellTimeoutMs: outerCtx.shellTimeoutMs,
+      signal,
+      web: outerCtx.web,
       model: this.deps.model,
-      visionCapable: ctx.visionCapable,
+      visionCapable: outerCtx.visionCapable,
       availableToolNames: tools.names(),
     };
 
@@ -186,15 +326,12 @@ class SubAgentRunner {
 
     try {
       // Unbounded loop: the sub-agent has no iteration limit. It only stops when the model
-      // returns a final answer (no tool calls) or the turn is aborted.
+      // returns a final answer (no tool calls) or the run is aborted via its own signal.
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        if (ctx.signal?.aborted) {
+        if (signal?.aborted) {
           send("sub_agent_done", { id: parentId, ok: false, aborted: true, output: "" });
-          return {
-            ok: false,
-            error: { code: "aborted", message: "The sub-agent run was aborted." },
-          };
+          return { ok: false, aborted: true, output: "" };
         }
 
         const answerParts: string[] = [];
@@ -209,7 +346,7 @@ class SubAgentRunner {
             tools: toolSchemas,
             baseUrl: this.deps.baseUrl,
             temperature: this.deps.temperature,
-            signal: ctx.signal,
+            signal,
           });
 
           for await (const delta of stream) {
@@ -228,13 +365,13 @@ class SubAgentRunner {
             }
           }
         } catch (error) {
-          if (ctx.signal?.aborted) {
+          if (signal?.aborted) {
             send("sub_agent_done", { id: parentId, ok: false, aborted: true, output: "" });
-            return { ok: false, error: { code: "aborted", message: "The sub-agent run was aborted." } };
+            return { ok: false, aborted: true, output: "" };
           }
           const message = `Sub-agent provider error: ${messageOf(error)}`;
           send("sub_agent_done", { id: parentId, ok: false, output: "", error: message });
-          return { ok: false, error: { code: "sub_agent_provider_error", message } };
+          return { ok: false, aborted: false, output: "", error: message };
         }
 
         const namedCalls = toolCalls.filter((c) => c.function.name);
@@ -320,21 +457,78 @@ class SubAgentRunner {
         const output = finalContent.trim() || answerAcrossTurns.join("\n").trim();
         send("sub_agent_done", { id: parentId, ok: true, output });
 
-        return {
-          ok: true,
-          data: {
-            session,
-            agent: definition.name,
-            output,
-          },
-        };
+        return { ok: true, aborted: false, output };
       }
     } catch (error) {
       const message = `Sub-agent failed: ${messageOf(error)}`;
       send("sub_agent_done", { id: parentId, ok: false, output: "", error: message });
-      return { ok: false, error: { code: "sub_agent_failed", message } };
+      return { ok: false, aborted: false, output: "", error: message };
     }
   }
+}
+
+/** Terminal states a background sub-agent output file can record. */
+type SubAgentOutputStatus = "running" | "completed" | "failed" | "aborted";
+
+interface SubAgentOutputFile {
+  definition: SubAgentDefinition;
+  task: string;
+  status: SubAgentOutputStatus;
+  output: string;
+  error?: string;
+}
+
+/** Render the markdown body of a background sub-agent's output file. */
+function renderOutputFile(file: SubAgentOutputFile): string {
+  const { definition, task, status, output, error } = file;
+  const lines: string[] = [
+    `# Sub-agent: ${definition.name}`,
+    "",
+    `- Status: ${status}`,
+    "",
+    "## Task",
+    "",
+    task.trim() || "(no task provided)",
+    "",
+    "## Output",
+    "",
+  ];
+  if (status === "running") {
+    lines.push("_The sub-agent is still working. Re-read this file later for the final report._");
+  } else if (output.trim().length > 0) {
+    lines.push(output.trim());
+  } else {
+    lines.push("_(the sub-agent produced no textual output)_");
+  }
+  if (error) {
+    lines.push("", "## Error", "", error.trim());
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+/** Best-effort write of a background sub-agent's output file; failures are swallowed. */
+async function writeOutputFile(absPath: string, file: SubAgentOutputFile): Promise<void> {
+  try {
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(absPath, renderOutputFile(file), "utf8");
+  } catch {
+    // Best-effort: the background run has already completed; nothing more we can do.
+  }
+}
+
+/** Turn a sub-agent name into a filesystem-safe slug for the output file name. */
+function slugifyName(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "sub-agent";
+}
+
+/** A random 5-digit id (10000–99999) used to keep background output file names unique. */
+function random5(): string {
+  return String(Math.floor(10000 + Math.random() * 90000));
 }
 
 function buildSubAgentSystemPrompt(definition: SubAgentDefinition, workspaceRoot: string): string {
@@ -356,7 +550,7 @@ function buildSubAgentSystemPrompt(definition: SubAgentDefinition, workspaceRoot
 - When finished, respond with NO tool calls and provide a COMPLETE, self-contained final report of exactly what you found, figured out, changed, or produced. This final message is the ONLY thing returned to the main agent, so it must stand on its own — include the concrete results, findings, file paths, and conclusions the main agent needs.`.trim();
 }
 
-/** Build provider (OpenAI) messages: system prompt followed by the preserved session history. */
+/** Build provider (OpenAI) messages: system prompt followed by the sub-agent's conversation. */
 function buildProviderMessages(
   systemPrompt: string,
   messages: StoredMessage[],
