@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/curro-ai"
-FRONTEND_DIR="$SCRIPT_DIR/dev-console"
+FRONTEND_DIR="$SCRIPT_DIR/frontend-main"
 
 cleanup() {
   echo ""
