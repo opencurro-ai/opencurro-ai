@@ -265,6 +265,7 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
         agent: String(data.agent ?? ""),
         task: String(data.task ?? ""),
         background: data.background === true,
+        sentContext: data.context_shared === true,
         outputFile: data.output_file != null ? String(data.output_file) : undefined,
       });
       break;
@@ -277,6 +278,7 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
         agent: String(data.agent ?? ""),
         task: String(data.task ?? ""),
         background: true,
+        sentContext: data.context_shared === true,
         outputFile: data.output_file != null ? String(data.output_file) : undefined,
       });
       break;

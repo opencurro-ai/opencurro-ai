@@ -20,6 +20,19 @@ const schema = z.object({
         '".curro/sub-agent" file where the sub-agent\'s output will be written — read it later with ' +
         "file_read. Background sub-agents keep running even if this main agent is aborted or stops.",
     ),
+  send_my_context: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Whether to share YOUR current conversation context with the sub-agent so it understands the " +
+        "broader goal behind the delegated task. Defaults to false. When true, a summary of this " +
+        "conversation so far (the user's requests, your relevant replies, and recent tool results) is " +
+        "handed to the sub-agent alongside 'task', giving it the background it needs to act correctly. " +
+        "By default (false) the sub-agent sees ONLY 'task' and nothing about this conversation, so set " +
+        "this to true whenever the task depends on context the sub-agent would otherwise be missing. " +
+        "Prefer putting critical specifics directly in 'task'; use this to add the surrounding intent.",
+    ),
 });
 
 export const callSubAgentTool = defineTool({
@@ -30,9 +43,14 @@ export const callSubAgentTool = defineTool({
     "sub-agent runs as a separate call with its own tools and memory. Set wait_for_output=true to " +
     "wait for and receive its final result; set wait_for_output=false to run it in the background " +
     "(the tool returns immediately with a file path where the output will be stored for you to read " +
-    "later, and the background sub-agent keeps running independently of this main agent).",
+    "later, and the background sub-agent keeps running independently of this main agent). By default " +
+    "the sub-agent cannot see this conversation, so put everything it needs into 'task'; set " +
+    "send_my_context=true to additionally share a summary of your current conversation so it grasps " +
+    "the broader goal.",
   schema,
-  label: (args) => `Sub-Agent: ${args.agent}${args.wait_for_output === false ? " (background)" : ""}`,
+  label: (args) =>
+    `Sub-Agent: ${args.agent}${args.wait_for_output === false ? " (background)" : ""}` +
+    `${args.send_my_context === true ? " (+context)" : ""}`,
   async execute(args, ctx: ToolContext): Promise<ToolResult> {
     if (!ctx.subAgents) {
       return {
@@ -44,7 +62,12 @@ export const callSubAgentTool = defineTool({
       };
     }
     return ctx.subAgents.run(
-      { agent: args.agent, task: args.task, wait_for_output: args.wait_for_output },
+      {
+        agent: args.agent,
+        task: args.task,
+        wait_for_output: args.wait_for_output,
+        send_my_context: args.send_my_context,
+      },
       ctx,
     );
   },

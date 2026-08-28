@@ -146,6 +146,9 @@ export class AgentRunner {
         baseUrl: request.baseUrl,
         temperature: request.temperature,
         send,
+        // Snapshot the live conversation so a call_sub_agent with send_my_context=true can share
+        // the surrounding context. Returns the current messages at the moment the sub-agent is called.
+        getConversationContext: () => session.messages,
       });
 
       // Skill runtime for this turn — enumerates the user's skills (list_skills) and materializes

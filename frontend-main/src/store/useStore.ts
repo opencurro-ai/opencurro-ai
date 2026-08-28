@@ -132,7 +132,7 @@ interface AppState {
     convId: string,
     msgId: string,
     toolId: string,
-    run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile">,
+    run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile" | "sentContext">,
   ) => void;
   applySubAgentDelta: (
     convId: string,
@@ -247,11 +247,12 @@ function patchTool(
 }
 
 const emptyRun = (
-  run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile">,
+  run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile" | "sentContext">,
 ): SubAgentRun => ({
   agent: run.agent,
   task: run.task,
   background: run.background,
+  sentContext: run.sentContext,
   outputFile: run.outputFile,
   reasoning: "",
   output: "",
@@ -576,6 +577,7 @@ export const useStore = create<AppState>()(
                     agent: run.agent,
                     task: run.task,
                     background: run.background ?? tool.subAgent.background,
+                    sentContext: run.sentContext ?? tool.subAgent.sentContext,
                     outputFile: run.outputFile ?? tool.subAgent.outputFile,
                   }
                 : emptyRun(run),
