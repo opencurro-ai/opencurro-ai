@@ -46,11 +46,12 @@ export function TopBar() {
             type="button"
             onClick={() => newConversation()}
             title="New thread"
-            className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] py-1 pl-3 pr-1 text-xs font-medium tracking-[0.02em] text-[var(--muted)] transition-colors hover:bg-[var(--chip-hover)] hover:text-[var(--fg)]"
+            aria-label="New thread"
+            className="inline-flex h-11 items-center gap-1.5 rounded-full bg-[var(--chip)] pl-4 pr-2 text-xs font-medium tracking-[0.02em] text-[var(--muted)] transition-colors hover:bg-[var(--chip-hover)] hover:text-[var(--fg)] active:scale-[0.98]"
           >
             New thread
-            <span className="grid h-6 w-6 place-items-center rounded-full text-[var(--muted)]">
-              <Plus className="h-3.5 w-3.5" strokeWidth={1.9} />
+            <span className="grid h-7 w-7 place-items-center rounded-full text-[var(--muted)]">
+              <Plus className="h-4 w-4" strokeWidth={1.9} />
             </span>
           </button>
         ) : (
