@@ -71,7 +71,7 @@ export function Composer({
             onChange={autoGrow}
             onKeyDown={handleKeyDown}
             rows={1}
-            placeholder="Ask Curro to build or change something…"
+            placeholder="Send a task to the agent and watch it work…"
             className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-[var(--color-muted)]"
           />
           {streaming ? (
@@ -99,8 +99,8 @@ export function Composer({
           )}
         </div>
         <p className="mt-1.5 text-center text-[11px] text-[var(--color-muted)]">
-          Curro runs locally — files are written to your workspace and shell commands run on your
-          machine.
+          Dev console — session is ephemeral (a refresh clears everything but your API keys). Every
+          agent event and API request is logged in the console on the left.
         </p>
       </div>
     </div>

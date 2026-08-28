@@ -128,6 +128,80 @@ interface SSEHandlers {
   onEvent: (event: string, data: SSEEventData) => void;
 }
 
+type Store = ReturnType<typeof useStore.getState>;
+
+/**
+ * Translate an incoming SSE event into the dev console's live "what is the LLM doing now" snapshot.
+ * Kept separate from the store mutations so the activity indicator stays in sync with the raw log.
+ */
+function applyAgentActivity(s: Store, event: string, data: SSEEventData): void {
+  switch (event) {
+    case "iteration":
+      s.setAgentActivity({
+        phase: "thinking",
+        detail: `Iteration ${Number(data.current ?? 0)} / ${Number(data.limit ?? 0)}`,
+        iteration: Number(data.current ?? 0),
+        maxIterations: Number(data.limit ?? 0),
+        toolName: undefined,
+      });
+      break;
+    case "status":
+      s.setAgentActivity({ phase: "thinking", detail: String(data.label ?? "Thinking...") });
+      break;
+    case "reasoning":
+      s.setAgentActivity({ phase: "reasoning", detail: "Reasoning…", toolName: undefined });
+      break;
+    case "token":
+      s.setAgentActivity({ phase: "responding", detail: "Writing response…", toolName: undefined });
+      break;
+    case "tool_call":
+      s.setAgentActivity({
+        phase: "tool",
+        detail: `Running ${String(data.name ?? "tool")}`,
+        toolName: String(data.name ?? "tool"),
+      });
+      break;
+    case "tool_result":
+      s.setAgentActivity({
+        phase: "thinking",
+        detail: `${String(data.name ?? "tool")} → ${data.ok ? "ok" : "error"}`,
+        toolName: undefined,
+      });
+      break;
+    case "plan_review":
+      s.setAgentActivity({ phase: "waiting", detail: "Waiting for plan approval…" });
+      break;
+    case "ask_question":
+      s.setAgentActivity({ phase: "waiting", detail: "Waiting for your answer…" });
+      break;
+    case "sub_agent_start":
+      s.setAgentActivity({ phase: "sub_agent", detail: `Sub-agent: ${String(data.agent ?? "")}` });
+      break;
+    case "sub_agent_tool_call":
+      s.setAgentActivity({
+        phase: "sub_agent",
+        detail: `Sub-agent running ${String(data.name ?? "tool")}`,
+        toolName: String(data.name ?? "tool"),
+      });
+      break;
+    case "sub_agent_done":
+      s.setAgentActivity({ phase: "thinking", detail: "Sub-agent finished" });
+      break;
+    case "error":
+      s.setAgentActivity({ phase: "error", detail: String(data.message ?? "Agent error") });
+      break;
+    case "done":
+      s.setAgentActivity({
+        phase: data.aborted ? "idle" : "done",
+        detail: data.aborted ? "Stopped" : "Done",
+        toolName: undefined,
+      });
+      break;
+    default:
+      break;
+  }
+}
+
 /**
  * Parse a text/event-stream body and dispatch each event. Robust to chunk
  * boundaries and CRLF line endings, so tokens stream smoothly over the proxy.
@@ -257,13 +331,31 @@ export function useChatStream(onFilesChanged?: () => void) {
         createdAt: Date.now(),
       });
       store.setStreaming(true);
+      store.setAgentActivity({
+        phase: "starting",
+        detail: "Sending request to agent…",
+        iteration: 0,
+        maxIterations: 0,
+        toolName: undefined,
+      });
+      store.pushDevLog({
+        kind: "system",
+        level: "info",
+        message: `Turn started · provider=${settings.provider} model=${settings.model || "(none)"}`,
+      });
 
       const controller = new AbortController();
       abortRef.current = controller;
 
       const finish = () => {
-        useStore.getState().updateMessage(convId, assistantId, { streaming: false });
-        useStore.getState().setStreaming(false);
+        const s = useStore.getState();
+        s.updateMessage(convId, assistantId, { streaming: false });
+        s.setStreaming(false);
+        // Settle the live indicator: keep a terminal "done"/"error" label if the stream set one,
+        // otherwise fall back to idle so the console doesn't look stuck mid-turn.
+        if (s.agentActivity.phase !== "done" && s.agentActivity.phase !== "error") {
+          s.resetAgentActivity();
+        }
         onFilesChanged?.();
       };
 
@@ -310,6 +402,20 @@ export function useChatStream(onFilesChanged?: () => void) {
           {
             onEvent: (event, data) => {
               const s = useStore.getState();
+              // Dev console: record the raw event (full payload) and update the live activity
+              // snapshot before applying the store mutations below. Sub-agent side-channel events
+              // are tagged with their session id so the console can group them.
+              const isSubAgent = event.startsWith("sub_agent");
+              s.pushDevLog({
+                kind: "sse",
+                event,
+                data,
+                eventId: typeof data._event_id === "number" ? data._event_id : undefined,
+                scope: isSubAgent ? String(data.id ?? "") : undefined,
+                level: event === "error" ? "error" : "info",
+              });
+              applyAgentActivity(s, event, data);
+
               switch (event) {
                 case "reasoning":
                   s.appendReasoning(convId, assistantId, String(data.value ?? ""));
@@ -541,12 +647,15 @@ export function useChatStream(onFilesChanged?: () => void) {
   );
 
   const stop = useCallback(async () => {
-    const convId = useStore.getState().currentId;
+    const s = useStore.getState();
+    const convId = s.currentId;
     abortRef.current?.abort();
+    s.pushDevLog({ kind: "system", level: "warn", message: "Turn aborted by user" });
     if (convId) {
       await abortChat(convId);
     }
-    useStore.getState().setStreaming(false);
+    s.setStreaming(false);
+    s.setAgentActivity({ phase: "idle", detail: "Stopped", toolName: undefined });
   }, []);
 
   return { send, stop };

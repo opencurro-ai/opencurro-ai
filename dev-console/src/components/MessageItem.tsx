@@ -47,7 +47,7 @@ export function MessageItem({ message }: { message: ChatMessage }) {
         )}
 
         {(message.tools?.length ?? 0) > 0 && (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-col items-start gap-1.5">
             {message.tools!.map((tool) => (
               <ToolChip key={tool.id} tool={tool} />
             ))}
