@@ -124,6 +124,8 @@ export interface SubAgentRun {
   error?: string;
   /** True when launched in the background (wait_for_output=false) — runs detached from the turn. */
   background?: boolean;
+  /** True when the main agent shared its conversation context (send_my_context=true) with this run. */
+  sentContext?: boolean;
   /** Workspace-relative ".curro/sub-agent" file where a background run writes its final output. */
   outputFile?: string;
 }
@@ -500,6 +502,8 @@ export interface SSEEventData {
   error?: string;
   /** Whether this sub-agent run was launched in the background (wait_for_output=false). */
   background?: boolean;
+  /** Whether the main agent shared its conversation context (send_my_context=true) with the run. */
+  context_shared?: boolean;
   /** Workspace-relative ".curro/sub-agent" file where a background run writes its output. */
   output_file?: string;
   // submit_plan review fields

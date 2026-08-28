@@ -257,6 +257,7 @@ function SubAgentChip({ tool, run }: { tool: ToolActivity; run: SubAgentRun }) {
               {run.agent}
             </span>
             {run.background && <Pill>background</Pill>}
+            {run.sentContext && <Pill>context shared</Pill>}
           </div>
           {run.background && run.outputFile && (
             <div>

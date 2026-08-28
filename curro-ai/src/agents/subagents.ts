@@ -49,6 +49,12 @@ export interface SubAgentRuntimeDeps {
   temperature?: number;
   /** Emit an SSE side-channel event onto the turn's event buffer. */
   send: (event: string, data: Record<string, unknown>) => void;
+  /**
+   * Snapshot the main agent's current conversation messages. Used only when a call_sub_agent
+   * invocation sets `send_my_context: true`, so the sub-agent can be handed a readable summary of
+   * the surrounding conversation. Returns the live message array; the runner copies/formats it.
+   */
+  getConversationContext?: () => StoredMessage[];
 }
 
 /**
@@ -97,7 +103,12 @@ class SubAgentRunner {
    * immediately with the path of the ".curro/sub-agent" file where its output will be written.
    */
   async run(
-    params: { agent: string; task: string; wait_for_output?: boolean },
+    params: {
+      agent: string;
+      task: string;
+      wait_for_output?: boolean;
+      send_my_context?: boolean;
+    },
     ctx: ToolContext,
   ): Promise<ToolResult> {
     const task = (params.task ?? "").trim();
@@ -128,9 +139,24 @@ class SubAgentRunner {
     // Default to waiting: only run in the background when explicitly asked to.
     const waitForOutput = params.wait_for_output !== false;
 
+    // Only share the main conversation when explicitly requested (defaults to false). The context
+    // is captured now, at call time, so it reflects the conversation up to this delegation.
+    const contextText =
+      params.send_my_context === true ? this.captureConversationContext() : undefined;
+
     return waitForOutput
-      ? this.runForeground(definition, task, ctx)
-      : this.runBackground(definition, task, ctx);
+      ? this.runForeground(definition, task, ctx, contextText)
+      : this.runBackground(definition, task, ctx, contextText);
+  }
+
+  /**
+   * Build a bounded, readable transcript of the main agent's current conversation to hand to a
+   * sub-agent when `send_my_context` is true. Returns undefined when no context provider is wired
+   * or when the conversation has nothing worth sharing.
+   */
+  private captureConversationContext(): string | undefined {
+    const messages = this.deps.getConversationContext?.() ?? [];
+    return buildMainContextBlock(messages);
   }
 
   /**
@@ -141,10 +167,12 @@ class SubAgentRunner {
     definition: SubAgentDefinition,
     task: string,
     ctx: ToolContext,
+    contextText?: string,
   ): Promise<ToolResult> {
     const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
     const result = await this.runLoop(definition, task, parentId, ctx, ctx.signal, {
       background: false,
+      contextText,
     });
 
     if (result.aborted) {
@@ -162,6 +190,7 @@ class SubAgentRunner {
         agent: definition.name,
         wait_for_output: true,
         background: false,
+        context_shared: contextText !== undefined,
         output: result.output,
       },
     };
@@ -177,6 +206,7 @@ class SubAgentRunner {
     definition: SubAgentDefinition,
     task: string,
     ctx: ToolContext,
+    contextText?: string,
   ): Promise<ToolResult> {
     const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
     const fileName = `${slugifyName(definition.name)}-output-${random5()}.md`;
@@ -231,11 +261,13 @@ class SubAgentRunner {
       agent: definition.name,
       task,
       output_file: relPath,
+      context_shared: contextText !== undefined,
     });
 
     // Fire-and-forget: the loop runs independently of this tool call's returned promise.
     void this.runLoop(definition, task, parentId, backgroundCtx, backgroundController.signal, {
       background: true,
+      contextText,
     })
       .then((result) =>
         writeOutputFile(outputAbs, {
@@ -262,6 +294,7 @@ class SubAgentRunner {
         agent: definition.name,
         wait_for_output: false,
         background: true,
+        context_shared: contextText !== undefined,
         output_file: relPath,
         message:
           `Sub-agent "${definition.name}" has started in the background. You can keep doing other ` +
@@ -285,7 +318,7 @@ class SubAgentRunner {
     parentId: string,
     outerCtx: ToolContext,
     signal: AbortSignal | undefined,
-    options: { background: boolean },
+    options: { background: boolean; contextText?: string },
   ): Promise<SubAgentLoopResult> {
     const { send, provider, tools, config } = this.deps;
 
@@ -298,16 +331,27 @@ class SubAgentRunner {
     );
     const toolSchemas = tools.schemasFor(allowed);
 
-    // Each call_sub_agent invocation is an independent, fresh sub-agent conversation.
-    const history: StoredMessage[] = [{ role: "user", content: task }];
+    // Each call_sub_agent invocation is an independent, fresh sub-agent conversation. When the main
+    // agent opted to share its context, the surrounding conversation is prepended to the task as
+    // background so the sub-agent understands the broader goal it is contributing to.
+    const hasSharedContext = Boolean(options.contextText && options.contextText.trim().length > 0);
+    const firstUserContent = hasSharedContext
+      ? `${options.contextText!.trim()}\n\n---\n\n# Your task\n${task}`
+      : task;
+    const history: StoredMessage[] = [{ role: "user", content: firstUserContent }];
 
-    const systemPrompt = buildSubAgentSystemPrompt(definition, config.workspaceRoot);
+    const systemPrompt = buildSubAgentSystemPrompt(
+      definition,
+      config.workspaceRoot,
+      hasSharedContext,
+    );
 
     send("sub_agent_start", {
       id: parentId,
       agent: definition.name,
       task,
       background: options.background,
+      context_shared: hasSharedContext,
     });
 
     // Tool executions for a sub-agent must NOT see the sub-agent runtime (no recursion) and
@@ -531,15 +575,120 @@ function random5(): string {
   return String(Math.floor(10000 + Math.random() * 90000));
 }
 
-function buildSubAgentSystemPrompt(definition: SubAgentDefinition, workspaceRoot: string): string {
+/** Upper bound on the shared-context block so a long conversation never bloats the sub-agent call. */
+const MAX_CONTEXT_CHARS = 12000;
+/** Per-message cap so one huge message (e.g. a big tool result) cannot dominate the context block. */
+const MAX_MESSAGE_CHARS = 2000;
+
+/**
+ * Turn the main agent's conversation into a bounded, readable transcript to hand to a sub-agent
+ * when `send_my_context` is true. Skips the system prompt and empty messages, summarises tool
+ * calls/results compactly, truncates each message, and keeps only the most recent messages within
+ * an overall character budget (older turns are dropped first). Returns undefined when there is
+ * nothing meaningful to share.
+ */
+function buildMainContextBlock(messages: StoredMessage[]): string | undefined {
+  const rendered: string[] = [];
+  for (const message of messages) {
+    if (message.role === "system") continue;
+    const line = renderContextMessage(message);
+    if (line) rendered.push(line);
+  }
+  if (rendered.length === 0) return undefined;
+
+  // Keep the most recent messages that fit within the budget (iterate newest-first, then restore
+  // chronological order). This preserves the context closest to the delegation decision.
+  const kept: string[] = [];
+  let used = 0;
+  let dropped = 0;
+  for (let i = rendered.length - 1; i >= 0; i--) {
+    const entry = rendered[i]!;
+    const cost = entry.length + 2; // account for the joining blank line
+    if (used + cost > MAX_CONTEXT_CHARS && kept.length > 0) {
+      dropped = i + 1;
+      break;
+    }
+    kept.push(entry);
+    used += cost;
+  }
+  kept.reverse();
+
+  const header =
+    "# Main agent conversation context\n" +
+    "The following is a summary of the main agent's conversation so far, shared to give you the " +
+    'broader goal behind your task. Treat it as background only — your actual instructions are under ' +
+    '"Your task" below.';
+  const omitted =
+    dropped > 0 ? `\n\n_(${dropped} earlier message(s) omitted to keep this context concise.)_` : "";
+
+  return `${header}\n\n${kept.join("\n\n")}${omitted}`;
+}
+
+/** Render a single conversation message as a compact context line, or "" to skip it. */
+function renderContextMessage(message: StoredMessage): string {
+  const text = truncate(extractText(message.content), MAX_MESSAGE_CHARS);
+  switch (message.role) {
+    case "user":
+      return text ? `## User\n${text}` : "";
+    case "assistant": {
+      const parts: string[] = [];
+      if (text) parts.push(text);
+      const toolNames = (message.tool_calls ?? [])
+        .map((call) => {
+          const fn = (call as { function?: { name?: unknown } }).function;
+          return typeof fn?.name === "string" ? fn.name : undefined;
+        })
+        .filter((name): name is string => Boolean(name));
+      if (toolNames.length > 0) parts.push(`(called tool(s): ${toolNames.join(", ")})`);
+      return parts.length > 0 ? `## Assistant\n${parts.join("\n")}` : "";
+    }
+    case "tool":
+      return text ? `## Tool result (${message.name ?? "tool"})\n${text}` : "";
+    default:
+      return "";
+  }
+}
+
+/** Extract plain text from a StoredMessage's content (string, multimodal parts array, or null). */
+function extractText(content: StoredMessage["content"]): string {
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        const text = (part as { text?: unknown }).text;
+        if (typeof text === "string") return text;
+        const type = (part as { type?: unknown }).type;
+        return typeof type === "string" && type !== "text" ? `[${type}]` : "";
+      })
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  }
+  return "";
+}
+
+/** Truncate a string to at most `max` characters, appending an ellipsis marker when cut. */
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max).trimEnd()}… [truncated]`;
+}
+
+function buildSubAgentSystemPrompt(
+  definition: SubAgentDefinition,
+  workspaceRoot: string,
+  hasSharedContext = false,
+): string {
   const base = (definition.system_prompt ?? "").trim();
+  const contextLine = hasSharedContext
+    ? '- The main agent has shared a summary of its conversation with you under the "Main agent conversation context" section of your task message. Use it as background to understand the broader goal, but focus on completing "Your task"; if anything conflicts, the explicit task instructions win.'
+    : "- You have NO access to the main agent's conversation. Everything you need is in the task you were given.";
   return `${base}
 
 # Environment
 - You are "${definition.name}", a specialized sub-agent working autonomously on a single delegated task.
 - You run on the same machine and share the same workspace as the main agent: ${workspaceRoot}
 - All file paths are relative to this workspace (file_read requires an absolute path). Shell commands run from it. Files you create persist on disk.
-- You have NO access to the main agent's conversation. Everything you need is in the task you were given.
+${contextLine}
 
 # Tools (native function calling only)
 - Use real tool calls only. Never describe a tool call in prose or output JSON/markdown pretending to be one.

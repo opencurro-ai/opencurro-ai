@@ -72,10 +72,18 @@ export interface SubAgentRuntime {
    * runs to completion and its final output is returned directly. When false the sub-agent is
    * launched in the background — fully detached from the main turn — and the tool returns
    * immediately with the ".curro/sub-agent" file path where the output will be written.
-   * Streams live progress (tokens, reasoning, nested tool calls) via SSE side-channel events.
+   * When `send_my_context` is true a summary of the main agent's current conversation is shared
+   * with the sub-agent so it understands the broader goal; when false (default) the sub-agent sees
+   * only `task`. Streams live progress (tokens, reasoning, nested tool calls) via SSE side-channel
+   * events.
    */
   run(
-    params: { agent: string; task: string; wait_for_output?: boolean },
+    params: {
+      agent: string;
+      task: string;
+      wait_for_output?: boolean;
+      send_my_context?: boolean;
+    },
     ctx: ToolContext,
   ): Promise<ToolResult>;
 }
