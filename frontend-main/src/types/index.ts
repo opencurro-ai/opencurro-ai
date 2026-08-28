@@ -115,7 +115,6 @@ export interface ReadImageToolResult {
 
 /** Live state of a sub-agent invocation, rendered inside the call_sub_agent chip popup. */
 export interface SubAgentRun {
-  session: string;
   agent: string;
   task: string;
   reasoning: string;
@@ -123,6 +122,10 @@ export interface SubAgentRun {
   tools: ToolActivity[];
   status: ToolActivityStatus;
   error?: string;
+  /** True when launched in the background (wait_for_output=false) — runs detached from the turn. */
+  background?: boolean;
+  /** Workspace-relative ".curro/sub-agent" file where a background run writes its final output. */
+  outputFile?: string;
 }
 
 /** A user-defined sub-agent, stored in the browser (localStorage) — never on the server. */
@@ -490,13 +493,15 @@ export interface SSEEventData {
   iteration_count?: number;
   aborted?: boolean;
   // Sub-agent side-channel fields
-  session?: string;
   agent?: string;
   task?: string;
   tool_id?: string;
   output?: string;
   error?: string;
-  new_session?: boolean;
+  /** Whether this sub-agent run was launched in the background (wait_for_output=false). */
+  background?: boolean;
+  /** Workspace-relative ".curro/sub-agent" file where a background run writes its output. */
+  output_file?: string;
   // submit_plan review fields
   chat_id?: string;
   plan?: string;

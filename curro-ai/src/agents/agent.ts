@@ -17,7 +17,7 @@ import type { SessionEventBuffer } from "../services/eventBuffer.js";
 import type { PlanApprovalStore } from "../services/planApprovalStore.js";
 import type { QuestionStore } from "../services/questionStore.js";
 import { safeJsonParse } from "../utils/json.js";
-import { SubAgentSessionStore, createSubAgentRuntime } from "./subagents.js";
+import { createSubAgentRuntime } from "./subagents.js";
 import { createSkillRuntime } from "./skills.js";
 import { mergeDefaultSkills, resolveDefaultSkills } from "./skills/index.js";
 import { resolveDefaultSubAgents, mergeDefaultSubAgents } from "./sub-agents/index.js";
@@ -57,9 +57,6 @@ export interface RunAgentRequest {
 }
 
 export class AgentRunner {
-  /** Process-lifetime memory for sub-agent sessions, shared across turns of every chat. */
-  private readonly subAgentSessions = new SubAgentSessionStore();
-
   constructor(
     private readonly providers: ProviderRegistry,
     private readonly tools: ToolRegistry,
@@ -142,7 +139,6 @@ export class AgentRunner {
         provider,
         tools: this.tools,
         config: this.config,
-        sessions: this.subAgentSessions,
         chatId: request.chatId,
         definitions: mergeDefaultSubAgents(defaultSubAgents, request.subAgents ?? []),
         model: request.model,

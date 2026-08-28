@@ -2,13 +2,6 @@ import { z } from "zod";
 import { defineTool, type ToolContext, type ToolResult } from "./types.js";
 
 const schema = z.object({
-  session: z
-    .string()
-    .describe(
-      "The unique session identifier where the sub-agent should execute. Use this to target an " +
-        "existing agent session. Reuse the same session to preserve the sub-agent's memory across " +
-        "follow-up questions; use a new name to start a fresh sub-agent conversation.",
-    ),
   agent: z
     .string()
     .describe(
@@ -18,17 +11,28 @@ const schema = z.object({
   task: z
     .string()
     .describe("A clear and detailed description of the task that the selected sub-agent should complete."),
+  wait_for_output: z
+    .boolean()
+    .describe(
+      "Whether to wait for the sub-agent to finish and return its final result. Set to true when " +
+        "the result is needed immediately; set to false to run the sub-agent in the background " +
+        "without waiting for its output. When false, the tool returns right away with the path of a " +
+        '".curro/sub-agent" file where the sub-agent\'s output will be written — read it later with ' +
+        "file_read. Background sub-agents keep running even if this main agent is aborted or stops.",
+    ),
 });
 
 export const callSubAgentTool = defineTool({
   name: "call_sub_agent",
   description:
-    "Call a specialized sub-agent to perform a specific task within a given session and return the " +
-    "result. Use this tool when a dedicated sub-agent is better suited for the requested work or for " +
-    "completing the task faster. The sub-agent runs as a completely separate call with its own tools " +
-    "and memory, and returns only its final result.",
+    "Call a specialized sub-agent to perform a specific task. Use this tool when a dedicated " +
+    "sub-agent is better suited for the requested work or can complete the task faster. The " +
+    "sub-agent runs as a separate call with its own tools and memory. Set wait_for_output=true to " +
+    "wait for and receive its final result; set wait_for_output=false to run it in the background " +
+    "(the tool returns immediately with a file path where the output will be stored for you to read " +
+    "later, and the background sub-agent keeps running independently of this main agent).",
   schema,
-  label: (args) => `Sub-Agent: ${args.agent}${args.session ? ` (${args.session})` : ""}`,
+  label: (args) => `Sub-Agent: ${args.agent}${args.wait_for_output === false ? " (background)" : ""}`,
   async execute(args, ctx: ToolContext): Promise<ToolResult> {
     if (!ctx.subAgents) {
       return {
@@ -40,7 +44,7 @@ export const callSubAgentTool = defineTool({
       };
     }
     return ctx.subAgents.run(
-      { session: args.session, agent: args.agent, task: args.task },
+      { agent: args.agent, task: args.task, wait_for_output: args.wait_for_output },
       ctx,
     );
   },

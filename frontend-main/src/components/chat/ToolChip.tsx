@@ -240,7 +240,7 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
 
 function SubAgentChip({ tool, run }: { tool: ToolActivity; run: SubAgentRun }) {
   const Icon = Bot;
-  const label = `Sub-Agent: ${run.agent}${run.session ? ` · ${run.session}` : ""}`;
+  const label = `Sub-Agent: ${run.agent}${run.background ? " · background" : ""}`;
   const [showReasoning, setShowReasoning] = useState(false);
   void tool;
   return (
@@ -256,8 +256,14 @@ function SubAgentChip({ tool, run }: { tool: ToolActivity; run: SubAgentRun }) {
               <Bot className="h-3.5 w-3.5 text-[var(--secondary)]" />
               {run.agent}
             </span>
-            {run.session && <Pill>{run.session}</Pill>}
+            {run.background && <Pill>background</Pill>}
           </div>
+          {run.background && run.outputFile && (
+            <div>
+              <Label>Output file</Label>
+              <div className="mt-1 break-all font-mono text-[var(--muted)]">{run.outputFile}</div>
+            </div>
+          )}
           {run.task && (
             <div>
               <Label>Task</Label>

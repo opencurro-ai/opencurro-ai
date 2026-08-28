@@ -132,7 +132,7 @@ interface AppState {
     convId: string,
     msgId: string,
     toolId: string,
-    run: Pick<SubAgentRun, "session" | "agent" | "task">,
+    run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile">,
   ) => void;
   applySubAgentDelta: (
     convId: string,
@@ -246,10 +246,13 @@ function patchTool(
   );
 }
 
-const emptyRun = (run: Pick<SubAgentRun, "session" | "agent" | "task">): SubAgentRun => ({
-  session: run.session,
+const emptyRun = (
+  run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile">,
+): SubAgentRun => ({
   agent: run.agent,
   task: run.task,
+  background: run.background,
+  outputFile: run.outputFile,
   reasoning: "",
   output: "",
   tools: [],
@@ -568,13 +571,19 @@ export const useStore = create<AppState>()(
             (tool) => ({
               ...tool,
               subAgent: tool.subAgent
-                ? { ...tool.subAgent, session: run.session, agent: run.agent, task: run.task }
+                ? {
+                    ...tool.subAgent,
+                    agent: run.agent,
+                    task: run.task,
+                    background: run.background ?? tool.subAgent.background,
+                    outputFile: run.outputFile ?? tool.subAgent.outputFile,
+                  }
                 : emptyRun(run),
             }),
             () => ({
               id: toolId,
               name: "call_sub_agent",
-              label: `Sub-Agent: ${run.agent}${run.session ? ` (${run.session})` : ""}`,
+              label: `Sub-Agent: ${run.agent}${run.background ? " (background)" : ""}`,
               status: "running",
               subAgent: emptyRun(run),
             }),
@@ -584,7 +593,7 @@ export const useStore = create<AppState>()(
       applySubAgentDelta: (convId, msgId, toolId, delta) =>
         set((s) => ({
           conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) => {
-            const run = tool.subAgent ?? emptyRun({ session: "", agent: "", task: "" });
+            const run = tool.subAgent ?? emptyRun({ agent: "", task: "" });
             return {
               ...tool,
               subAgent: {
@@ -599,7 +608,7 @@ export const useStore = create<AppState>()(
       upsertSubAgentTool: (convId, msgId, toolId, subTool) =>
         set((s) => ({
           conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) => {
-            const run = tool.subAgent ?? emptyRun({ session: "", agent: "", task: "" });
+            const run = tool.subAgent ?? emptyRun({ agent: "", task: "" });
             const tools = [...run.tools];
             const idx = tools.findIndex((t) => t.id === subTool.id);
             if (idx === -1) tools.push(subTool);
@@ -611,7 +620,7 @@ export const useStore = create<AppState>()(
       finishSubAgent: (convId, msgId, toolId, patch) =>
         set((s) => ({
           conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) => {
-            const run = tool.subAgent ?? emptyRun({ session: "", agent: "", task: "" });
+            const run = tool.subAgent ?? emptyRun({ agent: "", task: "" });
             return {
               ...tool,
               subAgent: {
