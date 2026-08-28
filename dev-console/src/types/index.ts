@@ -444,6 +444,83 @@ export interface BackendMessage {
   content: string;
 }
 
+/* ------------------------------------------------------------------ *
+ * Dev console observability types
+ * ------------------------------------------------------------------ */
+
+/** Category of a dev-console log entry. */
+export type DevLogKind = "sse" | "http" | "system";
+
+/** Severity used for system / http entries. */
+export type DevLogLevel = "info" | "warn" | "error";
+
+/**
+ * A single row in the dev console's live activity stream. Captures either an agent SSE event
+ * (`kind: "sse"`), an HTTP request the app made (`kind: "http"`), or an internal system note
+ * (`kind: "system"`). Every entry keeps the full raw payload so developers can inspect exactly
+ * what the agent and backend exchanged.
+ */
+export interface DevLogEntry {
+  id: string;
+  kind: DevLogKind;
+  /** Epoch ms the entry was recorded. */
+  ts: number;
+  level?: DevLogLevel;
+
+  // --- kind: "sse" (agent event) ---
+  /** SSE event name, e.g. "token", "tool_call", "tool_result". */
+  event?: string;
+  /** Full raw event payload streamed from the backend. */
+  data?: unknown;
+  /** Monotonic backend event id (`_event_id`), when present. */
+  eventId?: number;
+  /** For sub-agent side-channel events — the owning sub-agent session id. */
+  scope?: string;
+
+  // --- kind: "http" (network request) ---
+  method?: string;
+  url?: string;
+  status?: number;
+  ok?: boolean;
+  /** Round-trip time in ms (request start → response headers). */
+  durationMs?: number;
+  /** Parsed/stringified request body, when available. */
+  requestBody?: unknown;
+  /** Whether the response is an SSE stream (body intentionally not captured). */
+  streaming?: boolean;
+
+  // --- kind: "system" ---
+  message?: string;
+}
+
+/** High-level phase describing what the agent/LLM is doing right now. */
+export type AgentPhase =
+  | "idle"
+  | "starting"
+  | "thinking"
+  | "reasoning"
+  | "responding"
+  | "tool"
+  | "sub_agent"
+  | "waiting"
+  | "done"
+  | "error";
+
+/** Live snapshot of what the LLM/agent is currently doing, shown at the top of the dev console. */
+export interface AgentActivity {
+  phase: AgentPhase;
+  /** Human-readable detail line (e.g. "Running shall_tool" or "Thinking..."). */
+  detail: string;
+  /** Current loop iteration reported by the backend. */
+  iteration: number;
+  /** Iteration ceiling reported by the backend. */
+  maxIterations: number;
+  /** Name of the tool being executed, when phase === "tool". */
+  toolName?: string;
+  /** Epoch ms of the last update. */
+  updatedAt: number;
+}
+
 /** Payload sent to POST /api/chat/stream to start (or reconnect to) a turn. */
 export interface StreamRequest {
   chat_id: string;

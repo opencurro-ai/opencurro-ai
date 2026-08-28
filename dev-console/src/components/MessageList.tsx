@@ -18,10 +18,10 @@ export function MessageList({ messages }: { messages: ChatMessage[] }) {
           <Sparkles className="h-7 w-7 text-white" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold">Curro AI</h2>
+          <h2 className="text-lg font-semibold">Dev Console</h2>
           <p className="mt-1 max-w-sm text-sm text-[var(--color-muted)]">
-            Your autonomous local coding agent. Ask it to build, edit, or run code — it works
-            directly in your workspace.
+            Drive the curro-ai agent and observe everything it does — every event, tool call, and
+            network request streams live into the console on the left.
           </p>
         </div>
       </div>

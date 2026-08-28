@@ -1,9 +1,9 @@
 {
-  "name": "frontend-3",
+  "name": "dev-console",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Curro AI — fast, streaming-focused React 19 chat interface (Vite + Tailwind v4 + zustand).",
+  "description": "Curro AI Dev Console — a developer observability console for the curro-ai agent: live event stream, network log, raw tool arguments/results (Vite + React 19 + Tailwind v4 + zustand).",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

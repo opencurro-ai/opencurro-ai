@@ -216,7 +216,109 @@ function chipClasses(status: ToolActivity["status"], clickable: boolean): string
   );
 }
 
+/**
+ * Developer raw-data inspector appended to every tool block. Surfaces the exact arguments the
+ * model sent and the exact structured result the backend returned, as pretty-printed JSON, plus
+ * the tool's id and status. This is what turns each chip into a full observability record.
+ */
+function RawToolData({ tool }: { tool: ToolActivity }) {
+  const [tab, setTab] = useState<"args" | "result" | null>(null);
+  const hasArgs = tool.args != null && Object.keys(tool.args).length > 0;
+  const hasResult = tool.result !== undefined && tool.result !== null;
+  if (!hasArgs && !hasResult) return null;
+
+  const payload = tab === "args" ? tool.args : tab === "result" ? tool.result : null;
+  const statusStyle =
+    tool.status === "error"
+      ? "text-red-300"
+      : tool.status === "ok"
+        ? "text-emerald-300"
+        : "text-[var(--color-accent-2)]";
+
+  const copy = () => {
+    if (payload == null) return;
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2)).catch(() => {});
+  };
+
+  return (
+    <div className="w-full rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elev)]/40 text-xs">
+      <div className="flex items-center gap-1.5 px-2 py-1 font-mono text-[10px] text-[var(--color-muted)]">
+        <span className="text-[var(--color-fg)]">{tool.name}</span>
+        <span className="opacity-40">·</span>
+        <span className="truncate opacity-60" title={tool.id}>
+          {tool.id}
+        </span>
+        <span className={cn("ml-auto uppercase tracking-wide", statusStyle)}>{tool.status}</span>
+      </div>
+      <div className="flex items-center gap-1 border-t border-[var(--color-border)]/60 px-1.5 py-1">
+        {hasArgs && (
+          <button
+            type="button"
+            onClick={() => setTab((t) => (t === "args" ? null : "args"))}
+            aria-expanded={tab === "args"}
+            className={cn(
+              "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition",
+              tab === "args"
+                ? "bg-[var(--color-accent)]/15 text-[var(--color-fg)]"
+                : "text-[var(--color-muted)] hover:text-[var(--color-fg)]",
+            )}
+          >
+            <Braces className="h-3 w-3" />
+            Raw arguments
+          </button>
+        )}
+        {hasResult && (
+          <button
+            type="button"
+            onClick={() => setTab((t) => (t === "result" ? null : "result"))}
+            aria-expanded={tab === "result"}
+            className={cn(
+              "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition",
+              tab === "result"
+                ? "bg-[var(--color-accent)]/15 text-[var(--color-fg)]"
+                : "text-[var(--color-muted)] hover:text-[var(--color-fg)]",
+            )}
+          >
+            <CornerDownLeft className="h-3 w-3" />
+            Raw result
+          </button>
+        )}
+        {payload != null && (
+          <button
+            type="button"
+            onClick={copy}
+            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-muted)] transition hover:text-[var(--color-fg)]"
+            title="Copy JSON"
+          >
+            <Hash className="h-3 w-3" />
+            Copy
+          </button>
+        )}
+      </div>
+      {payload != null && (
+        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-b-lg border-t border-[var(--color-border)]/60 bg-[var(--color-bg-elev2)]/50 p-2 font-mono text-[10px] leading-relaxed text-[var(--color-fg)]">
+          {JSON.stringify(payload, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A tool block for the dev console: the specialized, human-readable renderer (ToolBody) followed by
+ * a universal raw-data inspector (RawToolData) so developers always have the exact arguments and
+ * result JSON for every tool call.
+ */
 export function ToolChip({ tool }: { tool: ToolActivity }) {
+  return (
+    <div className="w-full space-y-1">
+      <ToolBody tool={tool} />
+      <RawToolData tool={tool} />
+    </div>
+  );
+}
+
+function ToolBody({ tool }: { tool: ToolActivity }) {
   // A submit_plan tool renders the big inline review block (not the compact chip).
   if (tool.name === "submit_plan") {
     return <SubmitPlanBlock tool={tool} />;

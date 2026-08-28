@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  AgentActivity,
   AskQuestionInfo,
   AskQuestionStatus,
   AttachedFile,
@@ -8,6 +9,7 @@ import type {
   ChatMessage,
   Conversation,
   CustomProvider,
+  DevLogEntry,
   FetchProvider,
   KnowledgeFile,
   KnowledgeSource,
@@ -25,11 +27,8 @@ import type {
 } from "@/types";
 import { uid } from "@/utils/id";
 import { CUSTOM_PROVIDER_PREFIX } from "@/lib/providers";
-import {
-  DEFAULT_SUB_AGENTS,
-  mergeSubAgentsWithDefaults,
-} from "@/lib/defaultSubAgents";
-import { DEFAULT_SKILLS, mergeSkillsWithDefaults } from "@/lib/defaultSkills";
+import { DEFAULT_SUB_AGENTS } from "@/lib/defaultSubAgents";
+import { DEFAULT_SKILLS } from "@/lib/defaultSkills";
 import {
   DEFAULT_MEMORY_FILES,
   canonicalMemoryPath,
@@ -74,6 +73,16 @@ interface AppState {
   preview: BrowserPreview;
   /** Files attached by the attach_files tool (for preview/download). */
   attachedFiles: AttachedFile[];
+
+  // Dev console (ephemeral observability — never persisted)
+  /** Every agent SSE event + HTTP request + system note, newest last. */
+  devLog: DevLogEntry[];
+  /** Live snapshot of what the LLM/agent is currently doing. */
+  agentActivity: AgentActivity;
+  /** Whether the dev console panel is open (desktop persistent / mobile drawer). */
+  devConsoleOpen: boolean;
+  /** The most recent URL the agent asked to observe via embed_url. */
+  observedUrl: string;
 
   // Actions — conversations
   newConversation: () => string;
@@ -200,7 +209,26 @@ interface AppState {
   setKnowledgeOpen: (v: boolean) => void;
   setStreaming: (v: boolean) => void;
   bumpFiles: () => void;
+
+  // Actions — dev console
+  pushDevLog: (entry: Omit<DevLogEntry, "id" | "ts"> & { id?: string; ts?: number }) => void;
+  clearDevLog: () => void;
+  setAgentActivity: (patch: Partial<AgentActivity>) => void;
+  resetAgentActivity: () => void;
+  setDevConsoleOpen: (v: boolean) => void;
+  toggleDevConsole: () => void;
 }
+
+/** Max dev-console log rows kept in memory (oldest evicted). Prevents unbounded growth. */
+const DEV_LOG_LIMIT = 4000;
+
+const idleActivity: AgentActivity = {
+  phase: "idle",
+  detail: "Idle",
+  iteration: 0,
+  maxIterations: 0,
+  updatedAt: 0,
+};
 
 const defaultSettings: Settings = {
   provider: "openrouter",
@@ -290,6 +318,11 @@ export const useStore = create<AppState>()(
       filesVersion: 0,
       preview: { url: "", open: false },
       attachedFiles: [],
+
+      devLog: [],
+      agentActivity: { ...idleActivity },
+      devConsoleOpen: true,
+      observedUrl: "",
 
       newConversation: () => {
         const id = uid("conv");
@@ -862,46 +895,61 @@ export const useStore = create<AppState>()(
         }),
       setStreaming: (streaming) => set({ streaming }),
       bumpFiles: () => set((s) => ({ filesVersion: s.filesVersion + 1 })),
+
+      pushDevLog: (entry) =>
+        set((s) => {
+          const full: DevLogEntry = {
+            id: entry.id ?? uid("log"),
+            ts: entry.ts ?? Date.now(),
+            ...entry,
+          };
+          const next =
+            s.devLog.length >= DEV_LOG_LIMIT
+              ? [...s.devLog.slice(s.devLog.length - DEV_LOG_LIMIT + 1), full]
+              : [...s.devLog, full];
+          // Mirror the latest observed URL so the console can surface it prominently.
+          if (full.kind === "sse" && full.event === "embed_url") {
+            const url = (full.data as { url?: unknown } | undefined)?.url;
+            if (typeof url === "string" && /^https?:\/\//i.test(url.trim())) {
+              return { devLog: next, observedUrl: url.trim() };
+            }
+          }
+          return { devLog: next };
+        }),
+
+      clearDevLog: () => set({ devLog: [] }),
+
+      setAgentActivity: (patch) =>
+        set((s) => ({
+          agentActivity: { ...s.agentActivity, ...patch, updatedAt: Date.now() },
+        })),
+
+      resetAgentActivity: () => set({ agentActivity: { ...idleActivity, updatedAt: Date.now() } }),
+
+      setDevConsoleOpen: (devConsoleOpen) => set({ devConsoleOpen }),
+      toggleDevConsole: () => set((s) => ({ devConsoleOpen: !s.devConsoleOpen })),
     }),
     {
-      name: "curro-ai-frontend",
-      // Deep-merge settings with defaults so settings persisted before the
-      // search/fetch fields were added still gain the new fields (searchProvider
-      // defaults to tavily, keys default to "").
+      // Dev console: only API credentials survive a reload. Everything else — conversations,
+      // todos, memory, knowledge, sub-agents, skills, the live event log — is ephemeral and
+      // is wiped on refresh, matching a developer-observability console where each page load
+      // starts a clean session.
+      name: "curro-dev-console",
+      // Deep-merge settings with defaults so keys persisted before the search/fetch fields
+      // were added still gain the new fields. Only `settings` (which holds every API key) and
+      // `customProviders` (which may carry their own key) are read back from storage.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
         return {
           ...current,
-          ...p,
           settings: { ...current.settings, ...(p.settings ?? {}) },
-          subAgents: mergeSubAgentsWithDefaults(
-            Array.isArray(p.subAgents) ? p.subAgents : current.subAgents,
-          ),
-          skills: mergeSkillsWithDefaults(
-            Array.isArray(p.skills) ? p.skills : current.skills,
-          ),
-          todos: Array.isArray(p.todos) ? p.todos : current.todos,
-          memory: mergeMemoryWithDefaults(
-            Array.isArray(p.memory) ? p.memory : current.memory,
-          ),
-          knowledge: sanitizeKnowledge(Array.isArray(p.knowledge) ? p.knowledge : current.knowledge),
-          knowledgeSources:
-            p.knowledgeSources && typeof p.knowledgeSources === "object"
-              ? (p.knowledgeSources as Record<string, KnowledgeSource>)
-              : current.knowledgeSources,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,
         };
       },
+      // Persist ONLY credentials. Chat/session/agent state is intentionally excluded so a
+      // browser refresh clears everything except the API keys.
       partialize: (s) => ({
-        conversations: s.conversations,
-        currentId: s.currentId,
         settings: s.settings,
-        subAgents: s.subAgents,
-        skills: s.skills,
-        todos: s.todos,
-        memory: s.memory,
-        knowledge: s.knowledge,
-        knowledgeSources: s.knowledgeSources,
         customProviders: s.customProviders,
       }),
     },

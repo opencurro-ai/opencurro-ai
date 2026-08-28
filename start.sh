@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/curro-ai"
-FRONTEND_DIR="$SCRIPT_DIR/frontend-3"
+FRONTEND_DIR="$SCRIPT_DIR/dev-console"
 
 cleanup() {
   echo ""
@@ -18,7 +18,7 @@ echo "Installing backend dependencies (curro-ai)…"
 cd "$BACKEND_DIR"
 npm install --silent
 
-echo "Installing frontend dependencies (frontend-3)…"
+echo "Installing frontend dependencies (dev-console)…"
 cd "$FRONTEND_DIR"
 npm install --silent
 
@@ -27,7 +27,7 @@ cd "$BACKEND_DIR"
 npm run dev > "$SCRIPT_DIR/.curro-backend.log" 2>&1 &
 BACKEND_PID=$!
 
-echo "Starting frontend (frontend-3)…"
+echo "Starting frontend (dev-console)…"
 cd "$FRONTEND_DIR"
 npm run dev > "$SCRIPT_DIR/.curro-frontend.log" 2>&1 &
 FRONTEND_PID=$!

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { Sidebar } from "@/components/Sidebar";
+import { DevConsole } from "@/components/DevConsole";
 import { TopBar } from "@/components/TopBar";
 import { ChatPanel } from "@/components/ChatPanel";
 import { FileExplorer } from "@/components/FileExplorer";
@@ -19,6 +19,7 @@ import { cn } from "@/utils/cn";
 export function App() {
   const setProviders = useStore((s) => s.setProviders);
   const ensureConversation = useStore((s) => s.ensureConversation);
+  const devConsoleOpen = useStore((s) => s.devConsoleOpen);
   const [filesOpenMobile, setFilesOpenMobile] = useState(false);
 
   useEffect(() => {
@@ -28,7 +29,12 @@ export function App() {
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-[var(--color-bg)] text-[var(--color-fg)]">
-      <Sidebar />
+      {/* Dev console — the live agent observability panel (replaces the old chat sidebar). */}
+      {devConsoleOpen && (
+        <aside className="hidden w-[340px] shrink-0 border-r border-[var(--color-border)] md:block">
+          <DevConsole />
+        </aside>
+      )}
 
       <main className="flex min-w-0 flex-1 flex-col">
         <TopBar onToggleFiles={() => setFilesOpenMobile((v) => !v)} />
