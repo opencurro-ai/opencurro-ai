@@ -86,6 +86,7 @@ const ICONS: Record<string, typeof Terminal> = {
   read_image: ImageIcon,
   image_search: ImageIcon,
   call_sub_agent: Bot,
+  call_multiple_sub_agents: Bot,
   list_sub_agents: ListTree,
   list_skills: Blocks,
   skill_initialize: PackagePlus,
@@ -212,6 +213,7 @@ function parts(tool: ToolActivity) {
 
 export function ToolChip({ tool }: { tool: ToolActivity }) {
   if (tool.name === "call_sub_agent" && tool.subAgent) return <SubAgentChip tool={tool} run={tool.subAgent} />;
+  if (tool.name === "call_multiple_sub_agents") return <MultiSubAgentChip tool={tool} />;
   if (tool.name === "shall_tool") return <ShellChip tool={tool} />;
   if (tool.name === "shell_view") return <ShellViewChip tool={tool} />;
   if (tool.name === "bash_write_to_process") return <BashWriteChip tool={tool} />;
@@ -238,75 +240,132 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
 
 /* ------------------------------------------------------------------ sub-agent */
 
-function SubAgentChip({ tool, run }: { tool: ToolActivity; run: SubAgentRun }) {
-  const Icon = Bot;
-  const label = `Sub-Agent: ${run.agent}${run.background ? " · background" : ""}`;
+/** The expandable body of a single sub-agent run — shared by the single and batch chips. */
+function SubAgentRunView({ run }: { run: SubAgentRun }) {
   const [showReasoning, setShowReasoning] = useState(false);
-  void tool;
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <span className="flex items-center gap-1.5 font-medium text-[var(--fg)]">
+          <Bot className="h-3.5 w-3.5 text-[var(--secondary)]" />
+          {run.agent}
+        </span>
+        {run.background && <Pill>background</Pill>}
+        {run.sentContext && <Pill>context shared</Pill>}
+      </div>
+      {run.background && run.outputFile && (
+        <div>
+          <Label>Output file</Label>
+          <div className="mt-1 break-all font-mono text-[var(--muted)]">{run.outputFile}</div>
+        </div>
+      )}
+      {run.task && (
+        <div>
+          <Label>Task</Label>
+          <div className="mt-1 whitespace-pre-wrap text-[var(--muted)]">{run.task}</div>
+        </div>
+      )}
+      {run.reasoning.trim().length > 0 && (
+        <div className="overflow-hidden rounded-[var(--radius-sm)] border border-[var(--border)]">
+          <button
+            onClick={() => setShowReasoning((v) => !v)}
+            className="flex w-full items-center gap-1.5 px-2 py-1.5 text-[var(--muted)] hover:text-[var(--fg)]"
+          >
+            <ChevronDown className={cn("h-3 w-3 transition-transform", showReasoning && "rotate-180")} />
+            Reasoning
+          </button>
+          {showReasoning && (
+            <div className="whitespace-pre-wrap px-2 pb-2 text-[var(--muted)]">{run.reasoning}</div>
+          )}
+        </div>
+      )}
+      {run.tools.length > 0 && (
+        <div className="flex flex-col items-start gap-1.5">
+          {run.tools.map((t) => (
+            <ToolChip key={t.id} tool={t} />
+          ))}
+        </div>
+      )}
+      <div>
+        <Label>Output</Label>
+        {run.output ? (
+          <div className={cn("mt-1 whitespace-pre-wrap break-words text-[var(--fg)]", run.status === "running" && "caret")}>
+            {run.output}
+          </div>
+        ) : run.status === "running" ? (
+          <div className="mt-1 flex items-center gap-2 text-[var(--muted)]">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Working…
+          </div>
+        ) : (
+          <div className="mt-1 text-[var(--muted)]">No output.</div>
+        )}
+      </div>
+      {run.error && <div className="text-[var(--danger)]">⚠️ {run.error}</div>}
+    </>
+  );
+}
+
+/** A single sub-agent run rendered as its own expandable chip (the call_sub_agent block). */
+function SubAgentRunChip({ run }: { run: SubAgentRun }) {
+  const label = `Sub-Agent: ${run.agent || "sub-agent"}${run.background ? " · background" : ""}`;
   return (
     <Shell
-      icon={<Icon className="h-3.5 w-3.5" />}
+      icon={<Bot className="h-3.5 w-3.5" />}
       label={label}
       status={run.status}
       expandable
+      panel={() => <SubAgentRunView run={run} />}
+    />
+  );
+}
+
+function SubAgentChip({ tool, run }: { tool: ToolActivity; run: SubAgentRun }) {
+  void tool;
+  return <SubAgentRunChip run={run} />;
+}
+
+/** Aggregate status for the batch block: running if any child is still running, else error if any
+ * child failed, else ok. */
+function aggregateStatus(runs: SubAgentRun[]): ToolActivityStatus {
+  if (runs.some((r) => r.status === "running")) return "running";
+  if (runs.some((r) => r.status === "error")) return "error";
+  return "ok";
+}
+
+/**
+ * The call_multiple_sub_agents block. It reuses the single call_sub_agent block for each child,
+ * nested inside one extra "batch" block that identifies this tool and groups every sub-agent.
+ */
+function MultiSubAgentChip({ tool }: { tool: ToolActivity }) {
+  const order = tool.multiOrder ?? Object.keys(tool.multiRuns ?? {});
+  const runs = order.map((id) => tool.multiRuns?.[id]).filter((r): r is SubAgentRun => Boolean(r));
+  // Prefer the live aggregate of the child runs; fall back to the tool's own status before any
+  // child has registered (e.g. a brand-new batch whose start event hasn't arrived yet).
+  const status = runs.length > 0 ? aggregateStatus(runs) : tool.status;
+  const done = runs.filter((r) => r.status !== "running").length;
+  return (
+    <Shell
+      icon={<Bot className="h-3.5 w-3.5" />}
+      label={tool.label || `Sub-Agents (${runs.length})`}
+      status={status}
+      expandable={runs.length > 0}
+      pills={
+        runs.length > 0 ? (
+          <Pill>
+            {done}/{runs.length} done
+          </Pill>
+        ) : undefined
+      }
       panel={() => (
         <>
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 font-medium text-[var(--fg)]">
-              <Bot className="h-3.5 w-3.5 text-[var(--secondary)]" />
-              {run.agent}
-            </span>
-            {run.background && <Pill>background</Pill>}
-            {run.sentContext && <Pill>context shared</Pill>}
+          <div className="text-[var(--muted)]">
+            {runs.length} sub-agent(s) called in parallel. Each runs independently below.
           </div>
-          {run.background && run.outputFile && (
-            <div>
-              <Label>Output file</Label>
-              <div className="mt-1 break-all font-mono text-[var(--muted)]">{run.outputFile}</div>
-            </div>
-          )}
-          {run.task && (
-            <div>
-              <Label>Task</Label>
-              <div className="mt-1 whitespace-pre-wrap text-[var(--muted)]">{run.task}</div>
-            </div>
-          )}
-          {run.reasoning.trim().length > 0 && (
-            <div className="overflow-hidden rounded-[var(--radius-sm)] border border-[var(--border)]">
-              <button
-                onClick={() => setShowReasoning((v) => !v)}
-                className="flex w-full items-center gap-1.5 px-2 py-1.5 text-[var(--muted)] hover:text-[var(--fg)]"
-              >
-                <ChevronDown className={cn("h-3 w-3 transition-transform", showReasoning && "rotate-180")} />
-                Reasoning
-              </button>
-              {showReasoning && (
-                <div className="whitespace-pre-wrap px-2 pb-2 text-[var(--muted)]">{run.reasoning}</div>
-              )}
-            </div>
-          )}
-          {run.tools.length > 0 && (
-            <div className="flex flex-col items-start gap-1.5">
-              {run.tools.map((t) => (
-                <ToolChip key={t.id} tool={t} />
-              ))}
-            </div>
-          )}
-          <div>
-            <Label>Output</Label>
-            {run.output ? (
-              <div className={cn("mt-1 whitespace-pre-wrap break-words text-[var(--fg)]", run.status === "running" && "caret")}>
-                {run.output}
-              </div>
-            ) : run.status === "running" ? (
-              <div className="mt-1 flex items-center gap-2 text-[var(--muted)]">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Working…
-              </div>
-            ) : (
-              <div className="mt-1 text-[var(--muted)]">No output.</div>
-            )}
+          <div className="flex flex-col items-stretch gap-1.5">
+            {runs.map((run, i) => (
+              <SubAgentRunChip key={order[i]} run={run} />
+            ))}
           </div>
-          {run.error && <div className="text-[var(--danger)]">⚠️ {run.error}</div>}
         </>
       )}
     />

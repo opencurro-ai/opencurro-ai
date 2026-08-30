@@ -46,6 +46,14 @@ function normalizeAttachedFiles(raw: unknown, prefix = "att"): AttachedFile[] {
   return out;
 }
 
+/** Build the batch tool-chip label, e.g. "Sub-Agents (3): alpha, beta, gamma". */
+function multiSubAgentLabel(children: Array<{ run: { agent: string } }>): string {
+  const names = children.map((c) => c.run.agent).filter((n) => n.length > 0);
+  const shown = names.slice(0, 3).join(", ");
+  const extra = names.length > 3 ? `, +${names.length - 3} more` : "";
+  return `Sub-Agents (${children.length}): ${shown}${extra}`.trim();
+}
+
 function extractUrl(raw: unknown): string {
   if (!raw || typeof raw !== "object") return "";
   const record = raw as Record<string, unknown>;
@@ -260,58 +268,99 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
       break;
     }
 
-    case "sub_agent_start":
-      s.startSubAgent(convId, msgId, String(data.id ?? ""), {
+    case "multi_sub_agents_start": {
+      // A call_multiple_sub_agents batch was launched. Pre-create one run slot per child so every
+      // sub-agent renders its own block inside the batch tool block, in the requested order.
+      const parentId = String(data.id ?? uid("tool"));
+      const list = Array.isArray(data.agents) ? data.agents : [];
+      const children = list.map((a, i) => ({
+        id: String(a?.id ?? `${parentId}::${i}`),
+        run: {
+          agent: String(a?.agent ?? ""),
+          task: String(a?.task ?? ""),
+          background: a?.background === true,
+          sentContext: a?.context_shared === true,
+          error: a?.error != null ? String(a.error) : undefined,
+        },
+      }));
+      s.startMultiSubAgents(convId, msgId, parentId, multiSubAgentLabel(children), children);
+      break;
+    }
+
+    case "sub_agent_start": {
+      const parentToolId = data.parent_tool_id != null ? String(data.parent_tool_id) : undefined;
+      const run = {
         agent: String(data.agent ?? ""),
         task: String(data.task ?? ""),
         background: data.background === true,
         sentContext: data.context_shared === true,
         outputFile: data.output_file != null ? String(data.output_file) : undefined,
-      });
+      };
+      if (parentToolId) s.startSubAgentInParent(convId, msgId, parentToolId, String(data.id ?? ""), run);
+      else s.startSubAgent(convId, msgId, String(data.id ?? ""), run);
       break;
+    }
 
-    case "sub_agent_background_started":
+    case "sub_agent_background_started": {
       // A background (wait_for_output=false) sub-agent was launched and detached from the turn.
       // Register the run so the chip renders even though no further sub_agent_* events may arrive
       // once the main turn ends (the sub-agent writes its result to the output_file instead).
-      s.startSubAgent(convId, msgId, String(data.id ?? ""), {
+      const parentToolId = data.parent_tool_id != null ? String(data.parent_tool_id) : undefined;
+      const run = {
         agent: String(data.agent ?? ""),
         task: String(data.task ?? ""),
         background: true,
         sentContext: data.context_shared === true,
         outputFile: data.output_file != null ? String(data.output_file) : undefined,
-      });
+      };
+      if (parentToolId) s.startSubAgentInParent(convId, msgId, parentToolId, String(data.id ?? ""), run);
+      else s.startSubAgent(convId, msgId, String(data.id ?? ""), run);
       break;
+    }
 
-    case "sub_agent_tool_call":
-      s.upsertSubAgentTool(convId, msgId, String(data.id ?? ""), {
+    case "sub_agent_tool_call": {
+      const parentToolId = data.parent_tool_id != null ? String(data.parent_tool_id) : undefined;
+      const subTool = {
         id: String(data.tool_id ?? uid("subtool")),
         name: String(data.name ?? "tool"),
         label: String(data.label ?? data.name ?? "tool"),
-        status: "running",
+        status: "running" as const,
         args: (data.args as Record<string, unknown> | undefined) ?? undefined,
         filePath: (data.args as Record<string, unknown> | undefined)?.file_path as string | undefined,
-      });
+      };
+      if (parentToolId)
+        s.upsertSubAgentToolInParent(convId, msgId, parentToolId, String(data.id ?? ""), subTool);
+      else s.upsertSubAgentTool(convId, msgId, String(data.id ?? ""), subTool);
       break;
+    }
 
-    case "sub_agent_tool_result":
-      s.upsertSubAgentTool(convId, msgId, String(data.id ?? ""), {
+    case "sub_agent_tool_result": {
+      const parentToolId = data.parent_tool_id != null ? String(data.parent_tool_id) : undefined;
+      const subTool = {
         id: String(data.tool_id ?? uid("subtool")),
         name: String(data.name ?? "tool"),
         label: String(data.label ?? data.name ?? "tool"),
-        status: data.ok ? "ok" : "error",
+        status: (data.ok ? "ok" : "error") as "ok" | "error",
         result: data.result,
-      });
+      };
+      if (parentToolId)
+        s.upsertSubAgentToolInParent(convId, msgId, parentToolId, String(data.id ?? ""), subTool);
+      else s.upsertSubAgentTool(convId, msgId, String(data.id ?? ""), subTool);
       ctx.onFilesChanged?.();
       break;
+    }
 
-    case "sub_agent_done":
-      s.finishSubAgent(convId, msgId, String(data.id ?? ""), {
-        status: data.ok ? "ok" : "error",
+    case "sub_agent_done": {
+      const parentToolId = data.parent_tool_id != null ? String(data.parent_tool_id) : undefined;
+      const patch = {
+        status: (data.ok ? "ok" : "error") as "ok" | "error",
         output: data.output != null ? String(data.output) : undefined,
         error: data.error != null ? String(data.error) : undefined,
-      });
+      };
+      if (parentToolId) s.finishSubAgentInParent(convId, msgId, parentToolId, String(data.id ?? ""), patch);
+      else s.finishSubAgent(convId, msgId, String(data.id ?? ""), patch);
       break;
+    }
 
     case "error":
       s.applyAssistantDelta(convId, msgId, {
