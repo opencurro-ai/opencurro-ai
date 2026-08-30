@@ -155,6 +155,43 @@ interface AppState {
     toolId: string,
     patch: { status: SubAgentRun["status"]; output?: string; error?: string },
   ) => void;
+  /** Create/refresh the call_multiple_sub_agents batch tool block with one run slot per child. */
+  startMultiSubAgents: (
+    convId: string,
+    msgId: string,
+    toolId: string,
+    label: string,
+    children: Array<{
+      id: string;
+      run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile" | "sentContext"> & {
+        error?: string;
+      };
+    }>,
+  ) => void;
+  /** Create/refresh a single child run inside a call_multiple_sub_agents batch block. */
+  startSubAgentInParent: (
+    convId: string,
+    msgId: string,
+    parentToolId: string,
+    childId: string,
+    run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile" | "sentContext">,
+  ) => void;
+  /** Upsert a nested tool activity onto a child run inside a batch block. */
+  upsertSubAgentToolInParent: (
+    convId: string,
+    msgId: string,
+    parentToolId: string,
+    childId: string,
+    tool: ToolActivity,
+  ) => void;
+  /** Finalize a single child run inside a batch block. */
+  finishSubAgentInParent: (
+    convId: string,
+    msgId: string,
+    parentToolId: string,
+    childId: string,
+    patch: { status: SubAgentRun["status"]; output?: string; error?: string },
+  ) => void;
 
   // Sub-agent management
   addSubAgent: (input: Omit<SubAgent, "id" | "createdAt" | "updatedAt">) => void;
@@ -255,7 +292,9 @@ function patchTool(
 }
 
 const emptyRun = (
-  run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile" | "sentContext">,
+  run: Pick<SubAgentRun, "agent" | "task" | "background" | "outputFile" | "sentContext"> & {
+    error?: string;
+  },
 ): SubAgentRun => ({
   agent: run.agent,
   task: run.task,
@@ -265,8 +304,35 @@ const emptyRun = (
   reasoning: "",
   output: "",
   tools: [],
-  status: "running",
+  status: run.error ? "error" : "running",
+  error: run.error,
 });
+
+/**
+ * Patch a single child run inside a call_multiple_sub_agents batch tool block. Locates the parent
+ * tool by `parentToolId`, then updates `multiRuns[childId]` (creating the slot when missing). A
+ * no-op when the parent tool or child slot cannot be resolved and `createIfMissing` is not given.
+ */
+function patchMultiRun(
+  conversations: Conversation[],
+  convId: string,
+  msgId: string,
+  parentToolId: string,
+  childId: string,
+  updater: (run: SubAgentRun) => SubAgentRun,
+  createIfMissing?: () => SubAgentRun,
+): Conversation[] {
+  return patchTool(conversations, convId, msgId, parentToolId, (tool) => {
+    const multiRuns = { ...tool.multiRuns };
+    const existing = multiRuns[childId] ?? (createIfMissing ? createIfMissing() : undefined);
+    if (!existing) return tool;
+    multiRuns[childId] = updater(existing);
+    const multiOrder = tool.multiOrder?.includes(childId)
+      ? tool.multiOrder
+      : [...(tool.multiOrder ?? []), childId];
+    return { ...tool, multiRuns, multiOrder };
+  });
+}
 
 /**
  * Runtime store. NOTHING here touches browser storage (no localStorage, no
@@ -602,19 +668,43 @@ export const useStore = create<AppState>()(
         })),
 
       applySubAgentDelta: (convId, msgId, toolId, delta) =>
-        set((s) => ({
-          conversations: patchTool(s.conversations, convId, msgId, toolId, (tool) => {
-            const run = tool.subAgent ?? emptyRun({ agent: "", task: "" });
-            return {
-              ...tool,
-              subAgent: {
-                ...run,
-                output: delta.outputDelta ? run.output + delta.outputDelta : run.output,
-                reasoning: delta.reasoningDelta ? run.reasoning + delta.reasoningDelta : run.reasoning,
-              },
-            };
-          }),
-        })),
+        set((s) => {
+          const applyDelta = (run: SubAgentRun): SubAgentRun => ({
+            ...run,
+            output: delta.outputDelta ? run.output + delta.outputDelta : run.output,
+            reasoning: delta.reasoningDelta ? run.reasoning + delta.reasoningDelta : run.reasoning,
+          });
+          // Token/reasoning deltas are keyed only by the run's own event id (toolId). That id is a
+          // top-level call_sub_agent chip, OR a child of a call_multiple_sub_agents batch. Locate
+          // whichever holds the run so batch children stream correctly too.
+          return {
+            conversations: s.conversations.map((c) =>
+              c.id !== convId
+                ? c
+                : {
+                    ...c,
+                    messages: c.messages.map((m) => {
+                      if (m.id !== msgId || !m.tools) return m;
+                      return {
+                        ...m,
+                        tools: m.tools.map((t) => {
+                          if (t.id === toolId && t.subAgent) {
+                            return { ...t, subAgent: applyDelta(t.subAgent) };
+                          }
+                          if (t.multiRuns && t.multiRuns[toolId]) {
+                            return {
+                              ...t,
+                              multiRuns: { ...t.multiRuns, [toolId]: applyDelta(t.multiRuns[toolId]!) },
+                            };
+                          }
+                          return t;
+                        }),
+                      };
+                    }),
+                  },
+            ),
+          };
+        }),
 
       upsertSubAgentTool: (convId, msgId, toolId, subTool) =>
         set((s) => ({
@@ -642,6 +732,94 @@ export const useStore = create<AppState>()(
               },
             };
           }),
+        })),
+
+      startMultiSubAgents: (convId, msgId, toolId, label, children) =>
+        set((s) => ({
+          conversations: patchTool(
+            s.conversations,
+            convId,
+            msgId,
+            toolId,
+            (tool) => {
+              // Merge in any children not already present (idempotent across replays), keeping the
+              // requested order and preserving live state for children that already started.
+              const multiRuns = { ...tool.multiRuns };
+              const multiOrder = [...(tool.multiOrder ?? [])];
+              for (const child of children) {
+                if (!multiRuns[child.id]) {
+                  multiRuns[child.id] = emptyRun(child.run);
+                  if (!multiOrder.includes(child.id)) multiOrder.push(child.id);
+                }
+              }
+              return { ...tool, name: "call_multiple_sub_agents", label, multiRuns, multiOrder };
+            },
+            () => ({
+              id: toolId,
+              name: "call_multiple_sub_agents",
+              label,
+              status: "running",
+              multiRuns: Object.fromEntries(children.map((c) => [c.id, emptyRun(c.run)])),
+              multiOrder: children.map((c) => c.id),
+            }),
+          ),
+        })),
+
+      startSubAgentInParent: (convId, msgId, parentToolId, childId, run) =>
+        set((s) => ({
+          conversations: patchMultiRun(
+            s.conversations,
+            convId,
+            msgId,
+            parentToolId,
+            childId,
+            (existing) => ({
+              ...existing,
+              agent: run.agent || existing.agent,
+              task: run.task || existing.task,
+              background: run.background ?? existing.background,
+              sentContext: run.sentContext ?? existing.sentContext,
+              outputFile: run.outputFile ?? existing.outputFile,
+            }),
+            () => emptyRun(run),
+          ),
+        })),
+
+      upsertSubAgentToolInParent: (convId, msgId, parentToolId, childId, subTool) =>
+        set((s) => ({
+          conversations: patchMultiRun(
+            s.conversations,
+            convId,
+            msgId,
+            parentToolId,
+            childId,
+            (run) => {
+              const tools = [...run.tools];
+              const idx = tools.findIndex((t) => t.id === subTool.id);
+              if (idx === -1) tools.push(subTool);
+              else tools[idx] = { ...tools[idx], ...subTool };
+              return { ...run, tools };
+            },
+            () => emptyRun({ agent: "", task: "" }),
+          ),
+        })),
+
+      finishSubAgentInParent: (convId, msgId, parentToolId, childId, patch) =>
+        set((s) => ({
+          conversations: patchMultiRun(
+            s.conversations,
+            convId,
+            msgId,
+            parentToolId,
+            childId,
+            (run) => ({
+              ...run,
+              status: patch.status,
+              output: patch.output != null && patch.output.length > 0 ? patch.output : run.output,
+              error: patch.error,
+            }),
+            () => emptyRun({ agent: "", task: "" }),
+          ),
         })),
 
       addSubAgent: (input) =>

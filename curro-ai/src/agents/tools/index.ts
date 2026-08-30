@@ -12,6 +12,7 @@ import { imageSearchTool } from "./imagesearch.js";
 import { fetchWebUrlsTool } from "./fetchWebUrls.js";
 import { readImageTool } from "./readImage.js";
 import { callSubAgentTool } from "./call_sub_agent.js";
+import { callMultipleSubAgentsTool } from "./call_multiple_sub_agents.js";
 import { listSubAgentsTool } from "./list_sub_agents.js";
 import { listSkillsTool } from "./list_skills.js";
 import { skillInitializeTool } from "./skill_initialize.js";
@@ -70,6 +71,7 @@ export { fetchWebUrlsTool } from "./fetchWebUrls.js";
 export { applyMultipleEditsTool } from "./applyMultipleEdits.js";
 export { readImageTool, SUPPORTED_IMAGE_EXTENSIONS } from "./readImage.js";
 export { callSubAgentTool } from "./call_sub_agent.js";
+export { callMultipleSubAgentsTool } from "./call_multiple_sub_agents.js";
 export { listSubAgentsTool } from "./list_sub_agents.js";
 export { listSkillsTool } from "./list_skills.js";
 export { skillInitializeTool } from "./skill_initialize.js";
@@ -120,6 +122,7 @@ export function createToolRegistry(): ToolRegistry {
     fetchWebUrlsTool,
     readImageTool,
     callSubAgentTool,
+    callMultipleSubAgentsTool,
     listSubAgentsTool,
     listSkillsTool,
     skillInitializeTool,
@@ -160,6 +163,7 @@ export const tools = {
   fetchWebUrlsTool,
   readImageTool,
   callSubAgentTool,
+  callMultipleSubAgentsTool,
   listSubAgentsTool,
   listSkillsTool,
   skillInitializeTool,

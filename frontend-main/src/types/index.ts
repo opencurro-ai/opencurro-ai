@@ -95,6 +95,14 @@ export interface ToolActivity {
   result?: unknown;
   /** Live sub-agent run attached to a call_sub_agent tool chip (streamed token by token). */
   subAgent?: SubAgentRun;
+  /**
+   * Live sub-agent runs attached to a call_multiple_sub_agents tool chip, keyed by each child's
+   * unique event id. Every entry is an independent sub-agent run rendered as its own nested block
+   * inside the batch tool block.
+   */
+  multiRuns?: Record<string, SubAgentRun>;
+  /** Render order of `multiRuns` (child ids) — preserves the order the sub-agents were requested. */
+  multiOrder?: string[];
   /** Human-in-the-loop plan review rendered as the big chat block for submit_plan. */
   plan?: PlanApprovalInfo;
   /** Human-in-the-loop question-answer block rendered for ask_question_to_user. */
@@ -518,6 +526,27 @@ export interface SSEEventData {
   context_shared?: boolean;
   /** Workspace-relative ".curro/sub-agent" file where a background run writes its output. */
   output_file?: string;
+  /**
+   * Parent tool-call id set on every sub_agent_* event that belongs to a call_multiple_sub_agents
+   * batch, so the frontend nests the child run inside the batch's tool block instead of a top-level
+   * chip. Absent for a plain call_sub_agent run.
+   */
+  parent_tool_id?: string;
+  /** 10-character session id of the individual sub-agent run this event belongs to. */
+  sub_session_id?: string;
+  // call_multiple_sub_agents batch-start fields
+  /** Number of sub-agents in the batch (multi_sub_agents_start). */
+  count?: number;
+  /** The child sub-agents listed at batch start, each with its own child id + metadata. */
+  agents?: Array<{
+    id?: string;
+    agent?: string;
+    task?: string;
+    background?: boolean;
+    context_shared?: boolean;
+    sub_session_id?: string;
+    error?: string;
+  }>;
   // submit_plan review fields
   chat_id?: string;
   plan?: string;
