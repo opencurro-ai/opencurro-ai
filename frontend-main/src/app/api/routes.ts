@@ -7,7 +7,7 @@
  * `frontend-2` used, expressed as a typed registry for the Vite/React app.
  */
 
-export type HttpMethod = "GET" | "POST";
+export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export interface ApiRoute {
   /** Logical name used by the client (e.g. `chat.stream`). */
@@ -85,6 +85,36 @@ export const API_ROUTES = {
     method: "POST",
     path: "/api/scrape",
     description: "Fetch a URL's content via the built-in scraper for the URL→knowledge flow.",
+  },
+  stateGet: {
+    name: "state.get",
+    method: "GET",
+    path: "/api/state",
+    description: "Load the full application state (settings, skills, memory, sessions…) from SQLite.",
+  },
+  stateSet: {
+    name: "state.set",
+    method: "POST",
+    path: "/api/state/:key",
+    description: "Persist one application-state document into the backend SQLite database.",
+  },
+  sessionGet: {
+    name: "session.get",
+    method: "GET",
+    path: "/api/sessions/:id",
+    description: "Load one session's snapshot + transcript from the backend SQLite database.",
+  },
+  sessionSave: {
+    name: "session.save",
+    method: "POST",
+    path: "/api/sessions/:id",
+    description: "Upsert a session (title and/or UI conversation snapshot) into SQLite.",
+  },
+  sessionDelete: {
+    name: "session.delete",
+    method: "DELETE",
+    path: "/api/sessions/:id",
+    description: "Delete a session and all of its stored data from SQLite.",
   },
 } as const satisfies Record<string, ApiRoute>;
 

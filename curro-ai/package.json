@@ -15,6 +15,7 @@
     "test": "tsx --test src/agents/tools/fileRead.test.ts src/agents/tools/readImage.test.ts src/agents/tools/applyMultipleEdits.test.ts src/agents/tools/shall.test.ts src/agents/tools/shellView.test.ts src/agents/tools/bashwritetoprocess.test.ts src/agents/tools/submitplan.test.ts src/agents/tools/askuser.test.ts src/agents/tools/skills.test.ts src/agents/tools/buildsubagent.test.ts src/agents/tools/createskill.test.ts src/agents/tools/todowrite.test.ts src/agents/tools/todoread.test.ts src/agents/tools/memory_list.test.ts src/agents/tools/memory_search.test.ts src/agents/tools/memory_read.test.ts src/agents/tools/memory_write.test.ts src/agents/tools/memory_edit.test.ts src/agents/tools/memory_delete.test.ts src/agents/tools/imagesearch.test.ts src/agents/tools/knowledge_list.test.ts src/agents/tools/knowledge_search.test.ts src/agents/tools/knowledge_read.test.ts src/agents/tools/knowledge_create.test.ts src/agents/tools/knowledge_edit.test.ts src/agents/tools/knowledge_delete.test.ts src/scraper/scraper.test.ts src/agents/skills/index.test.ts"
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.0.1",
     "express": "^5.1.0",
@@ -22,6 +23,7 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",

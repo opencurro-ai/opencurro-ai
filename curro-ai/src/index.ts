@@ -11,9 +11,14 @@ import { buildChatRouter } from "./api/chat.js";
 import { buildProviderRouter } from "./api/providers.js";
 import { buildFilesRouter } from "./api/files.js";
 import { buildScrapeRouter } from "./api/scrape.js";
+import { buildStateRouter, buildSessionsRouter } from "./api/state.js";
+import { CurroDatabase } from "./database/index.js";
 
 function main(): void {
   ensureWorkspace();
+
+  // The SQLite database (workspace/.curro/curro.db) is created automatically on boot.
+  const db = CurroDatabase.open(config.workspaceRoot);
 
   const providers = createProviderRegistry();
   const tools = createToolRegistry();
@@ -39,13 +44,17 @@ function main(): void {
       providers: providers.list().map((p) => p.id),
       tools: tools.schemas.map((s) => s.function.name),
       max_iterations: config.maxIterations,
+      database: db.path,
+      sqlite_version: db.version,
     });
   });
 
   app.use("/api/providers", buildProviderRouter(providers));
-  app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals, askQuestions));
+  app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals, askQuestions, db));
   app.use("/api/files", buildFilesRouter(config));
   app.use("/api/scrape", buildScrapeRouter(config));
+  app.use("/api/state", buildStateRouter(db));
+  app.use("/api/sessions", buildSessionsRouter(db));
 
   const server = app.listen(config.port, () => {
     // eslint-disable-next-line no-console
@@ -55,6 +64,8 @@ function main(): void {
   });
 
   const shutdown = () => {
+    // Flush the write queue and checkpoint the WAL before exiting.
+    db.close();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 5000).unref();
   };

@@ -19,7 +19,7 @@ export interface CustomHeader {
 }
 
 /**
- * A user-defined OpenAI-compatible provider, persisted in the browser (localStorage).
+ * A user-defined OpenAI-compatible provider, persisted in the backend SQLite database.
  * Multiple providers coexist; each can carry one or more model ids.
  */
 export interface CustomProvider {
@@ -130,7 +130,7 @@ export interface SubAgentRun {
   outputFile?: string;
 }
 
-/** A user-defined sub-agent, stored in the browser (localStorage) — never on the server. */
+/** A user-defined sub-agent, stored in the backend SQLite database. */
 export interface SubAgent {
   id: string;
   name: string;
@@ -159,7 +159,7 @@ export interface SkillFile {
 }
 
 /**
- * A user-defined skill, stored in the browser (localStorage) — never on the server. A skill is a
+ * A user-defined skill, stored in the backend SQLite database. A skill is a
  * reusable, packaged capability: a folder named after the skill containing an entry markdown file
  * (SKILL.md by default, renameable) plus any number of reference/example/script files.
  */
@@ -201,11 +201,23 @@ export interface ChatMessage {
 }
 
 export interface Conversation {
+  /** 20-character alphanumeric session id shared with the backend SQLite database. */
   id: string;
   title: string;
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  /**
+   * Server-reported message count for sessions whose full snapshot has not been
+   * fetched yet (conversation stubs listed from the database at boot).
+   */
+  messageCount?: number;
+  /**
+   * False while this conversation is only a stub from the session list — its
+   * snapshot has not been loaded from the database yet. Stubs are never synced
+   * back to the server (that would overwrite the stored history).
+   */
+  loaded?: boolean;
 }
 
 export interface FileNode {
@@ -227,7 +239,7 @@ export type TodoStatus = "pending" | "in_progress" | "completed";
 /** Priority a todo can carry. */
 export type TodoPriority = "low" | "medium" | "high";
 
-/** A single todo item in the session's task list, stored in the browser (localStorage). */
+/** A single todo item in the session's task list, stored in the backend SQLite database. */
 export interface TodoItem {
   /** Unique string identifier (starts at 1; used to refer to the todo in updates). */
   id: string;
@@ -251,7 +263,7 @@ export interface TodoToolResult {
 }
 
 /**
- * A single persistent memory file, stored in the browser (localStorage) — never on the server.
+ * A single persistent memory file, stored in the backend SQLite database.
  * `path` is relative to the virtual memory root (/memory/): a bare name ("MEMORY.md") or a nested
  * path ("projects/app.md"). The agent reads/maintains these via the `memory` tool to self-evolve
  * across chat sessions. Three files are always pre-added and permanent: MEMORY.md, SOUL.md, USER.md.
@@ -297,7 +309,7 @@ export interface MemoryToolResult {
 }
 
 /**
- * A single persistent knowledge file, stored in the browser (localStorage) — never on the server.
+ * A single persistent knowledge file, stored in the backend SQLite database.
  * `path` is relative to the virtual knowledge root (knowledge/): a bare name ("docs.md") or a nested
  * path ("api/reference.md"). The user curates the knowledge base (manual creation, file/folder
  * upload, or URL fetch); the agent reads/maintains it via the knowledge_* tools. Unlike memory, the

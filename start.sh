@@ -23,6 +23,7 @@ cd "$FRONTEND_DIR"
 npm install --silent
 
 echo "Starting backend (curro-ai)…"
+echo "  → SQLite database is created/opened automatically at <workspace>/.curro/curro.db"
 cd "$BACKEND_DIR"
 npm run dev > "$SCRIPT_DIR/.curro-backend.log" 2>&1 &
 BACKEND_PID=$!
@@ -34,7 +35,8 @@ FRONTEND_PID=$!
 
 echo ""
 echo "Backend  → http://localhost:8787  (health: http://localhost:8787/health)"
-echo "Frontend → http://localhost:5173  (proxies /api → backend)"
+echo "Frontend → http://localhost:5173  (proxies /api → backend, reads from the local SQLite DB)"
+echo "Database → curro-ai/workspace/.curro/curro.db (SQLite, WAL mode — auto-created)"
 echo ""
 echo "Press Ctrl+C to stop both."
 echo ""

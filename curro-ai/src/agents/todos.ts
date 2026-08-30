@@ -3,7 +3,7 @@ import type { TodoItem, TodoRuntime, ToolContext } from "./tools/types.js";
 /**
  * Build the TodoRuntime bound to a single main-agent turn. The returned object is injected into
  * the ToolContext so TodoWrite / read_todos can read and update the user's todo list. Todos live
- * in the user's browser (localStorage) and travel with each turn; the runtime keeps a per-turn
+ * in the SQLite database (and browser runtime state) and travel with each turn; the runtime keeps a per-turn
  * mutable snapshot so reads/writes within the same turn see consistent state.
  */
 export function createTodoRuntime(definitions: TodoItem[]): TodoRuntime {

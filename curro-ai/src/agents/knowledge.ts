@@ -16,7 +16,7 @@ export const KNOWLEDGE_ROOT = "knowledge/";
 /**
  * Build the KnowledgeRuntime bound to a single main-agent turn. Injected into the ToolContext so
  * the knowledge_* tools can list/read/create/edit/delete knowledge files. Knowledge lives in the
- * user's browser (localStorage) and travels with each turn; the runtime keeps a per-turn mutable
+ * SQLite database (and browser runtime state) and travels with each turn; the runtime keeps a per-turn mutable
  * snapshot so reads/writes within the same turn stay consistent, and emits `knowledge_updated` on
  * every mutation so the frontend persists the change back to the browser.
  */

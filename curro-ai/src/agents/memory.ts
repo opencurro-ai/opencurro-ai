@@ -27,10 +27,10 @@ export const MEMORY_ROOT = "/memory/";
 
 /**
  * Build the MemoryRuntime bound to a single main-agent turn. Injected into the ToolContext so the
- * `memory` tool can list/read/write/edit/delete memory files. Memory lives in the user's browser
- * (localStorage) and travels with each turn; the runtime keeps a per-turn mutable snapshot so
+ * `memory` tool can list/read/write/edit/delete memory files. Memory lives in the SQLite
+ * database and travels with each turn; the runtime keeps a per-turn mutable snapshot so
  * reads/writes within the same turn stay consistent, and emits `memory_updated` on every mutation
- * so the frontend persists the change back to the browser.
+ * so the frontend syncs the change back into the database.
  */
 export function createMemoryRuntime(initial: MemoryFile[]): MemoryRuntime {
   const runner = new MemoryRunner(initial);
