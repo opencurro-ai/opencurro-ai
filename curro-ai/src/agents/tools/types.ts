@@ -57,10 +57,27 @@ export interface SubAgentDefinition {
 }
 
 /**
+ * One entry in a call_multiple_sub_agents invocation — a single independent sub-agent to run as
+ * part of the batch. Mirrors the single-call parameters but is named for the batch tool: `prompt`
+ * is that sub-agent's task, `wait_for_output` decides whether the main agent blocks on it, and
+ * `send_my_output` shares the main agent's current conversation/output with the sub-agent.
+ */
+export interface MultiSubAgentParam {
+  /** Name of the specialized sub-agent to run for this entry. */
+  agent: string;
+  /** The specific task/instructions for this sub-agent. */
+  prompt: string;
+  /** When true (default) the main agent waits for this sub-agent; when false it runs detached. */
+  wait_for_output?: boolean;
+  /** When true, the main agent's current conversation/output is shared with this sub-agent. */
+  send_my_output?: boolean;
+}
+
+/**
  * Runtime bridge injected into the ToolContext for the main agent's turn so the
- * call_sub_agent / list_sub_agents tools can enumerate and execute sub-agents. It is
- * intentionally absent from the context handed to a sub-agent's own tool calls, which
- * prevents recursive sub-agent invocation.
+ * call_sub_agent / call_multiple_sub_agents / list_sub_agents tools can enumerate and execute
+ * sub-agents. It is intentionally absent from the context handed to a sub-agent's own tool calls,
+ * which prevents recursive sub-agent invocation.
  */
 export interface SubAgentRuntime {
   /** All definitions provided by the user for this turn (enabled + disabled). */
@@ -86,6 +103,19 @@ export interface SubAgentRuntime {
     },
     ctx: ToolContext,
   ): Promise<ToolResult>;
+  /**
+   * Execute several sub-agents concurrently in a single call. Each entry runs as its own fully
+   * independent sub-agent — its own session id, system prompt, allowed tools, and conversation —
+   * exactly like a call_sub_agent invocation. The main agent blocks until every entry whose
+   * `wait_for_output` is true (the default) has finished, and their outputs are returned inline.
+   * Entries whose `wait_for_output` is false are launched detached in the background: the call does
+   * not wait for them, and each writes its final report to its own ".curro/sub-agent" file for the
+   * main agent to read later. When `send_my_output` is true for an entry, a summary of the main
+   * agent's current conversation is shared with that sub-agent. Streams the same `sub_agent_*`
+   * side-channel events as call_sub_agent, additionally stamped with `parent_tool_id` so the UI can
+   * group every child run inside the batch's tool block.
+   */
+  runMany(params: { agents: MultiSubAgentParam[] }, ctx: ToolContext): Promise<ToolResult>;
 }
 
 /**

@@ -11,6 +11,7 @@ import {
 } from "./tools/readImage.js";
 import type { StoredMessage } from "../services/sessionStore.js";
 import type {
+  MultiSubAgentParam,
   SubAgentDefinition,
   SubAgentRuntime,
   ToolContext,
@@ -26,6 +27,7 @@ import { createSubAgentSessionId } from "../database/ids.js";
  */
 export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
   "call_sub_agent",
+  "call_multiple_sub_agents",
   "list_sub_agents",
   "list_skills",
   "skill_initialize",
@@ -68,6 +70,7 @@ export function createSubAgentRuntime(deps: SubAgentRuntimeDeps): SubAgentRuntim
     definitions: deps.definitions,
     available: () => runner.available(),
     run: (params, ctx) => runner.run(params, ctx),
+    runMany: (params, ctx) => runner.runMany(params, ctx),
   };
 }
 
@@ -155,6 +158,237 @@ class SubAgentRunner {
   }
 
   /**
+   * Dispatch a BATCH of sub-agents concurrently from a single tool call. Each entry becomes a fully
+   * independent sub-agent run — its own 10-character session id, system prompt, allowed tools, and
+   * conversation — exactly like an individual call_sub_agent invocation. The runs execute in
+   * parallel; the returned promise resolves once every `wait_for_output: true` entry has finished
+   * (their outputs are returned inline) and every `wait_for_output: false` entry has been launched
+   * detached in the background (each writing its final report to its own ".curro/sub-agent" file).
+   *
+   * Every child run streams the same `sub_agent_*` side-channel events as call_sub_agent, but each
+   * is stamped with a unique child event id and the shared `parent_tool_id`, so the frontend renders
+   * one live sub-agent block per entry, all grouped inside this batch tool's block.
+   */
+  async runMany(
+    params: { agents: MultiSubAgentParam[] },
+    ctx: ToolContext,
+  ): Promise<ToolResult> {
+    const specs = Array.isArray(params.agents) ? params.agents : [];
+    if (specs.length === 0) {
+      return {
+        ok: false,
+        error: {
+          code: "no_sub_agents",
+          message: "Provide at least one sub-agent to call in the 'agents' array.",
+        },
+      };
+    }
+
+    // The batch shares one parent tool-call id; each child gets a unique, stable event id derived
+    // from it (index-based) so the UI can create and address one block per child.
+    const parentToolId = ctx.toolCallId ?? `multi_subagent_${Date.now()}`;
+
+    // Resolve every entry up front into a plan item — valid (has a definition + task) or invalid
+    // (unknown/disabled agent, or empty prompt). Each carries its own fresh sub-agent session id.
+    const plan = specs.map((spec, index) => {
+      const agentName = (spec?.agent ?? "").trim();
+      const task = (spec?.prompt ?? "").trim();
+      const definition = this.find(agentName);
+      const waitForOutput = spec?.wait_for_output !== false;
+      const sendMyOutput = spec?.send_my_output === true;
+      let error: string | undefined;
+      if (!definition) {
+        const names = this.available().map((a) => a.name);
+        error =
+          `Unknown or disabled sub-agent "${spec?.agent ?? ""}". ` +
+          (names.length > 0
+            ? `Available sub-agents: ${names.join(", ")}.`
+            : "No sub-agents are currently available.");
+      } else if (!task) {
+        error = "A non-empty prompt is required for this sub-agent.";
+      }
+      return {
+        index,
+        childId: `${parentToolId}::${index}`,
+        subSessionId: createSubAgentSessionId(),
+        agentName,
+        task,
+        definition,
+        waitForOutput,
+        sendMyOutput,
+        error,
+      };
+    });
+
+    // Capture the main conversation once (shared by reference) if any valid entry asked for it.
+    const wantsContext = plan.some((p) => p.sendMyOutput && !p.error);
+    const contextText = wantsContext ? this.captureConversationContext() : undefined;
+
+    // Announce the whole batch so the frontend can render one block per child immediately — before
+    // any child streams — including the invalid entries (shown with their error).
+    this.deps.send("multi_sub_agents_start", {
+      id: parentToolId,
+      count: plan.length,
+      agents: plan.map((p) => ({
+        id: p.childId,
+        agent: p.definition?.name ?? p.agentName,
+        task: p.task,
+        background: !p.waitForOutput,
+        context_shared: Boolean(p.sendMyOutput && !p.error && contextText !== undefined),
+        sub_session_id: p.subSessionId,
+        error: p.error,
+      })),
+    });
+
+    // Launch every entry concurrently. Foreground (wait_for_output=true) entries are awaited to
+    // completion; background entries resolve as soon as they are detached. Promise.all therefore
+    // settles when the slowest foreground child finishes and all background children have started.
+    const settled = await Promise.all(
+      plan.map((p) => this.runOne(p, ctx, parentToolId, contextText)),
+    );
+
+    const waitedFor = settled.filter((r) => r.wait_for_output);
+    const background = settled.filter((r) => !r.wait_for_output);
+    const failures = settled.filter((r) => r.ok === false);
+
+    return {
+      ok: true,
+      data: {
+        parent_tool_id: parentToolId,
+        count: settled.length,
+        waited_for: waitedFor.length,
+        running_in_background: background.length,
+        failed: failures.length,
+        agents: settled,
+        message: buildMultiSummaryMessage(waitedFor.length, background.length, failures.length),
+      },
+    };
+  }
+
+  /**
+   * Run a single planned entry of a call_multiple_sub_agents batch and normalize its outcome into a
+   * compact, model-facing record. Invalid entries (unknown agent / empty prompt) emit a start +
+   * error-done pair so the UI still shows their block, then report the error without running.
+   */
+  private async runOne(
+    p: {
+      index: number;
+      childId: string;
+      subSessionId: string;
+      agentName: string;
+      task: string;
+      definition: SubAgentDefinition | undefined;
+      waitForOutput: boolean;
+      sendMyOutput: boolean;
+      error?: string;
+    },
+    ctx: ToolContext,
+    parentToolId: string,
+    contextText: string | undefined,
+  ): Promise<Record<string, unknown> & { wait_for_output: boolean; ok: boolean }> {
+    if (p.error || !p.definition) {
+      // No run happens — but surface a block in the UI with the error so nothing silently vanishes.
+      const agent = p.definition?.name ?? p.agentName;
+      this.deps.send("sub_agent_start", {
+        id: p.childId,
+        parent_tool_id: parentToolId,
+        sub_session_id: p.subSessionId,
+        agent,
+        task: p.task,
+        background: !p.waitForOutput,
+        context_shared: false,
+      });
+      this.deps.send("sub_agent_done", {
+        id: p.childId,
+        parent_tool_id: parentToolId,
+        sub_session_id: p.subSessionId,
+        ok: false,
+        output: "",
+        error: p.error,
+      });
+      return {
+        index: p.index,
+        agent,
+        session_id: p.subSessionId,
+        wait_for_output: p.waitForOutput,
+        ok: false,
+        error: p.error ?? "The sub-agent could not be run.",
+      };
+    }
+
+    const childContext = p.sendMyOutput ? contextText : undefined;
+
+    if (p.waitForOutput) {
+      const result = await this.runForeground(
+        p.definition,
+        p.task,
+        ctx,
+        p.subSessionId,
+        childContext,
+        p.childId,
+        parentToolId,
+      );
+      if (result.ok) {
+        const data = (result.data ?? {}) as { output?: unknown; context_shared?: unknown };
+        return {
+          index: p.index,
+          agent: p.definition.name,
+          session_id: p.subSessionId,
+          wait_for_output: true,
+          background: false,
+          context_shared: data.context_shared === true,
+          ok: true,
+          output: typeof data.output === "string" ? data.output : "",
+        };
+      }
+      return {
+        index: p.index,
+        agent: p.definition.name,
+        session_id: p.subSessionId,
+        wait_for_output: true,
+        background: false,
+        ok: false,
+        error: result.error?.message ?? "The sub-agent failed.",
+      };
+    }
+
+    const result = await this.runBackground(
+      p.definition,
+      p.task,
+      ctx,
+      p.subSessionId,
+      childContext,
+      p.childId,
+      parentToolId,
+    );
+    if (result.ok) {
+      const data = (result.data ?? {}) as { output_file?: unknown; context_shared?: unknown };
+      return {
+        index: p.index,
+        agent: p.definition.name,
+        session_id: p.subSessionId,
+        wait_for_output: false,
+        background: true,
+        context_shared: data.context_shared === true,
+        ok: true,
+        output_file: typeof data.output_file === "string" ? data.output_file : undefined,
+        message:
+          `Sub-agent "${p.definition.name}" is running in the background. Read its output file with ` +
+          `file_read when you need the result.`,
+      };
+    }
+    return {
+      index: p.index,
+      agent: p.definition.name,
+      session_id: p.subSessionId,
+      wait_for_output: false,
+      background: true,
+      ok: false,
+      error: result.error?.message ?? "The background sub-agent could not be started.",
+    };
+  }
+
+  /**
    * Build a bounded, readable transcript of the main agent's current conversation to hand to a
    * sub-agent when `send_my_context` is true. Returns undefined when no context provider is wired
    * or when the conversation has nothing worth sharing.
@@ -174,12 +408,15 @@ class SubAgentRunner {
     ctx: ToolContext,
     subSessionId: string,
     contextText?: string,
+    eventId?: string,
+    parentToolId?: string,
   ): Promise<ToolResult> {
-    const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
+    const parentId = eventId ?? ctx.toolCallId ?? `subagent_${Date.now()}`;
     const result = await this.runLoop(definition, task, parentId, ctx, ctx.signal, {
       background: false,
       contextText,
       subSessionId,
+      parentToolId,
     });
 
     if (result.aborted) {
@@ -216,8 +453,10 @@ class SubAgentRunner {
     ctx: ToolContext,
     subSessionId: string,
     contextText?: string,
+    eventId?: string,
+    parentToolId?: string,
   ): Promise<ToolResult> {
-    const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
+    const parentId = eventId ?? ctx.toolCallId ?? `subagent_${Date.now()}`;
     const fileName = `${slugifyName(definition.name)}-output-${random5()}.md`;
     const relPath = `${SUB_AGENT_OUTPUT_DIR}/${fileName}`;
 
@@ -267,6 +506,7 @@ class SubAgentRunner {
 
     this.deps.send("sub_agent_background_started", {
       id: parentId,
+      ...(parentToolId ? { parent_tool_id: parentToolId } : {}),
       sub_session_id: subSessionId,
       agent: definition.name,
       task,
@@ -279,6 +519,7 @@ class SubAgentRunner {
       background: true,
       contextText,
       subSessionId,
+      parentToolId,
     })
       .then((result) =>
         writeOutputFile(outputAbs, {
@@ -330,14 +571,26 @@ class SubAgentRunner {
     parentId: string,
     outerCtx: ToolContext,
     signal: AbortSignal | undefined,
-    options: { background: boolean; contextText?: string; subSessionId?: string },
+    options: {
+      background: boolean;
+      contextText?: string;
+      subSessionId?: string;
+      /** When set, every event of this run also carries `parent_tool_id` so the UI can group the
+       * run inside a call_multiple_sub_agents batch block. */
+      parentToolId?: string;
+    },
   ): Promise<SubAgentLoopResult> {
     const { send: rawSend, provider, tools, config } = this.deps;
     // Stamp every event of this run with its 10-char sub-agent session id so the
     // database can attribute the stream, tool calls, and output to this exact run.
     const subSessionId = options.subSessionId ?? createSubAgentSessionId();
+    // When this run belongs to a call_multiple_sub_agents batch, also stamp the parent tool-call id
+    // so the frontend nests every event under the batch's tool block instead of a top-level chip.
+    const eventStamp: Record<string, unknown> = options.parentToolId
+      ? { sub_session_id: subSessionId, parent_tool_id: options.parentToolId }
+      : { sub_session_id: subSessionId };
     const send = (event: string, data: Record<string, unknown>): void =>
-      rawSend(event, { sub_session_id: subSessionId, ...data });
+      rawSend(event, { ...eventStamp, ...data });
 
     // Allowed tools = the sub-agent's chosen tools, minus the sub-agent meta tools, that
     // actually exist in the registry. This is the tool set both advertised and enforced.
@@ -526,6 +779,35 @@ class SubAgentRunner {
       return { ok: false, aborted: false, output: "", error: message };
     }
   }
+}
+
+/**
+ * Human/model-facing summary line for a completed call_multiple_sub_agents batch: how many entries
+ * were waited on (with their outputs inline), how many are still running detached in the background,
+ * and how many failed.
+ */
+function buildMultiSummaryMessage(
+  waitedFor: number,
+  background: number,
+  failures: number,
+): string {
+  const parts: string[] = [];
+  if (waitedFor > 0) {
+    parts.push(
+      `Waited for ${waitedFor} sub-agent(s); their outputs are included above under each agent.`,
+    );
+  }
+  if (background > 0) {
+    parts.push(
+      `${background} sub-agent(s) are running in the background — you do not need to wait. Read ` +
+        `each one's output file with file_read when you need its result.`,
+    );
+  }
+  if (failures > 0) {
+    parts.push(`${failures} sub-agent(s) could not be run or failed; see their 'error' fields.`);
+  }
+  if (parts.length === 0) return "No sub-agents were run.";
+  return parts.join(" ");
 }
 
 /** Terminal states a background sub-agent output file can record. */
