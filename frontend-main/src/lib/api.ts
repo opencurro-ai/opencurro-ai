@@ -29,7 +29,8 @@ export interface ScrapeUrlOptions {
   curl?: string;
 }
 
-async function requestJson<T>(url: string, init?: RequestInit, signal?: AbortSignal): Promise<T> {
+/** Shared JSON request helper (also used by the SQLite state client in `backendState.ts`). */
+export async function requestJson<T>(url: string, init?: RequestInit, signal?: AbortSignal): Promise<T> {
   const res = await resilientFetch(url, { cache: "no-store", ...init }, { signal });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

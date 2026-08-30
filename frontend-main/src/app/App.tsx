@@ -15,28 +15,59 @@ import { PreviewPanel } from "@/components/overlays/PreviewPanel";
 import { useStore } from "@/store/useStore";
 import { useChatStream, useConnectionWatch } from "@/hooks/useChatStream";
 import { fetchProviders } from "@/lib/api";
+import {
+  bootstrapFromBackend,
+  loadConversationIfNeeded,
+  startStatePersistence,
+} from "@/lib/statePersistence";
 
 export function App() {
   const section = useStore((s) => s.section);
+  const currentId = useStore((s) => s.currentId);
+  const hydrated = useStore((s) => s.hydrated);
   const setProviders = useStore((s) => s.setProviders);
-  const ensureConversation = useStore((s) => s.ensureConversation);
   const { send, resume, stop } = useChatStream();
-  const resumedRef = useRef(false);
+  const bootedRef = useRef(false);
 
   useConnectionWatch();
 
+  // Boot: hydrate the runtime store from the backend SQLite database, start the
+  // change-sync bridge, then re-attach to any run the backend is still executing —
+  // a page refresh loses nothing and reconnects to the live stream immediately.
   useEffect(() => {
-    ensureConversation();
-    fetchProviders().then(setProviders).catch(() => {});
-  }, [ensureConversation, setProviders]);
+    if (bootedRef.current) return;
+    bootedRef.current = true;
 
-  // Re-attach to a run the backend may still be executing (survives refresh/close/reconnect).
+    fetchProviders().then(setProviders).catch(() => {});
+
+    void (async () => {
+      const payload = await bootstrapFromBackend();
+      startStatePersistence();
+
+      const store = useStore.getState();
+      const activeId = store.currentId;
+      if (activeId) await loadConversationIfNeeded(activeId);
+      useStore.getState().ensureConversation();
+
+      // Re-attach to a still-running stream (survives refresh/close/reconnect).
+      const running = payload.sessions.find((s) => s.running);
+      if (running) {
+        await loadConversationIfNeeded(running.id);
+        void resume({
+          chatId: running.id,
+          assistantId: "", // rebuilt by resume(): a fresh placeholder receives the replay
+          lastEventId: -1,
+          startedAt: Date.now(),
+        });
+      }
+    })();
+  }, [resume, setProviders]);
+
+  // Lazily pull a conversation's stored snapshot from the database when it is opened.
   useEffect(() => {
-    if (resumedRef.current) return;
-    resumedRef.current = true;
-    const run = useStore.getState().activeRun;
-    if (run) void resume(run);
-  }, [resume]);
+    if (!hydrated || !currentId) return;
+    void loadConversationIfNeeded(currentId);
+  }, [hydrated, currentId]);
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-[var(--bg)] text-[var(--fg)]">

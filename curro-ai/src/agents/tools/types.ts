@@ -39,7 +39,7 @@ export interface WebToolsConfig {
 
 /**
  * A user-defined sub-agent. Definitions are authored in the frontend and stored in the
- * user's browser (localStorage); they are sent to the backend with each turn. A sub-agent
+ * SQLite database (and browser runtime state); they are sent with each turn. A sub-agent
  * is a completely separate LLM call — its own system prompt, its own allowed tools, and its
  * own conversation memory keyed by session name — with no access to the main agent history.
  */
@@ -100,7 +100,7 @@ export interface SkillFileDefinition {
 
 /**
  * A user-defined skill. Definitions are authored in the frontend and stored in the user's
- * browser (localStorage); they are sent to the backend with each turn. A skill is a reusable,
+ * SQLite database (and browser runtime state); they are sent with each turn. A skill is a reusable,
  * packaged capability — a folder named after the skill, containing an entry markdown file (by
  * convention SKILL.md, but renameable) plus any number of reference/example/script files. The
  * agent discovers skills with list_skills, then materializes the ones it needs onto disk (inside
@@ -139,7 +139,7 @@ export interface FailedSkill {
 /**
  * A single memory file. `path` is relative to the virtual memory root ("/memory/") — a bare name
  * ("MEMORY.md") or a nested path ("projects/app.md"). Memory files are authored/maintained by the
- * agent via the `memory` tool and stored in the user's browser (localStorage); they travel with
+ * agent via the `memory` tool and stored in the SQLite database; they travel with
  * each turn. Three files are always pre-added and permanent: MEMORY.md, SOUL.md, USER.md.
  */
 export interface MemoryFile {
@@ -182,7 +182,7 @@ export interface MemoryRuntime {
  * A single knowledge file. `path` is relative to the virtual knowledge root ("/knowledge/") — a bare
  * name ("docs.md") or a nested path ("api/reference.md"). Knowledge files are curated by the user
  * (manual creation, file/folder upload, or URL fetch) and maintained by the agent via the
- * knowledge_* tools; they are stored in the user's browser (localStorage) and travel with each turn.
+ * knowledge_* tools; they are stored in the SQLite database (and browser runtime state) and travel with each turn.
  * Unlike memory, the knowledge base has NO pre-added files and NO character limits — it starts empty.
  */
 export interface KnowledgeFile {
@@ -229,7 +229,7 @@ export type TodoPriority = "low" | "medium" | "high";
 
 /**
  * A single todo item in the session's task list. Todos are authored by the main agent and stored
- * in the user's browser (localStorage); they travel with each turn and are rendered in a popup.
+ * in the SQLite database; they travel with each turn and are rendered in a popup.
  */
 export interface TodoItem {
   /** Unique string identifier — recreated during a turn only if missing/unfit. */

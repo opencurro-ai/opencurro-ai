@@ -4,10 +4,10 @@ import { useStore } from "@/store/useStore";
  * Coalesces high-frequency stream deltas (assistant tokens/reasoning and each sub-agent's
  * output/reasoning) and flushes them to the store at most once per animation frame.
  *
- * This is the core render/state optimization: a fast model can emit hundreds of tokens per
+ * This is the core render/state optimization: a fast model can emit thousands of tokens per
  * second, but the UI only needs to repaint ~once per frame. Batching turns N store writes into
- * 1 per frame, which (combined with the debounced persistence layer) keeps long, streaming
- * agent responses smooth and prevents localStorage thrash.
+ * 1 per frame, keeping long, streaming agent responses smooth. Persistence happens entirely on
+ * the backend (SQLite) — the browser holds runtime state only.
  */
 export class StreamBatcher {
   private content = "";

@@ -10,6 +10,7 @@ import { normalizeTodos } from "../agents/todos.js";
 import { normalizeMemoryFiles } from "../agents/memory.js";
 import { normalizeKnowledgeFiles } from "../agents/knowledge.js";
 import { initSSE, formatSSE } from "../utils/sse.js";
+import type { CurroDatabase } from "../database/index.js";
 
 /** Extract a string field from an untrusted object (used on the custom_provider payload). */
 function str(value: unknown): string {
@@ -125,11 +126,33 @@ export function buildChatRouter(
   config: AppConfig,
   planApprovals: PlanApprovalStore,
   askQuestions: QuestionStore,
+  db: CurroDatabase,
 ): Router {
   const router = Router();
 
+  /**
+   * Persist the turn's outcome: transcript + session bookkeeping (batched, off hot path).
+   * `buffer` guards against stale settles: when a new turn has already replaced the
+   * session's buffer (rapid abort → resend), the old turn's late `.finally` must not
+   * clear the new turn's `running` flag or overwrite its `last_event_id`.
+   */
+  const settleTurn = (
+    chatId: string,
+    session: { messages: unknown[]; eventBuffer: SessionEventBuffer | null },
+    buffer: SessionEventBuffer,
+  ): void => {
+    if (session.eventBuffer !== buffer) return;
+    try {
+      db.queue.enqueueMessages(chatId, session.messages);
+      db.sessions.finishTurn(chatId, buffer.lastEventId);
+    } catch {
+      // Persistence failures must never break the chat flow.
+    }
+  };
+
   router.post("/abort/:chatId", (req: Request, res: Response) => {
-    const session = store.get(String(req.params.chatId));
+    const chatId = String(req.params.chatId);
+    const session = store.get(chatId);
     if (!session) {
       res.json({ ok: false });
       return;
@@ -137,6 +160,7 @@ export function buildChatRouter(
     session.abortController?.abort();
     session.eventBuffer?.setDone();
     session.running = false;
+    if (session.eventBuffer) settleTurn(chatId, session, session.eventBuffer);
     res.json({ ok: true });
   });
 
@@ -223,8 +247,26 @@ export function buildChatRouter(
         existing.eventBuffer?.setDone();
       }
 
-      const session = store.hydrate(chatId, body.history ?? []);
-      const buffer = new SessionEventBuffer();
+      // Transcript source of truth, in order of fidelity:
+      //   1. the in-memory session (full provider transcript incl. tool calls/results),
+      //   2. the SQLite transcript (survives backend restarts with full fidelity),
+      //   3. the client-sent history (lossy, text-only — last resort for fresh installs).
+      // Never let the lossy client history overwrite a richer stored transcript.
+      const session = store.getOrCreate(chatId);
+      if (session.messages.length === 0) {
+        const persisted = db.messages.list(chatId);
+        session.messages =
+          persisted.length > 0 ? persisted : (body.history ?? []).map((m) => ({ ...m }));
+        session.updatedAt = Date.now();
+      }
+
+      // Register the turn in the database (creates the session row on first use) and
+      // wire every SSE event — main agent AND sub-agents — into the batched write queue.
+      const title = (body.user_message ?? "").trim().slice(0, 80);
+      const turn = db.sessions.startTurn(chatId, title);
+      const buffer = new SessionEventBuffer((id, event, data) => {
+        db.queue.enqueueEvent(chatId, turn, id, event, data);
+      });
       const abortController = new AbortController();
       session.eventBuffer = buffer;
       session.abortController = abortController;
@@ -254,14 +296,19 @@ export function buildChatRouter(
       };
 
       // Fire-and-forget the autonomous agent loop; the response streams from the buffer.
-      void agent.run(runRequest, session, buffer, abortController.signal).catch((error) => {
-        buffer.append("error", {
-          code: "agent_crashed",
-          message: error instanceof Error ? error.message : String(error),
+      void agent
+        .run(runRequest, session, buffer, abortController.signal)
+        .catch((error) => {
+          buffer.append("error", {
+            code: "agent_crashed",
+            message: error instanceof Error ? error.message : String(error),
+          });
+          buffer.setDone();
+          session.running = false;
+        })
+        .finally(() => {
+          settleTurn(chatId, session, buffer);
         });
-        buffer.setDone();
-        session.running = false;
-      });
 
       await streamFromBuffer(res, buffer, body.since_event_id ?? -1);
       return;
@@ -274,10 +321,51 @@ export function buildChatRouter(
       return;
     }
 
+    // No live buffer (e.g. the backend restarted): replay the persisted event log of the
+    // session's latest turn from the database, then terminate the stream cleanly.
+    if (db.sessions.get(chatId)) {
+      replayFromDatabase(res, db, chatId, body.since_event_id ?? -1);
+      return;
+    }
+
     res.status(400).json({ error: "No active agent and no user_message provided." });
   });
 
   return router;
+}
+
+/**
+ * Serve a finished (or interrupted) turn straight from the SQLite event log. Coalesced
+ * delta rows replay as single events carrying the concatenated text — reconnecting to a
+ * finished stream is a single indexed range read, fast regardless of database size.
+ */
+function replayFromDatabase(
+  res: Response,
+  db: CurroDatabase,
+  chatId: string,
+  sinceId: number,
+): void {
+  initSSE(res);
+  const turn = db.events.lastTurn(chatId);
+  const events = turn > 0 ? db.events.listTurnSince(chatId, turn, sinceId) : [];
+
+  let sawTerminal = false;
+  let lastId = sinceId;
+  for (const event of events) {
+    // A coalesced row whose range straddles sinceId contains text the client already
+    // rendered — skip it rather than resend duplicated content (its unseen tail, if
+    // any, belongs to a crashed run that is terminated with `interrupted` below).
+    if (event.firstEventId <= sinceId) continue;
+    res.write(formatSSE(event.event, { ...event.data, _event_id: event.eventId }));
+    lastId = event.eventId;
+    if (event.event === "done") sawTerminal = true;
+  }
+  // A turn interrupted by a restart has no terminal event — synthesize one so the
+  // client stops waiting instead of reconnect-looping.
+  if (!sawTerminal) {
+    res.write(formatSSE("done", { ok: false, interrupted: true, _event_id: lastId + 1 }));
+  }
+  res.end();
 }
 
 async function streamFromBuffer(

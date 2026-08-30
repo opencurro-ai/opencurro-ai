@@ -18,6 +18,7 @@ import type {
 } from "./tools/types.js";
 import { safeJsonParse } from "../utils/json.js";
 import { safeResolve } from "../utils/paths.js";
+import { createSubAgentSessionId } from "../database/ids.js";
 
 /**
  * Tools a sub-agent may never use: the sub-agent meta tools (prevents recursive delegation) and
@@ -144,9 +145,13 @@ class SubAgentRunner {
     const contextText =
       params.send_my_context === true ? this.captureConversationContext() : undefined;
 
+    // Every sub-agent invocation runs inside its own 10-character session id — this is
+    // the key the database uses to store its stream, tool calls, and final output.
+    const subSessionId = createSubAgentSessionId();
+
     return waitForOutput
-      ? this.runForeground(definition, task, ctx, contextText)
-      : this.runBackground(definition, task, ctx, contextText);
+      ? this.runForeground(definition, task, ctx, subSessionId, contextText)
+      : this.runBackground(definition, task, ctx, subSessionId, contextText);
   }
 
   /**
@@ -167,12 +172,14 @@ class SubAgentRunner {
     definition: SubAgentDefinition,
     task: string,
     ctx: ToolContext,
+    subSessionId: string,
     contextText?: string,
   ): Promise<ToolResult> {
     const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
     const result = await this.runLoop(definition, task, parentId, ctx, ctx.signal, {
       background: false,
       contextText,
+      subSessionId,
     });
 
     if (result.aborted) {
@@ -188,6 +195,7 @@ class SubAgentRunner {
       ok: true,
       data: {
         agent: definition.name,
+        session_id: subSessionId,
         wait_for_output: true,
         background: false,
         context_shared: contextText !== undefined,
@@ -206,6 +214,7 @@ class SubAgentRunner {
     definition: SubAgentDefinition,
     task: string,
     ctx: ToolContext,
+    subSessionId: string,
     contextText?: string,
   ): Promise<ToolResult> {
     const parentId = ctx.toolCallId ?? `subagent_${Date.now()}`;
@@ -258,6 +267,7 @@ class SubAgentRunner {
 
     this.deps.send("sub_agent_background_started", {
       id: parentId,
+      sub_session_id: subSessionId,
       agent: definition.name,
       task,
       output_file: relPath,
@@ -268,6 +278,7 @@ class SubAgentRunner {
     void this.runLoop(definition, task, parentId, backgroundCtx, backgroundController.signal, {
       background: true,
       contextText,
+      subSessionId,
     })
       .then((result) =>
         writeOutputFile(outputAbs, {
@@ -292,6 +303,7 @@ class SubAgentRunner {
       ok: true,
       data: {
         agent: definition.name,
+        session_id: subSessionId,
         wait_for_output: false,
         background: true,
         context_shared: contextText !== undefined,
@@ -318,9 +330,14 @@ class SubAgentRunner {
     parentId: string,
     outerCtx: ToolContext,
     signal: AbortSignal | undefined,
-    options: { background: boolean; contextText?: string },
+    options: { background: boolean; contextText?: string; subSessionId?: string },
   ): Promise<SubAgentLoopResult> {
-    const { send, provider, tools, config } = this.deps;
+    const { send: rawSend, provider, tools, config } = this.deps;
+    // Stamp every event of this run with its 10-char sub-agent session id so the
+    // database can attribute the stream, tool calls, and output to this exact run.
+    const subSessionId = options.subSessionId ?? createSubAgentSessionId();
+    const send = (event: string, data: Record<string, unknown>): void =>
+      rawSend(event, { sub_session_id: subSessionId, ...data });
 
     // Allowed tools = the sub-agent's chosen tools, minus the sub-agent meta tools, that
     // actually exist in the registry. This is the tool set both advertised and enforced.

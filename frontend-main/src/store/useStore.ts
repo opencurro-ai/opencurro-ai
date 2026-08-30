@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist, type StateStorage, createJSONStorage } from "zustand/middleware";
 import type {
   AskQuestionInfo,
   AskQuestionStatus,
@@ -23,7 +22,8 @@ import type {
   TodoItem,
   ToolActivity,
 } from "@/types";
-import { uid } from "@/utils/id";
+import { uid, newSessionId } from "@/utils/id";
+import type { BackendBootPayload } from "@/lib/backendState";
 import { CUSTOM_PROVIDER_PREFIX } from "@/lib/providers";
 import { DEFAULT_SUB_AGENTS, mergeSubAgentsWithDefaults } from "@/lib/defaultSubAgents";
 import { DEFAULT_SKILLS, mergeSkillsWithDefaults } from "@/lib/defaultSkills";
@@ -42,8 +42,9 @@ export type Section = "chat" | "memory" | "knowledge" | "agents" | "skills";
 export type Connection = "online" | "reconnecting" | "offline";
 
 /**
- * A run that the backend is executing independently of this browser. Persisted so that after a
- * refresh/close/reconnect the client can re-attach to the running agent and continue streaming.
+ * A run that the backend is executing independently of this browser (runtime-only).
+ * After a refresh the backend's session list (`running` flag in SQLite) tells the client
+ * which chat to re-attach to; the stream then replays from the database-backed buffer.
  */
 export interface ActiveRun {
   chatId: string;
@@ -60,7 +61,7 @@ interface StreamDelta {
 }
 
 interface AppState {
-  // Persisted
+  // Synced to the backend SQLite database (nothing is kept in browser storage)
   conversations: Conversation[];
   currentId: string | null;
   settings: Settings;
@@ -74,6 +75,8 @@ interface AppState {
   activeRun: ActiveRun | null;
 
   // Ephemeral UI
+  /** True once the store has been hydrated from the backend database. */
+  hydrated: boolean;
   section: Section;
   providers: ProviderMeta[];
   models: ModelInfo[];
@@ -87,12 +90,17 @@ interface AppState {
   preview: BrowserPreview;
   attachedFiles: AttachedFile[];
 
+  // Hydration from the backend SQLite database
+  hydrateFromBackend: (payload: BackendBootPayload) => void;
+
   // Conversations
   newConversation: () => string;
   selectConversation: (id: string) => void;
   deleteConversation: (id: string) => void;
   renameConversation: (id: string, title: string) => void;
   ensureConversation: () => string;
+  /** Replace one conversation wholesale (used when its snapshot loads from the database). */
+  replaceConversation: (conv: Conversation) => void;
 
   // Messages
   addMessage: (convId: string, message: ChatMessage) => void;
@@ -261,64 +269,14 @@ const emptyRun = (
 });
 
 /**
- * Debounced localStorage adapter: decouples the disk-write cadence from the state-update cadence
- * so streaming (which updates state ~60×/s) never floods localStorage. Writes are coalesced and
- * flushed after a short idle, and force-flushed on pagehide so the resume cursor is always durable.
+ * Runtime store. NOTHING here touches browser storage (no localStorage, no
+ * sessionStorage, no IndexedDB, no cookies): all durable data lives in the backend
+ * SQLite database. The store hydrates from `GET /api/state` at boot (see
+ * `lib/statePersistence.ts` + `hydrateFromBackend`), and every persistent slice is
+ * synced back to the database when it changes. A page refresh rebuilds the runtime
+ * state from the database and re-attaches to any still-running stream.
  */
-function createDebouncedStorage(delayMs: number): StateStorage {
-  const pending = new Map<string, string>();
-  let timer: ReturnType<typeof setTimeout> | null = null;
-
-  const flush = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    for (const [key, value] of pending) {
-      try {
-        localStorage.setItem(key, value);
-      } catch {
-        /* quota / private mode — best effort */
-      }
-    }
-    pending.clear();
-  };
-
-  if (typeof window !== "undefined") {
-    // Force durability before the tab goes away — critical so the resume cursor survives refresh.
-    window.addEventListener("pagehide", flush);
-    window.addEventListener("beforeunload", flush);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") flush();
-    });
-  }
-
-  return {
-    getItem: (name) => {
-      try {
-        return localStorage.getItem(name);
-      } catch {
-        return null;
-      }
-    },
-    setItem: (name, value) => {
-      pending.set(name, value);
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(flush, delayMs);
-    },
-    removeItem: (name) => {
-      pending.delete(name);
-      try {
-        localStorage.removeItem(name);
-      } catch {
-        /* ignore */
-      }
-    },
-  };
-}
-
 export const useStore = create<AppState>()(
-  persist(
     (set, get) => ({
       conversations: [],
       currentId: null,
@@ -332,6 +290,7 @@ export const useStore = create<AppState>()(
       customProviders: [],
       activeRun: null,
 
+      hydrated: false,
       section: "chat",
       providers: [],
       models: [],
@@ -345,18 +304,68 @@ export const useStore = create<AppState>()(
       preview: { url: "", open: false },
       attachedFiles: [],
 
+      hydrateFromBackend: (payload) => {
+        const state = payload.state ?? {};
+        const p = state as Partial<AppState>;
+
+        // Sessions from the database become conversation stubs; their full snapshots
+        // are fetched lazily when selected (see lib/statePersistence.ts).
+        const conversations: Conversation[] = payload.sessions.map((s) => ({
+          id: s.id,
+          title: s.title.trim().length > 0 ? s.title : "New thread",
+          messages: [],
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+          messageCount: s.messageCount,
+          loaded: false,
+        }));
+
+        const storedCurrent =
+          typeof state.currentSessionId === "string" ? (state.currentSessionId as string) : null;
+        const currentId =
+          storedCurrent && conversations.some((c) => c.id === storedCurrent)
+            ? storedCurrent
+            : (conversations[0]?.id ?? null);
+
+        set((s) => ({
+          hydrated: true,
+          conversations,
+          currentId,
+          settings: { ...s.settings, ...(p.settings && typeof p.settings === "object" ? p.settings : {}) },
+          subAgents: mergeSubAgentsWithDefaults(Array.isArray(p.subAgents) ? p.subAgents : s.subAgents),
+          skills: mergeSkillsWithDefaults(Array.isArray(p.skills) ? p.skills : s.skills),
+          todos: Array.isArray(p.todos) ? p.todos : s.todos,
+          memory: mergeMemoryWithDefaults(Array.isArray(p.memory) ? p.memory : s.memory),
+          knowledge: sanitizeKnowledge(Array.isArray(p.knowledge) ? p.knowledge : s.knowledge),
+          knowledgeSources:
+            p.knowledgeSources && typeof p.knowledgeSources === "object"
+              ? (p.knowledgeSources as Record<string, KnowledgeSource>)
+              : s.knowledgeSources,
+          customProviders: Array.isArray(p.customProviders) ? p.customProviders : s.customProviders,
+        }));
+      },
+
       newConversation: () => {
-        const id = uid("conv");
+        // 20-character alphanumeric session id — the database key for this chat.
+        const id = newSessionId();
         const conv: Conversation = {
           id,
           title: "New thread",
           messages: [],
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          loaded: true,
         };
         set((s) => ({ conversations: [conv, ...s.conversations], currentId: id, section: "chat" }));
         return id;
       },
+
+      replaceConversation: (conv) =>
+        set((s) => ({
+          conversations: s.conversations.some((c) => c.id === conv.id)
+            ? s.conversations.map((c) => (c.id === conv.id ? { ...conv, loaded: true } : c))
+            : [{ ...conv, loaded: true }, ...s.conversations],
+        })),
 
       ensureConversation: () => {
         const { currentId } = get();
@@ -903,41 +912,4 @@ export const useStore = create<AppState>()(
       setFilesOpen: (filesOpen) => set({ filesOpen }),
       bumpFiles: () => set((s) => ({ filesVersion: s.filesVersion + 1 })),
     }),
-    {
-      name: "haku-curro-frontend",
-      storage: createJSONStorage(() => createDebouncedStorage(400)),
-      merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<AppState>;
-        return {
-          ...current,
-          ...p,
-          settings: { ...current.settings, ...p.settings },
-          subAgents: mergeSubAgentsWithDefaults(Array.isArray(p.subAgents) ? p.subAgents : current.subAgents),
-          skills: mergeSkillsWithDefaults(Array.isArray(p.skills) ? p.skills : current.skills),
-          todos: Array.isArray(p.todos) ? p.todos : current.todos,
-          memory: mergeMemoryWithDefaults(Array.isArray(p.memory) ? p.memory : current.memory),
-          knowledge: sanitizeKnowledge(Array.isArray(p.knowledge) ? p.knowledge : current.knowledge),
-          knowledgeSources:
-            p.knowledgeSources && typeof p.knowledgeSources === "object"
-              ? (p.knowledgeSources as Record<string, KnowledgeSource>)
-              : current.knowledgeSources,
-          customProviders: Array.isArray(p.customProviders) ? p.customProviders : current.customProviders,
-          activeRun: p.activeRun ?? null,
-        };
-      },
-      partialize: (s) => ({
-        conversations: s.conversations,
-        currentId: s.currentId,
-        settings: s.settings,
-        subAgents: s.subAgents,
-        skills: s.skills,
-        todos: s.todos,
-        memory: s.memory,
-        knowledge: s.knowledge,
-        knowledgeSources: s.knowledgeSources,
-        customProviders: s.customProviders,
-        activeRun: s.activeRun,
-      }),
-    },
-  ),
 );

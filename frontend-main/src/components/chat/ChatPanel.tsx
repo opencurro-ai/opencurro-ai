@@ -25,7 +25,8 @@ export function ChatPanel({ onSend }: { onSend: (text: string) => void }) {
   const recents = useMemo(
     () =>
       conversations
-        .filter((c) => c.id !== currentId && c.messages.length > 0)
+        // Unloaded stubs from the database report their size via messageCount.
+        .filter((c) => c.id !== currentId && Math.max(c.messages.length, c.messageCount ?? 0) > 0)
         .slice(0, 5),
     [conversations, currentId],
   );
@@ -84,7 +85,8 @@ export function ChatPanel({ onSend }: { onSend: (text: string) => void }) {
                         {c.title}
                       </span>
                       <span className="block text-xs text-[var(--subtle)]">
-                        {c.messages.length} message{c.messages.length === 1 ? "" : "s"} ·{" "}
+                        {Math.max(c.messages.length, c.messageCount ?? 0)} message
+                        {Math.max(c.messages.length, c.messageCount ?? 0) === 1 ? "" : "s"} ·{" "}
                         {timeAgo(c.updatedAt)}
                       </span>
                     </span>

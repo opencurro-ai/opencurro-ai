@@ -197,18 +197,45 @@ export function useChatStream(onFilesChanged?: () => void) {
     [drive],
   );
 
-  /** Re-attach to a run the backend is still executing (after a refresh/reconnect). */
+  /**
+   * Re-attach to a run the backend is still executing (after a refresh/reconnect).
+   * The stream replays from event 0, so the assistant message is rebuilt in full —
+   * after a refresh a fresh placeholder message is created to receive the replay.
+   */
   const resume = useCallback(
     async (run: ActiveRun) => {
       if (runningRef.current) return;
       const store = useStore.getState();
       const conv = store.conversations.find((c) => c.id === run.chatId);
-      const msg = conv?.messages.find((m) => m.id === run.assistantId);
-      if (!conv || !msg) {
+      if (!conv) {
         store.setActiveRun(null);
         return;
       }
-      await drive({ convId: run.chatId, assistantId: run.assistantId, resume: true });
+      let assistantId = run.assistantId;
+      const msg = conv.messages.find((m) => m.id === assistantId);
+      if (!msg) {
+        // Post-refresh: runtime state was rebuilt from the database snapshot. If the
+        // snapshot already contains the in-flight (partial) assistant message, REUSE it
+        // — the replay resets and refills it in place, so nothing is duplicated. Only
+        // create a fresh placeholder when the thread doesn't end with an assistant.
+        const last = conv.messages[conv.messages.length - 1];
+        if (last && last.role === "assistant") {
+          assistantId = last.id;
+          store.updateMessage(run.chatId, assistantId, { streaming: true });
+        } else {
+          assistantId = uid("msg");
+          store.addMessage(run.chatId, {
+            id: assistantId,
+            role: "assistant",
+            content: "",
+            streaming: true,
+            tools: [],
+            createdAt: Date.now(),
+          });
+        }
+        store.setActiveRun({ ...run, assistantId });
+      }
+      await drive({ convId: run.chatId, assistantId, resume: true });
     },
     [drive],
   );
