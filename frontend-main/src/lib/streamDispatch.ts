@@ -72,6 +72,17 @@ function persistCreatedSubAgent(s: Store, raw: Record<string, unknown>): void {
   else s.addSubAgent({ name, description, systemPrompt, tools, enabled: true });
 }
 
+function persistDeletedSubAgent(s: Store, rawName: unknown): void {
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+  if (!name) return;
+  // Remove the user-defined sub-agent matching the name (case-insensitive). Built-in defaults
+  // (id prefixed with "default-") are never removed — the backend already blocks deleting them.
+  const target = s.subAgents.find(
+    (a) => !a.id.startsWith("default-") && a.name.trim().toLowerCase() === name.toLowerCase(),
+  );
+  if (target) s.deleteSubAgent(target.id);
+}
+
 function persistCreatedSkill(s: Store, raw: Record<string, unknown>): void {
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
   if (!name) return;
@@ -197,6 +208,9 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
         | undefined;
       if (ok && name === "create_sub_agent" && payload?.created_sub_agent) {
         persistCreatedSubAgent(s, payload.created_sub_agent as Record<string, unknown>);
+      }
+      if (ok && name === "delete_sub_agent" && payload?.deleted_sub_agent) {
+        persistDeletedSubAgent(s, payload.deleted_sub_agent);
       }
       if (ok && name === "create_skill" && payload?.created_skill) {
         persistCreatedSkill(s, payload.created_skill as Record<string, unknown>);
