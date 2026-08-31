@@ -32,6 +32,7 @@ import {
   Terminal,
   Timer,
   Trash2,
+  UserMinus,
   UserPlus,
   Wand2,
   Wrench,
@@ -92,6 +93,8 @@ const ICONS: Record<string, typeof Terminal> = {
   skill_initialize: PackagePlus,
   create_sub_agent: UserPlus,
   create_skill: Wand2,
+  delete_sub_agent: UserMinus,
+  wait: Timer,
   TodoWrite: ListTodo,
   read_todos: ClipboardList,
   memory_search: Search,
@@ -234,7 +237,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   if (tool.name === "list_skills") return <ListSkillsChip tool={tool} />;
   if (tool.name === "skill_initialize") return <SkillInitChip tool={tool} />;
   if (tool.name === "create_sub_agent") return <CreateSubAgentChip tool={tool} />;
+  if (tool.name === "delete_sub_agent") return <DeleteSubAgentChip tool={tool} />;
   if (tool.name === "create_skill") return <CreateSkillChip tool={tool} />;
+  if (tool.name === "wait") return <WaitChip tool={tool} />;
   return <GenericChip tool={tool} />;
 }
 
@@ -1195,6 +1200,63 @@ function CreateSubAgentChip({ tool }: { tool: ToolActivity }) {
           <div className="text-[var(--muted)]">No data.</div>
         )
       }
+    />
+  );
+}
+
+function DeleteSubAgentChip({ tool }: { tool: ToolActivity }) {
+  const { data, error, args, hasResult } = parts(tool);
+  const name: string = (data?.deleted_sub_agent as string) ?? (args.name as string) ?? "";
+  return (
+    <Shell
+      icon={<UserMinus className="h-3.5 w-3.5" />}
+      label={tool.label}
+      status={tool.status}
+      expandable={hasResult}
+      pills={data?.deleted_sub_agent ? <Pill tone="danger">deleted</Pill> : undefined}
+      panel={() => (
+        <>
+          {error?.message && <div className="text-[var(--danger)]">{error.message}</div>}
+          {data?.deleted_sub_agent && (
+            <>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="flex items-center gap-1 font-medium text-[var(--fg)]">
+                  <UserMinus className="h-3 w-3" />
+                  {name}
+                </span>
+              </div>
+              {data.message && <div className="text-[var(--muted)]">{String(data.message)}</div>}
+            </>
+          )}
+          {!data && !error && <div className="text-[var(--muted)]">No data.</div>}
+        </>
+      )}
+    />
+  );
+}
+
+function WaitChip({ tool }: { tool: ToolActivity }) {
+  const { data, error, args, hasResult } = parts(tool);
+  const seconds = (data?.waited_seconds as number) ?? (args.seconds as number) ?? 0;
+  return (
+    <Shell
+      icon={<Timer className="h-3.5 w-3.5" />}
+      label={tool.label}
+      status={tool.status}
+      expandable={hasResult}
+      pills={<Pill><Timer className="h-2.5 w-2.5" />{seconds}s</Pill>}
+      panel={() => (
+        <>
+          {error?.message && <div className="text-[var(--danger)]">{error.message}</div>}
+          {data ? (
+            <div className="text-[var(--muted)]">
+              {data.message ? String(data.message) : `Waited ${seconds} second(s).`}
+            </div>
+          ) : (
+            !error && <div className="text-[var(--muted)]">Waiting {seconds} second(s)…</div>
+          )}
+        </>
+      )}
     />
   );
 }

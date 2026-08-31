@@ -76,6 +76,12 @@ export const SUB_AGENT_TOOLS: readonly SubAgentToolMeta[] = [
     description:
       "Search the web for images using a query and return direct live image URLs and source URLs.",
   },
+  {
+    name: "wait",
+    label: "Wait",
+    description:
+      "Pause for a set number of seconds (1–180) to wait for a process, task, or external operation to complete before continuing.",
+  },
 ] as const;
 
 export const SUB_AGENT_TOOL_NAMES: readonly string[] = SUB_AGENT_TOOLS.map((t) => t.name);

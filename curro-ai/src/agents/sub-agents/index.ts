@@ -20,6 +20,7 @@ export const DEFAULT_SUB_AGENT_DISALLOWED_TOOLS: readonly string[] = [
   "call_sub_agent",
   "list_sub_agents",
   "create_sub_agent",
+  "delete_sub_agent",
   "submit_plan",
   "ask_question_to_user",
   "embed_url",
@@ -50,11 +51,13 @@ const ALL_AGENT_TOOLS: readonly string[] = [
   "submit_plan",
   "ask_question_to_user",
   "create_sub_agent",
+  "delete_sub_agent",
   "create_skill",
   "TodoWrite",
   "read_todos",
   "embed_url",
   "attach_files",
+  "wait",
 ];
 
 /**

@@ -29,6 +29,7 @@ export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
   "call_sub_agent",
   "call_multiple_sub_agents",
   "list_sub_agents",
+  "delete_sub_agent",
   "list_skills",
   "skill_initialize",
   "TodoWrite",

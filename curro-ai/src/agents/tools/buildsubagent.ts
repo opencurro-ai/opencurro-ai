@@ -19,6 +19,7 @@ export const SUB_AGENT_CREATE_RESTRICTED_TOOLS: readonly string[] = [
   "submit_plan",
   "call_sub_agent",
   "list_sub_agents",
+  "delete_sub_agent",
   "TodoWrite",
   "read_todos",
 ];

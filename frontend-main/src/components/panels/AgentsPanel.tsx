@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Bot, Check, ChevronLeft, Pencil, Plus, Search, Trash2, Wrench, X } from "lucide-react";
+import { Bot, Check, ChevronLeft, Pencil, Plus, Search, Wrench, X } from "lucide-react";
 import { useStore } from "@/store/useStore";
 
 import { SUB_AGENT_TOOLS } from "@/lib/subAgentTools";
@@ -25,7 +25,6 @@ export function AgentsPanel() {
   const subAgents = useStore((s) => s.subAgents);
   const addSubAgent = useStore((s) => s.addSubAgent);
   const updateSubAgent = useStore((s) => s.updateSubAgent);
-  const deleteSubAgent = useStore((s) => s.deleteSubAgent);
   const toggleSubAgent = useStore((s) => s.toggleSubAgent);
 
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -92,9 +91,6 @@ export function AgentsPanel() {
                 <div className="mt-4 flex items-center gap-1.5 border-t border-[var(--border)] pt-3">
                   <Button variant="ghost" className="px-2" onClick={() => { setError(null); setDraft({ id: agent.id, name: agent.name, description: agent.description, systemPrompt: agent.systemPrompt, tools: [...agent.tools], enabled: agent.enabled }); }}>
                     <Pencil className="h-3.5 w-3.5" /> Edit
-                  </Button>
-                  <Button variant="ghost" className="px-2 text-[var(--subtle)] hover:text-[var(--danger)]" onClick={() => deleteSubAgent(agent.id)}>
-                    <Trash2 className="h-3.5 w-3.5" /> Delete
                   </Button>
                 </div>
               </article>

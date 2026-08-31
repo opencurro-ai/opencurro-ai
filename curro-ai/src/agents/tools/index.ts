@@ -36,6 +36,8 @@ import { knowledgeEditTool } from "./knowledge_edit.js";
 import { knowledgeDeleteTool } from "./knowledge_delete.js";
 import { embedUrlTool } from "./embedUrl.js";
 import { attachFilesTool } from "./attachFiles.js";
+import { waitTool } from "./wait.js";
+import { deleteSubAgentTool } from "./delete_sub_agent.js";
 
 export { ToolRegistry } from "./registry.js";
 export type {
@@ -95,6 +97,8 @@ export { submitPlanTool } from "./submit_plan.js";
 export { askUserTool, ASK_ANSWERED, ASK_TIMEOUT } from "./askuser.js";
 export { embedUrlTool } from "./embedUrl.js";
 export { attachFilesTool, formatFileSizeLabel } from "./attachFiles.js";
+export { waitTool, WAIT_MIN_SECONDS, WAIT_MAX_SECONDS } from "./wait.js";
+export { deleteSubAgentTool, DELETE_DEFAULT_SUB_AGENT_ERROR } from "./delete_sub_agent.js";
 export type { AttachedFileInfo, AttachFileFailure } from "./attachFiles.js";
 export { shellViewTool } from "./shellView.js";
 export { bashWriteToProcessTool } from "./bashWriteToProcess.js";
@@ -146,6 +150,8 @@ export function createToolRegistry(): ToolRegistry {
     knowledgeDeleteTool,
     embedUrlTool,
     attachFilesTool,
+    waitTool,
+    deleteSubAgentTool,
   ]);
 }
 
@@ -187,4 +193,6 @@ export const tools = {
   knowledgeDeleteTool,
   embedUrlTool,
   attachFilesTool,
+  waitTool,
+  deleteSubAgentTool,
 };
