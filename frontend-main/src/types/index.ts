@@ -461,6 +461,12 @@ export interface Settings {
   exaApiKey: string;
   serpapiApiKey: string;
   firecrawlApiKey: string;
+  /**
+   * Whether the agent may use the sub-agent session tools (list_sub_agent_sessions /
+   * reuse_same_sub_agent_session). "no" (default) hides both tools and their usage guidance;
+   * "yes" enables them so the agent can continue previously run sub-agent sessions.
+   */
+  enableReuseSubAgentSession: "no" | "yes";
 }
 
 /** Provider-format message sent to the backend to preserve history across turns. */
@@ -493,6 +499,8 @@ export interface StreamRequest {
   todos?: TodoItem[];
   memory?: MemoryFile[];
   knowledge?: KnowledgeFile[];
+  /** Mirrors settings.enableReuseSubAgentSession; gates the sub-agent session tools this turn. */
+  enable_reuse_sub_agent_session?: "no" | "yes";
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */

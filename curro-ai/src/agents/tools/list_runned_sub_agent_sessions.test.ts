@@ -5,7 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { ToolRegistry } from "./registry.js";
 import { listSubAgentSessionsTool } from "./list_sub_agent_sessions.js";
-import { callSubAgentTool } from "./call_sub_agent.js";
 import { fileReadTool } from "./fileRead.js";
 import { createSubAgentRuntime } from "../subagents.js";
 import { subAgentSessionStore } from "../subAgentSessionStore.js";

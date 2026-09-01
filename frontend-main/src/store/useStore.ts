@@ -255,6 +255,7 @@ const defaultSettings: Settings = {
   exaApiKey: "",
   serpapiApiKey: "",
   firecrawlApiKey: "",
+  enableReuseSubAgentSession: "no",
 };
 
 function touch(conv: Conversation): Conversation {
