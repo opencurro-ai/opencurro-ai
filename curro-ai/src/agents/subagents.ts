@@ -19,7 +19,9 @@ import type {
 } from "./tools/types.js";
 import { safeJsonParse } from "../utils/json.js";
 import { safeResolve } from "../utils/paths.js";
-import { createSubAgentSessionId } from "../database/ids.js";
+import { createSubAgentSessionId, isSafeSessionId } from "../database/ids.js";
+import { subAgentSessionStore, type SubAgentSessionStatus } from "./subAgentSessionStore.js";
+import type { OpenAIToolSchema } from "./tools/registry.js";
 
 /**
  * Tools a sub-agent may never use: the sub-agent meta tools (prevents recursive delegation) and
@@ -30,8 +32,11 @@ export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
   "call_multiple_sub_agents",
   "list_sub_agents",
   "delete_sub_agent",
+  "list_sub_agent_sessions",
+  "reuse_same_sub_agent_session",
   "list_skills",
   "skill_initialize",
+  "delete_skill",
   "TodoWrite",
   "read_todos",
 ];
@@ -72,7 +77,15 @@ export function createSubAgentRuntime(deps: SubAgentRuntimeDeps): SubAgentRuntim
     available: () => runner.available(),
     run: (params, ctx) => runner.run(params, ctx),
     runMany: (params, ctx) => runner.runMany(params, ctx),
+    listSessions: () => runner.listSessions(),
+    reuseSession: (params, ctx) => runner.reuseSession(params, ctx),
   };
+}
+
+/** Map a finished loop result to the session status recorded for the sub-agent session store. */
+function statusFromResult(result: SubAgentLoopResult): SubAgentSessionStatus {
+  if (result.aborted) return "aborted";
+  return result.ok ? "completed" : "failed";
 }
 
 /** Internal result of running a sub-agent's Thought -> Action -> Observation loop to completion. */
@@ -561,10 +574,168 @@ class SubAgentRunner {
   }
 
   /**
+   * List every sub-agent session created so far in this chat (by call_sub_agent /
+   * call_multiple_sub_agents), returning the id + agent name + status of each. These ids are what
+   * reuse_same_sub_agent_session accepts.
+   */
+  listSessions(): Array<{ session_id: string; agent: string; status: string }> {
+    return subAgentSessionStore.list(this.deps.chatId).map((s) => ({
+      session_id: s.sessionId,
+      agent: s.agent,
+      status: s.status,
+    }));
+  }
+
+  /**
+   * Continue an existing sub-agent session with a new prompt, preserving that session's full prior
+   * conversation. The stored transcript is replayed as the sub-agent's context, the new prompt is
+   * appended as the next user turn, and the sub-agent runs its Thought -> Action -> Observation loop
+   * again — streaming the same `sub_agent_*` events as a fresh run (stamped with the session id) so
+   * the frontend can render the continued run live inside the reuse tool block.
+   */
+  async reuseSession(
+    params: { session_id: string; prompt: string },
+    ctx: ToolContext,
+  ): Promise<ToolResult> {
+    const sessionId = (params.session_id ?? "").trim();
+    const prompt = (params.prompt ?? "").trim();
+
+    if (!isSafeSessionId(sessionId)) {
+      return {
+        ok: false,
+        error: {
+          code: "invalid_session_id",
+          message:
+            "A valid session id is required. Call list_sub_agent_sessions to get the session ids " +
+            "of previously run sub-agents.",
+        },
+      };
+    }
+    if (!prompt) {
+      return {
+        ok: false,
+        error: {
+          code: "missing_prompt",
+          message: "A non-empty prompt is required to continue the sub-agent session.",
+        },
+      };
+    }
+
+    const record = subAgentSessionStore.get(this.deps.chatId, sessionId);
+    if (!record) {
+      const known = subAgentSessionStore.list(this.deps.chatId).map((s) => s.sessionId);
+      return {
+        ok: false,
+        error: {
+          code: "unknown_session",
+          message:
+            `No sub-agent session with id "${sessionId}" exists in this chat. ` +
+            (known.length > 0
+              ? `Known session ids: ${known.join(", ")}. Call list_sub_agent_sessions first.`
+              : "No sub-agent sessions have been created yet in this chat."),
+        },
+      };
+    }
+
+    const parentId = ctx.toolCallId ?? `reuse_${sessionId}`;
+    const signal = ctx.signal;
+
+    const eventStamp: Record<string, unknown> = { sub_session_id: sessionId };
+    const send = (event: string, data: Record<string, unknown>): void =>
+      this.deps.send(event, { ...eventStamp, ...data });
+
+    const { allowed, toolSchemas } = this.buildToolAccess(record.definition);
+
+    // Continue the SAME conversation: the stored transcript is the context, the new prompt is the
+    // next user turn appended to it.
+    const history: StoredMessage[] = [...record.messages, { role: "user", content: prompt }];
+
+    subAgentSessionStore.update(this.deps.chatId, sessionId, { status: "running" });
+
+    send("sub_agent_start", {
+      id: parentId,
+      agent: record.agent,
+      task: prompt,
+      background: false,
+      context_shared: true,
+    });
+
+    const subToolCtx = this.buildSubToolCtx(ctx, signal);
+
+    const result = await this.agenticLoop({
+      definition: record.definition,
+      systemPrompt: record.systemPrompt,
+      history,
+      allowed,
+      toolSchemas,
+      subToolCtx,
+      send,
+      parentId,
+      signal,
+    });
+
+    subAgentSessionStore.update(this.deps.chatId, sessionId, {
+      messages: history,
+      status: statusFromResult(result),
+    });
+
+    if (result.aborted) {
+      return { ok: false, error: { code: "aborted", message: "The sub-agent run was aborted." } };
+    }
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: { code: "sub_agent_failed", message: result.error ?? "The sub-agent failed." },
+      };
+    }
+    return {
+      ok: true,
+      data: {
+        agent: record.agent,
+        session_id: sessionId,
+        reused: true,
+        output: result.output,
+        message: `Continued sub-agent session "${sessionId}" (${record.agent}).`,
+      },
+    };
+  }
+
+  /** Allowed tool set + advertised schemas for a sub-agent definition (meta tools stripped). */
+  private buildToolAccess(definition: SubAgentDefinition): {
+    allowed: Set<string>;
+    toolSchemas: OpenAIToolSchema[];
+  } {
+    const { tools } = this.deps;
+    const allowed = new Set(
+      (definition.tools ?? []).filter(
+        (name) => tools.has(name) && !SUB_AGENT_EXCLUDED_TOOLS.includes(name),
+      ),
+    );
+    return { allowed, toolSchemas: tools.schemasFor(allowed) };
+  }
+
+  /**
+   * Tool-execution context for a sub-agent: it must NOT see the sub-agent runtime (no recursion)
+   * and carries the sub-agent's own abort signal (the background signal when detached).
+   */
+  private buildSubToolCtx(outerCtx: ToolContext, signal: AbortSignal | undefined): ToolContext {
+    return {
+      workspaceRoot: outerCtx.workspaceRoot,
+      shellTimeoutMs: outerCtx.shellTimeoutMs,
+      signal,
+      web: outerCtx.web,
+      model: this.deps.model,
+      visionCapable: outerCtx.visionCapable,
+      availableToolNames: this.deps.tools.names(),
+    };
+  }
+
+  /**
    * Execute a sub-agent's unbounded Thought -> Action -> Observation loop to completion, streaming
    * progress as `sub_agent_*` events correlated to the parent tool-call id. Returns a structured
    * result (ok / aborted / output / error) rather than a ToolResult so both the foreground and
-   * background callers can shape their own response.
+   * background callers can shape their own response. The `subSessionId` binds the run to a session
+   * record so a later reuse_same_sub_agent_session can continue the exact same conversation.
    */
   private async runLoop(
     definition: SubAgentDefinition,
@@ -581,7 +752,7 @@ class SubAgentRunner {
       parentToolId?: string;
     },
   ): Promise<SubAgentLoopResult> {
-    const { send: rawSend, provider, tools, config } = this.deps;
+    const { send: rawSend, config } = this.deps;
     // Stamp every event of this run with its 10-char sub-agent session id so the
     // database can attribute the stream, tool calls, and output to this exact run.
     const subSessionId = options.subSessionId ?? createSubAgentSessionId();
@@ -595,12 +766,7 @@ class SubAgentRunner {
 
     // Allowed tools = the sub-agent's chosen tools, minus the sub-agent meta tools, that
     // actually exist in the registry. This is the tool set both advertised and enforced.
-    const allowed = new Set(
-      (definition.tools ?? []).filter(
-        (name) => tools.has(name) && !SUB_AGENT_EXCLUDED_TOOLS.includes(name),
-      ),
-    );
-    const toolSchemas = tools.schemasFor(allowed);
+    const { allowed, toolSchemas } = this.buildToolAccess(definition);
 
     // Each call_sub_agent invocation is an independent, fresh sub-agent conversation. When the main
     // agent opted to share its context, the surrounding conversation is prepended to the task as
@@ -617,6 +783,22 @@ class SubAgentRunner {
       hasSharedContext,
     );
 
+    // Register the session so its transcript + status can later be continued with
+    // reuse_same_sub_agent_session. `history` is stored by reference so the record always reflects
+    // the live conversation; its final status is recorded when the loop returns.
+    subAgentSessionStore.register({
+      sessionId: subSessionId,
+      chatId: this.deps.chatId,
+      agent: definition.name,
+      definition,
+      systemPrompt,
+      messages: history,
+      task,
+      background: options.background,
+      hasSharedContext,
+      status: "running",
+    });
+
     send("sub_agent_start", {
       id: parentId,
       agent: definition.name,
@@ -627,15 +809,48 @@ class SubAgentRunner {
 
     // Tool executions for a sub-agent must NOT see the sub-agent runtime (no recursion) and
     // carry the sub-agent's own signal (the background signal when detached).
-    const subToolCtx: ToolContext = {
-      workspaceRoot: outerCtx.workspaceRoot,
-      shellTimeoutMs: outerCtx.shellTimeoutMs,
+    const subToolCtx = this.buildSubToolCtx(outerCtx, signal);
+
+    const result = await this.agenticLoop({
+      definition,
+      systemPrompt,
+      history,
+      allowed,
+      toolSchemas,
+      subToolCtx,
+      send,
+      parentId,
       signal,
-      web: outerCtx.web,
-      model: this.deps.model,
-      visionCapable: outerCtx.visionCapable,
-      availableToolNames: tools.names(),
-    };
+    });
+
+    subAgentSessionStore.update(this.deps.chatId, subSessionId, {
+      messages: history,
+      status: statusFromResult(result),
+    });
+
+    return result;
+  }
+
+  /**
+   * The shared streaming loop used by both a fresh sub-agent run (runLoop) and a continued session
+   * (reuseSession). It drives the model against `history` (mutated in place so the caller can persist
+   * the resulting transcript), executing tool calls and streaming `sub_agent_*` events via `send`,
+   * until the model returns a final answer with no tool calls or the run is aborted.
+   */
+  private async agenticLoop(args: {
+    definition: SubAgentDefinition;
+    systemPrompt: string;
+    history: StoredMessage[];
+    allowed: Set<string>;
+    toolSchemas: OpenAIToolSchema[];
+    subToolCtx: ToolContext;
+    send: (event: string, data: Record<string, unknown>) => void;
+    parentId: string;
+    signal: AbortSignal | undefined;
+  }): Promise<SubAgentLoopResult> {
+    const { definition, systemPrompt, history, allowed, toolSchemas, subToolCtx, send, parentId, signal } =
+      args;
+    const { provider, tools } = this.deps;
 
     const answerAcrossTurns: string[] = [];
 
@@ -709,19 +924,19 @@ class SubAgentRunner {
 
           for (const toolCall of namedCalls) {
             const name = toolCall.function.name;
-            const args = safeJsonParse(toolCall.function.arguments);
-            const label = tools.label(name, args);
+            const args2 = safeJsonParse(toolCall.function.arguments);
+            const label = tools.label(name, args2);
 
             send("sub_agent_tool_call", {
               id: parentId,
               tool_id: toolCall.id,
               name,
-              args,
+              args: args2,
               label,
             });
 
             const result: ToolResult = allowed.has(name)
-              ? await tools.execute(name, args, subToolCtx)
+              ? await tools.execute(name, args2, subToolCtx)
               : {
                   ok: false,
                   error: {

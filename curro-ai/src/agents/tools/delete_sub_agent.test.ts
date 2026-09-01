@@ -14,6 +14,8 @@ function makeRuntime(definitions: SubAgentDefinition[]): SubAgentRuntime {
         .map((d) => ({ name: d.name, description: d.description })),
     run: async (): Promise<ToolResult> => ({ ok: true }),
     runMany: async (): Promise<ToolResult> => ({ ok: true }),
+    listSessions: () => [],
+    reuseSession: async (): Promise<ToolResult> => ({ ok: true }),
   };
 }
 

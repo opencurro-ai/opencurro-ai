@@ -116,6 +116,22 @@ export interface SubAgentRuntime {
    * group every child run inside the batch's tool block.
    */
   runMany(params: { agents: MultiSubAgentParam[] }, ctx: ToolContext): Promise<ToolResult>;
+  /**
+   * List every sub-agent session created so far in this chat by call_sub_agent /
+   * call_multiple_sub_agents. Each entry carries the 10-character session id, the sub-agent name,
+   * and the session's current status — the ids to pass to `reuseSession`.
+   */
+  listSessions(): Array<{ session_id: string; agent: string; status: string }>;
+  /**
+   * Continue an existing sub-agent session (identified by its 10-character session id) with a new
+   * prompt, preserving that session's full prior conversation as context. Streams the same
+   * `sub_agent_*` side-channel events as a fresh run (stamped with the session id) and returns the
+   * sub-agent's new final output.
+   */
+  reuseSession(
+    params: { session_id: string; prompt: string },
+    ctx: ToolContext,
+  ): Promise<ToolResult>;
 }
 
 /**

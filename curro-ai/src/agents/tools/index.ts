@@ -38,6 +38,9 @@ import { embedUrlTool } from "./embedUrl.js";
 import { attachFilesTool } from "./attachFiles.js";
 import { waitTool } from "./wait.js";
 import { deleteSubAgentTool } from "./delete_sub_agent.js";
+import { listSubAgentSessionsTool } from "./list_sub_agent_sessions.js";
+import { reuseSameSubAgentSessionTool } from "./reuse_same_sub_agent_session.js";
+import { deleteSkillTool } from "./delete_skill.js";
 
 export { ToolRegistry } from "./registry.js";
 export type {
@@ -99,6 +102,9 @@ export { embedUrlTool } from "./embedUrl.js";
 export { attachFilesTool, formatFileSizeLabel } from "./attachFiles.js";
 export { waitTool, WAIT_MIN_SECONDS, WAIT_MAX_SECONDS } from "./wait.js";
 export { deleteSubAgentTool, DELETE_DEFAULT_SUB_AGENT_ERROR } from "./delete_sub_agent.js";
+export { listSubAgentSessionsTool } from "./list_sub_agent_sessions.js";
+export { reuseSameSubAgentSessionTool } from "./reuse_same_sub_agent_session.js";
+export { deleteSkillTool, DELETE_DEFAULT_SKILL_ERROR } from "./delete_skill.js";
 export type { AttachedFileInfo, AttachFileFailure } from "./attachFiles.js";
 export { shellViewTool } from "./shellView.js";
 export { bashWriteToProcessTool } from "./bashWriteToProcess.js";
@@ -152,6 +158,9 @@ export function createToolRegistry(): ToolRegistry {
     attachFilesTool,
     waitTool,
     deleteSubAgentTool,
+    listSubAgentSessionsTool,
+    reuseSameSubAgentSessionTool,
+    deleteSkillTool,
   ]);
 }
 
@@ -195,4 +204,7 @@ export const tools = {
   attachFilesTool,
   waitTool,
   deleteSubAgentTool,
+  listSubAgentSessionsTool,
+  reuseSameSubAgentSessionTool,
+  deleteSkillTool,
 };

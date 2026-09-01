@@ -51,6 +51,7 @@ interface StreamBody {
   todos?: unknown;
   memory?: unknown;
   knowledge?: unknown;
+  enable_reuse_sub_agent_session?: unknown;
 }
 
 /** Defensively coerce the client-provided sub-agent definitions into safe, well-typed values. */
@@ -293,6 +294,9 @@ export function buildChatRouter(
         todos: normalizeTodos(body.todos),
         memory: normalizeMemoryFiles(body.memory),
         knowledge: normalizeKnowledgeFiles(body.knowledge),
+        enableReuseSubAgentSession:
+          body.enable_reuse_sub_agent_session === true ||
+          body.enable_reuse_sub_agent_session === "yes",
       };
 
       // Fire-and-forget the autonomous agent loop; the response streams from the buffer.
