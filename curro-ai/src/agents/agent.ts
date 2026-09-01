@@ -54,7 +54,22 @@ export interface RunAgentRequest {
   memory?: MemoryFile[];
   /** The user's knowledge base files (from the frontend, stored in the browser) available this turn. */
   knowledge?: KnowledgeFile[];
+  /**
+   * Whether the sub-agent session tools (list_sub_agent_sessions / reuse_same_sub_agent_session)
+   * are enabled for this turn. Mirrors the user's Settings choice. When false (default) the two
+   * tools are hidden from the model and their usage guidance is omitted from the system prompt.
+   */
+  enableReuseSubAgentSession?: boolean;
 }
+
+/**
+ * The sub-agent session tools, gated by the `enable_reuse_sub_agent_session` setting. When the
+ * setting is off they are neither advertised to the model nor described in the system prompt.
+ */
+const SESSION_REUSE_TOOLS: readonly string[] = [
+  "list_sub_agent_sessions",
+  "reuse_same_sub_agent_session",
+];
 
 export class AgentRunner {
   constructor(
@@ -116,7 +131,15 @@ export class AgentRunner {
         : request.userMessage;
 
       session.messages.push({ role: "user", content: userContent });
-      const systemPrompt = buildSystemPrompt(this.config.workspaceRoot);
+      const reuseSessionsEnabled = request.enableReuseSubAgentSession === true;
+      const systemPrompt = buildSystemPrompt(this.config.workspaceRoot, {
+        enableReuseSubAgentSession: reuseSessionsEnabled,
+      });
+      // Expose the sub-agent session tools to the model only when the setting is on. Everything else
+      // in the registry is always available; the two session tools are filtered out otherwise.
+      const toolSchemas = reuseSessionsEnabled
+        ? this.tools.schemas
+        : this.tools.schemas.filter((s) => !SESSION_REUSE_TOOLS.includes(s.function.name));
       const maxIterations = clampIterations(request.maxIterations, this.config.maxIterations);
       const visionCapable = isVisionCapableModel(request.model, this.config);
       const web: WebToolsConfig = {
@@ -189,7 +212,7 @@ export class AgentRunner {
             apiKey: request.apiKey,
             model: request.model,
             messages: this.buildProviderMessages(systemPrompt, session.messages),
-            tools: this.tools.schemas,
+            tools: toolSchemas,
             baseUrl: request.baseUrl,
             temperature: request.temperature,
             signal,

@@ -17,6 +17,7 @@ import {
   FolderTree,
   Globe,
   Hash,
+  History,
   Image as ImageIcon,
   Library,
   Link2,
@@ -28,6 +29,7 @@ import {
   Paperclip,
   Pencil,
   PencilLine,
+  Repeat2,
   Search,
   Terminal,
   Timer,
@@ -94,6 +96,9 @@ const ICONS: Record<string, typeof Terminal> = {
   create_sub_agent: UserPlus,
   create_skill: Wand2,
   delete_sub_agent: UserMinus,
+  delete_skill: Trash2,
+  list_sub_agent_sessions: History,
+  reuse_same_sub_agent_session: Repeat2,
   wait: Timer,
   TodoWrite: ListTodo,
   read_todos: ClipboardList,
@@ -239,6 +244,9 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   if (tool.name === "create_sub_agent") return <CreateSubAgentChip tool={tool} />;
   if (tool.name === "delete_sub_agent") return <DeleteSubAgentChip tool={tool} />;
   if (tool.name === "create_skill") return <CreateSkillChip tool={tool} />;
+  if (tool.name === "delete_skill") return <DeleteSkillChip tool={tool} />;
+  if (tool.name === "list_sub_agent_sessions") return <ListSubAgentSessionsChip tool={tool} />;
+  if (tool.name === "reuse_same_sub_agent_session") return <ReuseSessionChip tool={tool} />;
   if (tool.name === "wait") return <WaitChip tool={tool} />;
   return <GenericChip tool={tool} />;
 }
@@ -1297,6 +1305,118 @@ function CreateSkillChip({ tool }: { tool: ToolActivity }) {
           <div className="text-[var(--muted)]">No data.</div>
         )
       }
+    />
+  );
+}
+
+/* ---------------------------------------------------- sub-agent sessions / delete skill */
+
+/** delete_skill — mirrors the delete_sub_agent chip. */
+function DeleteSkillChip({ tool }: { tool: ToolActivity }) {
+  const { data, error, args, hasResult } = parts(tool);
+  const name: string = (data?.deleted_skill as string) ?? (args.skill_name as string) ?? "";
+  return (
+    <Shell
+      icon={<Trash2 className="h-3.5 w-3.5" />}
+      label={tool.label}
+      status={tool.status}
+      expandable={hasResult}
+      pills={data?.deleted_skill ? <Pill tone="danger">deleted</Pill> : undefined}
+      panel={() => (
+        <>
+          {error?.message && <div className="text-[var(--danger)]">{error.message}</div>}
+          {data?.deleted_skill && (
+            <>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="flex items-center gap-1 font-medium text-[var(--fg)]">
+                  <Blocks className="h-3 w-3" />
+                  {name}
+                </span>
+              </div>
+              {data.message && <div className="text-[var(--muted)]">{String(data.message)}</div>}
+            </>
+          )}
+          {!data && !error && <div className="text-[var(--muted)]">No data.</div>}
+        </>
+      )}
+    />
+  );
+}
+
+/** list_sub_agent_sessions — the list of every sub-agent session created this chat, in a dropdown. */
+function ListSubAgentSessionsChip({ tool }: { tool: ToolActivity }) {
+  const { data, error, hasResult } = parts(tool);
+  const sessions: any[] = (data?.sessions as any[]) ?? [];
+  return (
+    <Shell
+      icon={<History className="h-3.5 w-3.5" />}
+      label={tool.label}
+      status={tool.status}
+      expandable={hasResult}
+      pills={sessions.length > 0 ? <Pill>{sessions.length}</Pill> : undefined}
+      panel={() => (
+        <>
+          {error?.message && <div className="text-[var(--danger)]">{error.message}</div>}
+          {sessions.length === 0 && !error && (
+            <div className="text-[var(--muted)]">No sub-agent sessions yet.</div>
+          )}
+          {sessions.map((s, i) => (
+            <div
+              key={i}
+              className="flex flex-wrap items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--border)] p-2"
+            >
+              <span className="flex items-center gap-1 font-medium text-[var(--secondary)]">
+                <Bot className="h-3 w-3" />
+                {s.agent || "sub-agent"}
+              </span>
+              <Pill>
+                <Hash className="h-2.5 w-2.5" />
+                <span className="font-mono">{s.session_id}</span>
+              </Pill>
+              {s.status && <Pill tone={s.status === "completed" ? "default" : s.status === "running" ? "accent" : "danger"}>{s.status}</Pill>}
+            </div>
+          ))}
+        </>
+      )}
+    />
+  );
+}
+
+/**
+ * reuse_same_sub_agent_session — a dropdown that reveals the reused sub-agent's live streaming run
+ * (its output, reasoning, and nested tool calls), exactly like the call_sub_agent block.
+ */
+function ReuseSessionChip({ tool }: { tool: ToolActivity }) {
+  const { data, error, args, hasResult } = parts(tool);
+  const run = tool.subAgent;
+  const sessionId: string = (data?.session_id as string) ?? (args.session_id as string) ?? "";
+  const status = run ? run.status : tool.status;
+  return (
+    <Shell
+      icon={<Repeat2 className="h-3.5 w-3.5" />}
+      label={tool.label || `Reuse Sub-Agent Session: ${sessionId}`}
+      status={status}
+      expandable={Boolean(run) || hasResult}
+      pills={
+        sessionId ? (
+          <Pill>
+            <Hash className="h-2.5 w-2.5" />
+            <span className="font-mono">{sessionId}</span>
+          </Pill>
+        ) : undefined
+      }
+      panel={() => (
+        <>
+          {error?.message && <div className="text-[var(--danger)]">{error.message}</div>}
+          {run ? (
+            <SubAgentRunView run={run} />
+          ) : data ? (
+            <div className="text-[var(--muted)]">{String(data.message ?? "Session reused.")}</div>
+          ) : (
+            !error && <div className="text-[var(--muted)]">Continuing the sub-agent session…</div>
+          )}
+        </>
+      )}
     />
   );
 }

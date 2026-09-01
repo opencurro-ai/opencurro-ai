@@ -90,6 +90,7 @@ function buildStartRequest(convId: string, text: string): StreamRequest {
     todos,
     memory,
     knowledge,
+    enable_reuse_sub_agent_session: settings.enableReuseSubAgentSession === "yes" ? "yes" : "no",
   };
 }
 

@@ -217,6 +217,25 @@ export function SettingsModal() {
             )}
           </section>
 
+          {/* Sub-agent sessions */}
+          <section className="space-y-3 border-t border-[var(--border)] pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Sub-agent sessions</h3>
+            <Field label="Reuse sub-agent sessions">
+              <Select
+                value={settings.enableReuseSubAgentSession ?? "no"}
+                onChange={(e) => setSettings({ enableReuseSubAgentSession: e.target.value === "yes" ? "yes" : "no" })}
+              >
+                <option value="no">No — disabled</option>
+                <option value="yes">Yes — enabled</option>
+              </Select>
+            </Field>
+            <p className="text-xs text-[var(--muted)]">
+              When enabled, the agent can list previously run sub-agent sessions and continue any of
+              them with their preserved conversation context (list_sub_agent_sessions /
+              reuse_same_sub_agent_session). When disabled, both tools are hidden from the agent.
+            </p>
+          </section>
+
           {/* Custom providers */}
           <section className="space-y-3 border-t border-[var(--border)] pt-5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Custom providers</h3>

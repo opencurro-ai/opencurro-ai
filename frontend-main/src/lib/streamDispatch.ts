@@ -83,6 +83,17 @@ function persistDeletedSubAgent(s: Store, rawName: unknown): void {
   if (target) s.deleteSubAgent(target.id);
 }
 
+function persistDeletedSkill(s: Store, rawName: unknown): void {
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+  if (!name) return;
+  // Remove the user-defined skill matching the name (case-insensitive). Built-in defaults
+  // (id prefixed with "default-") are never removed — the backend already blocks deleting them.
+  const target = s.skills.find(
+    (sk) => !sk.id.startsWith("default-") && sk.name.trim().toLowerCase() === name.toLowerCase(),
+  );
+  if (target) s.deleteSkill(target.id);
+}
+
 function persistCreatedSkill(s: Store, raw: Record<string, unknown>): void {
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
   if (!name) return;
@@ -214,6 +225,9 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
       }
       if (ok && name === "create_skill" && payload?.created_skill) {
         persistCreatedSkill(s, payload.created_skill as Record<string, unknown>);
+      }
+      if (ok && name === "delete_skill" && payload?.deleted_skill) {
+        persistDeletedSkill(s, payload.deleted_skill);
       }
       if ((name === "TodoWrite" || name === "read_todos") && Array.isArray(payload?.todos)) {
         s.setTodos(payload.todos as TodoItem[]);
