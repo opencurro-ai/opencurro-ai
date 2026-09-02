@@ -106,9 +106,11 @@ class KnowledgeRunner {
   }
 
   /**
-   * knowledge_search — scan every knowledge file for the natural-language query and return ONLY the
-   * matching file paths together with the 1-based line numbers where the query was found. It never
-   * returns file contents — just locations — so the agent can then knowledge_read the exact spots.
+   * knowledge_search — scan every knowledge file for the natural-language query and return the
+   * matching file paths together with each matching 1-based line number AND that line's content.
+   * Every result carries a `matches` array of `{ line, content }` plus a ready-to-read `preview` that
+   * renders the hits as `LINE <n>: <content>` so the agent immediately sees the matched text;
+   * knowledge_read is then only needed to load surrounding context.
    */
   opSearch(rawQuery: unknown): ToolResult {
     const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
@@ -123,13 +125,18 @@ class KnowledgeRunner {
     }
 
     const { terms, phrase } = parseSearchQuery(query);
-    const results: Array<{ path: string; lines: number[] }> = [];
+    const results: Array<{ path: string; lines: number[]; matches: SearchMatch[]; preview: string }> = [];
     let matchCount = 0;
     for (const file of this.current) {
-      const lines = findMatchingLines(file.content, terms, phrase);
-      if (lines.length > 0) {
-        results.push({ path: `${KNOWLEDGE_ROOT}${file.path}`, lines });
-        matchCount += lines.length;
+      const matches = findMatchingLines(file.content, terms, phrase);
+      if (matches.length > 0) {
+        results.push({
+          path: `${KNOWLEDGE_ROOT}${file.path}`,
+          lines: matches.map((m) => m.line),
+          matches,
+          preview: formatMatches(matches),
+        });
+        matchCount += matches.length;
       }
     }
 
@@ -143,8 +150,9 @@ class KnowledgeRunner {
         message:
           results.length === 0
             ? "No knowledge files matched the query. Try knowledge_list to browse, or a broader query."
-            : "Each result lists the file path and the 1-based line numbers where the query was found. " +
-              "Use knowledge_read with a path (and offset/limit around those lines) to load the content.",
+            : "Each result lists the file path and its matching lines as `LINE <n>: <content>` (see the " +
+              "`matches` array and the `preview` string). Use knowledge_read with a path (and " +
+              "offset/limit around those lines) to load surrounding context.",
       },
     };
   }
@@ -354,14 +362,35 @@ export function parseSearchQuery(query: string): { terms: string[]; phrase: stri
   return { terms, phrase };
 }
 
+/** A single search hit: the 1-based line number and that line's (possibly truncated) content. */
+export interface SearchMatch {
+  line: number;
+  content: string;
+}
+
 /**
- * Return the sorted, 1-based line numbers of every line in `content` that matches the query (either
- * the full phrase or any single term, case-insensitively). Blank lines are skipped. Exported so both
- * the knowledge_search runtime and its tests share one matcher.
+ * Max characters of a single matching line returned in a search result. Keeps a pathologically long
+ * or minified line from bloating the tool output while still giving the agent the matched text.
  */
-export function findMatchingLines(content: string, terms: string[], phrase: string): number[] {
+export const MAX_MATCH_LINE_CHARS = 500;
+
+/** Trim trailing whitespace and cap an over-long matching line so results stay compact. */
+function truncateMatchLine(line: string): string {
+  const trimmed = line.replace(/\s+$/, "");
+  return trimmed.length <= MAX_MATCH_LINE_CHARS
+    ? trimmed
+    : `${trimmed.slice(0, MAX_MATCH_LINE_CHARS)}… (truncated)`;
+}
+
+/**
+ * Return, in order, every line in `content` that matches the query (either the full phrase or any
+ * single term, case-insensitively) as a `{ line, content }` pair — the 1-based line number plus that
+ * line's content. Blank lines are skipped. Exported so both the knowledge_search runtime and its
+ * tests share one matcher.
+ */
+export function findMatchingLines(content: string, terms: string[], phrase: string): SearchMatch[] {
   const lines = content.split("\n");
-  const out: number[] = [];
+  const out: SearchMatch[] = [];
   for (let i = 0; i < lines.length; i += 1) {
     const lower = lines[i].toLowerCase();
     if (lower.length === 0) continue;
@@ -376,9 +405,14 @@ export function findMatchingLines(content: string, terms: string[], phrase: stri
         }
       }
     }
-    if (matched) out.push(i + 1);
+    if (matched) out.push({ line: i + 1, content: truncateMatchLine(lines[i]) });
   }
   return out;
+}
+
+/** Render matches as one `LINE <n>: <content>` per line — the block handed to the agent. */
+export function formatMatches(matches: SearchMatch[]): string {
+  return matches.map((m) => `LINE ${m.line}: ${m.content}`).join("\n");
 }
 
 function countOccurrences(haystack: string, needle: string): number {

@@ -844,22 +844,34 @@ function SearchLocatorChip({ tool }: { tool: ToolActivity }) {
               <Pill>{data.match_count} line(s)</Pill>
             </div>
           )}
-          {results.map((r, i) => (
-            <div key={i} className="rounded-[var(--radius-sm)] border border-[var(--border)] p-2">
-              <span className="flex items-center gap-1 font-mono text-[var(--fg)]">
-                <FileText className="h-3 w-3" />
-                {r.path}
-              </span>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {(r.lines as number[]).map((ln, li) => (
-                  <Pill key={li}>
-                    <Hash className="h-2.5 w-2.5" />
-                    {ln}
-                  </Pill>
-                ))}
+          {results.map((r, i) => {
+            const matches: { line?: number; content?: string }[] = Array.isArray(r.matches)
+              ? r.matches
+              : ((r.lines as number[] | undefined) ?? []).map((ln) => ({ line: ln }));
+            return (
+              <div key={i} className="rounded-[var(--radius-sm)] border border-[var(--border)] p-2">
+                <span className="flex items-center gap-1 font-mono text-[var(--fg)]">
+                  <FileText className="h-3 w-3" />
+                  {r.path}
+                </span>
+                <div className="mt-1 flex flex-col gap-1">
+                  {matches.map((m, li) => (
+                    <div key={li} className="flex items-start gap-1.5 font-mono text-[11px]">
+                      <span className="flex shrink-0 items-center gap-0.5 text-[var(--muted)]">
+                        <Hash className="h-2.5 w-2.5" />
+                        {m.line}
+                      </span>
+                      {m.content != null && (
+                        <span className="whitespace-pre-wrap break-all text-[var(--fg)]">
+                          {m.content}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </>
       )}
     />

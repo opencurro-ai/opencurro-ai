@@ -5,9 +5,16 @@ import { knowledgeSearchTool } from "./knowledge_search.js";
 import { createKnowledgeRuntime } from "../knowledge.js";
 import type { KnowledgeFile, ToolContext } from "./types.js";
 
+interface SearchMatch {
+  line: number;
+  content: string;
+}
+
 interface SearchResult {
   path: string;
   lines: number[];
+  matches: SearchMatch[];
+  preview: string;
 }
 
 interface SearchData {
@@ -55,7 +62,7 @@ describe("knowledge_search tool", () => {
     assert.deepEqual(schema!.function.parameters.required as string[], ["query"]);
   });
 
-  it("returns only paths and line numbers where the query is found", async () => {
+  it("returns paths, line numbers and the matching line content", async () => {
     const { ctx } = ctxFor([
       { path: "architecture.md", content: ARCH },
       { path: "tools/memory.md", content: MEMORY_DOC },
@@ -64,8 +71,25 @@ describe("knowledge_search tool", () => {
     assert.equal(res.ok, true);
     const data = res.data as SearchData;
     assert.deepEqual(data.results, [
-      { path: "knowledge/architecture.md", lines: [3, 4, 5] },
-      { path: "knowledge/tools/memory.md", lines: [4] },
+      {
+        path: "knowledge/architecture.md",
+        lines: [3, 4, 5],
+        matches: [
+          { line: 3, content: "The system uses a message bus for events." },
+          { line: 4, content: "Each service publishes to the bus." },
+          { line: 5, content: "The bus guarantees ordering." },
+        ],
+        preview:
+          "LINE 3: The system uses a message bus for events.\n" +
+          "LINE 4: Each service publishes to the bus.\n" +
+          "LINE 5: The bus guarantees ordering.",
+      },
+      {
+        path: "knowledge/tools/memory.md",
+        lines: [4],
+        matches: [{ line: 4, content: "The bus is unrelated here." }],
+        preview: "LINE 4: The bus is unrelated here.",
+      },
     ]);
     assert.equal(data.result_count, 2);
     assert.equal(data.match_count, 4);
@@ -76,7 +100,19 @@ describe("knowledge_search tool", () => {
     const res = await registry.execute("knowledge_search", { query: "Message Ordering" }, ctx);
     const data = res.data as SearchData;
     // line 3 has "message", line 5 has "ordering"
-    assert.deepEqual(data.results, [{ path: "knowledge/architecture.md", lines: [3, 5] }]);
+    assert.deepEqual(data.results, [
+      {
+        path: "knowledge/architecture.md",
+        lines: [3, 5],
+        matches: [
+          { line: 3, content: "The system uses a message bus for events." },
+          { line: 5, content: "The bus guarantees ordering." },
+        ],
+        preview:
+          "LINE 3: The system uses a message bus for events.\n" +
+          "LINE 5: The bus guarantees ordering.",
+      },
+    ]);
   });
 
   it("returns an empty result set (not an error) when nothing matches", async () => {

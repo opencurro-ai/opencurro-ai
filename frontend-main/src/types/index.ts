@@ -375,10 +375,16 @@ export interface KnowledgeToolResult {
   };
 }
 
+/** A single search hit: the 1-based line number and that line's content. */
+export interface SearchLocatorMatch {
+  line?: number;
+  content?: string;
+}
+
 /**
  * Structured result streamed back for the memory_search / knowledge_search tools. Each result is a
- * matched file path plus the 1-based line numbers where the natural-language query was found — no
- * file contents are returned, only locations.
+ * matched file path plus, for every hit, the 1-based line number and that line's content (also
+ * pre-rendered as a `LINE <n>: <content>` block in `preview`).
  */
 export interface SearchLocatorToolResult {
   ok?: boolean;
@@ -386,7 +392,12 @@ export interface SearchLocatorToolResult {
     query?: string;
     result_count?: number;
     match_count?: number;
-    results?: Array<{ path?: string; lines?: number[] }>;
+    results?: Array<{
+      path?: string;
+      lines?: number[];
+      matches?: SearchLocatorMatch[];
+      preview?: string;
+    }>;
     message?: string;
   };
   error?: { code?: string; message?: string };

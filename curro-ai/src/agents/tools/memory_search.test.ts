@@ -5,9 +5,16 @@ import { memorySearchTool } from "./memory_search.js";
 import { createMemoryRuntime } from "../memory.js";
 import type { MemoryFile, ToolContext } from "./types.js";
 
+interface SearchMatch {
+  line: number;
+  content: string;
+}
+
 interface SearchResult {
   path: string;
   lines: number[];
+  matches: SearchMatch[];
+  preview: string;
 }
 
 interface SearchData {
@@ -55,7 +62,7 @@ describe("memory_search tool", () => {
     assert.deepEqual(schema!.function.parameters.required as string[], ["query"]);
   });
 
-  it("returns only paths and line numbers where the query is found", async () => {
+  it("returns paths, line numbers and the matching line content", async () => {
     const { ctx } = ctxFor([
       { path: "USER.md", content: USER },
       { path: "projects/curro-ai.md", content: PROJECT },
@@ -64,8 +71,18 @@ describe("memory_search tool", () => {
     assert.equal(res.ok, true);
     const data = res.data as SearchData;
     assert.deepEqual(data.results, [
-      { path: "memory/USER.md", lines: [4] },
-      { path: "memory/projects/curro-ai.md", lines: [4] },
+      {
+        path: "memory/USER.md",
+        lines: [4],
+        matches: [{ line: 4, content: "Prefers TypeScript and concise answers." }],
+        preview: "LINE 4: Prefers TypeScript and concise answers.",
+      },
+      {
+        path: "memory/projects/curro-ai.md",
+        lines: [4],
+        matches: [{ line: 4, content: "TypeScript everywhere." }],
+        preview: "LINE 4: TypeScript everywhere.",
+      },
     ]);
     assert.equal(data.result_count, 2);
     assert.equal(data.match_count, 2);
@@ -76,7 +93,17 @@ describe("memory_search tool", () => {
     const res = await registry.execute("memory_search", { query: "Ada Project" }, ctx);
     const data = res.data as SearchData;
     // line 3 has "ada", line 5 has "project"
-    assert.deepEqual(data.results, [{ path: "memory/USER.md", lines: [3, 5] }]);
+    assert.deepEqual(data.results, [
+      {
+        path: "memory/USER.md",
+        lines: [3, 5],
+        matches: [
+          { line: 3, content: "Name: Ada" },
+          { line: 5, content: "Works on the curro-ai project." },
+        ],
+        preview: "LINE 3: Name: Ada\nLINE 5: Works on the curro-ai project.",
+      },
+    ]);
   });
 
   it("returns an empty result set (not an error) when nothing matches", async () => {
