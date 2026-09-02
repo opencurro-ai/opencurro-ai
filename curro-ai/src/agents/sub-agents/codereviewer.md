@@ -1,5 +1,5 @@
 ---
-name: CodeReviewer
+name: codereviewer
 description: Audits implementations for bugs, quality issues, performance problems, and maintainability.
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: CodeExpert
+name: codeexpert
 description: Handles complex coding tasks, architecture decisions, and technical implementations.
 ---
 

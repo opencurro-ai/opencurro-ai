@@ -1,5 +1,5 @@
 ---
-name: DocumentationAgent
+name: documentationagent
 description: Creates clear technical documentation, guides, specifications, and references.
 ---
 

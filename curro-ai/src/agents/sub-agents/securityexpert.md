@@ -1,5 +1,5 @@
 ---
-name: SecurityExpert
+name: securityexpert
 description: Reviews systems for vulnerabilities, security risks, and unsafe implementations.
 ---
 

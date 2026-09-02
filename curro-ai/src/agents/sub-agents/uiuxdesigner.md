@@ -1,5 +1,5 @@
 ---
-name: UIUXDesigner
+name: uiuxdesigner
 description: Designs modern interfaces, layouts, user flows, and visual experiences.
 ---
 

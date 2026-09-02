@@ -22,24 +22,17 @@ import { safeResolve } from "../utils/paths.js";
 import { createSubAgentSessionId, isSafeSessionId } from "../database/ids.js";
 import { subAgentSessionStore, type SubAgentSessionStatus } from "./subAgentSessionStore.js";
 import type { OpenAIToolSchema } from "./tools/registry.js";
+import { SUB_AGENT_RESTRICTED_TOOLS } from "./tools/subAgentRestrictedTools.js";
 
 /**
- * Tools a sub-agent may never use: the sub-agent meta tools (prevents recursive delegation) and
- * the skill meta tools (the skill runtime is only wired to the main agent's turn).
+ * Tools a sub-agent may never use. This is the single canonical restricted set
+ * (SUB_AGENT_RESTRICTED_TOOLS) enforced at runtime for every sub-agent run: the sub-agent
+ * delegation/meta tools (prevents recursive delegation and self-management), the human-in-the-loop
+ * tools (only the main agent talks to the user / plans / presents), and the shared todo + skill
+ * deletion tools. Every other registered tool (including the knowledge, memory, and skill
+ * discovery tools) remains available to sub-agents.
  */
-export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
-  "call_sub_agent",
-  "call_multiple_sub_agents",
-  "list_sub_agents",
-  "delete_sub_agent",
-  "list_sub_agent_sessions",
-  "reuse_same_sub_agent_session",
-  "list_skills",
-  "skill_initialize",
-  "delete_skill",
-  "TodoWrite",
-  "read_todos",
-];
+export const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = SUB_AGENT_RESTRICTED_TOOLS;
 
 /** Directory (relative to the workspace root) where background sub-agent outputs are written. */
 export const SUB_AGENT_OUTPUT_DIR = ".curro/sub-agent";

@@ -1,5 +1,5 @@
 ---
-name: DebugAgent
+name: debugagent
 description: Diagnoses errors, traces root causes, and develops reliable fixes.
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: ProjectPlanner
+name: projectplanner
 description: Breaks large objectives into structured tasks, dependencies, and execution steps.
 ---
 

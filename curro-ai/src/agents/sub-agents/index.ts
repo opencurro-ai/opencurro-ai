@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SubAgentDefinition } from "../tools/types.js";
+import { SUB_AGENT_RESTRICTED_TOOLS } from "../tools/subAgentRestrictedTools.js";
 
 /**
  * Root directory holding the built-in default sub-agent data files. Each `.md` file in this
@@ -11,28 +12,15 @@ import type { SubAgentDefinition } from "../tools/types.js";
 export const DEFAULT_SUB_AGENTS_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Tools a pre-added sub-agent is never granted. These are the human-in-the-loop meta tools
- * (submit_plan / ask_question_to_user), the sub-agent delegation meta tools (call_sub_agent /
- * list_sub_agents / create_sub_agent), and the presentation helpers that only make sense for the
- * main agent (embed_url / attach_files). Everything else registered in the tool registry is granted.
+ * Tools a pre-added sub-agent is never granted — the single canonical restricted set
+ * (SUB_AGENT_RESTRICTED_TOOLS). Everything else registered in the tool registry (file, shell, web,
+ * knowledge, memory, and skill discovery tools) is granted.
  */
-export const DEFAULT_SUB_AGENT_DISALLOWED_TOOLS: readonly string[] = [
-  "call_sub_agent",
-  "list_sub_agents",
-  "list_sub_agent_sessions",
-  "reuse_same_sub_agent_session",
-  "create_sub_agent",
-  "delete_sub_agent",
-  "delete_skill",
-  "submit_plan",
-  "ask_question_to_user",
-  "embed_url",
-  "attach_files",
-];
+export const DEFAULT_SUB_AGENT_DISALLOWED_TOOLS: readonly string[] = SUB_AGENT_RESTRICTED_TOOLS;
 
 /**
  * Every tool name currently registered in the agent's tool registry (the same set the main agent
- * sees). Kept in sync with createToolRegistry in ../tools/index.js.
+ * sees). Kept in sync with createToolRegistry in ../tools/index.js — 42 tools total.
  */
 const ALL_AGENT_TOOLS: readonly string[] = [
   "file_read",
@@ -48,29 +36,41 @@ const ALL_AGENT_TOOLS: readonly string[] = [
   "fatch_web_urls",
   "read_image",
   "call_sub_agent",
+  "call_multiple_sub_agents",
   "list_sub_agents",
-  "list_sub_agent_sessions",
-  "reuse_same_sub_agent_session",
   "list_skills",
   "skill_initialize",
   "submit_plan",
   "ask_question_to_user",
   "create_sub_agent",
-  "delete_sub_agent",
   "create_skill",
-  "delete_skill",
   "TodoWrite",
   "read_todos",
+  "memory_list",
+  "memory_search",
+  "memory_read",
+  "memory_write",
+  "memory_edit",
+  "memory_delete",
+  "knowledge_list",
+  "knowledge_search",
+  "knowledge_read",
+  "knowledge_create",
+  "knowledge_edit",
+  "knowledge_delete",
   "embed_url",
   "attach_files",
   "wait",
+  "delete_sub_agent",
+  "list_sub_agent_sessions",
+  "reuse_same_sub_agent_session",
+  "delete_skill",
 ];
 
 /**
  * The canonical allowed-tool set granted to every pre-added default sub-agent: all registered
- * tools except the disallowed meta/presentation tools above. Note the sub-agent runner
- * (../subagents.js SUB_AGENT_EXCLUDED_TOOLS) additionally strips list_skills, skill_initialize,
- * TodoWrite and read_todos at runtime for safety, so the effective set is always meta-tool free.
+ * tools except the restricted sub-agent tools above (28 tools). This is the same effective set the
+ * sub-agent runner (../subagents.js SUB_AGENT_EXCLUDED_TOOLS) enforces at runtime.
  */
 export const DEFAULT_SUB_AGENT_TOOLS: readonly string[] = ALL_AGENT_TOOLS.filter(
   (name) => !DEFAULT_SUB_AGENT_DISALLOWED_TOOLS.includes(name),

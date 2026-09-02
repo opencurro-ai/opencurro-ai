@@ -1,5 +1,5 @@
 ---
-name: DeepExplorer
+name: deepexplorer
 description: Performs deep research, explores sources, and discovers relevant information.
 ---
 

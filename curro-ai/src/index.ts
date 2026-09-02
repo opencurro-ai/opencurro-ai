@@ -12,6 +12,7 @@ import { buildProviderRouter } from "./api/providers.js";
 import { buildFilesRouter } from "./api/files.js";
 import { buildScrapeRouter } from "./api/scrape.js";
 import { buildStateRouter, buildSessionsRouter } from "./api/state.js";
+import { buildToolsRouter } from "./api/tools.js";
 import { CurroDatabase } from "./database/index.js";
 
 function main(): void {
@@ -50,6 +51,7 @@ function main(): void {
   });
 
   app.use("/api/providers", buildProviderRouter(providers));
+  app.use("/api/tools", buildToolsRouter(tools));
   app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals, askQuestions, db));
   app.use("/api/files", buildFilesRouter(config));
   app.use("/api/scrape", buildScrapeRouter(config));
