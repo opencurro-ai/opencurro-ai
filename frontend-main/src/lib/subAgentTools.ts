@@ -1,7 +1,13 @@
+import { API_ROUTES, routeUrl } from "@/app/api/routes";
+import { requestJson } from "@/lib/api";
+
 /**
- * Catalog of tools a sub-agent can be granted, mirroring the tools registered in the
- * curro-ai backend (src/agents/tools). The sub-agent meta tools (call_sub_agent /
- * list_sub_agents) are intentionally excluded to prevent recursive delegation.
+ * Catalog of tools a sub-agent can be granted. The authoritative list is fetched at runtime from
+ * the curro-ai backend (`GET /api/tools`), which returns every registered tool minus the 14
+ * restricted sub-agent tools — so the popup always mirrors the backend and never needs a
+ * hand-maintained list in code. The constant below is only a bundled FALLBACK used if that fetch
+ * fails (offline / backend not ready). Keep it roughly in sync, but the backend is the source of
+ * truth.
  */
 export interface SubAgentToolMeta {
   name: string;
@@ -9,88 +15,91 @@ export interface SubAgentToolMeta {
   description: string;
 }
 
+/** Raw tool entry as returned by the backend `/api/tools` endpoint. */
+interface BackendToolInfo {
+  name: string;
+  description: string;
+}
+
+/**
+ * Clean a raw backend tool description for compact display: a few tool descriptions embed a full
+ * JSON schema or long "Usage:" block. Keep just the leading human sentence(s) — cut at the first
+ * embedded JSON object or the "Usage"/"Usage notes" heading — and collapse whitespace.
+ */
+export function cleanToolDescription(raw: string): string {
+  let text = (raw ?? "").trim();
+  const jsonAt = text.search(/\n\s*\{/);
+  if (jsonAt !== -1) text = text.slice(0, jsonAt);
+  const usageAt = text.search(/\n\s*Usage(?:\s+notes)?:/i);
+  if (usageAt !== -1) text = text.slice(0, usageAt);
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Turn a snake_case / lowercase tool name into a readable Title Case label
+ * (e.g. "knowledge_read" -> "Knowledge Read", "fatch_web_urls" -> "Fatch Web Urls").
+ */
+export function humanizeToolName(name: string): string {
+  return name
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((word) => (word.length > 0 ? word[0]!.toUpperCase() + word.slice(1) : word))
+    .join(" ");
+}
+
+/**
+ * The bundled fallback list of the 28 tools a sub-agent may be granted (all registered tools minus
+ * the 14 restricted sub-agent tools). Used only when the backend `/api/tools` fetch fails.
+ */
 export const SUB_AGENT_TOOLS: readonly SubAgentToolMeta[] = [
-  {
-    name: "file_read",
-    label: "Read file",
-    description:
-      "Read a file from the local filesystem. file_path must be an absolute path; use offset/limit to read sections of large files.",
-  },
-  {
-    name: "file_write",
-    label: "Write file",
-    description: "Create a new file or fully overwrite an existing one.",
-  },
-  {
-    name: "file_list",
-    label: "List files",
-    description: "List files and directories inside a workspace directory.",
-  },
-  {
-    name: "str_replace",
-    label: "Edit file",
-    description: "Exact string replacement inside an existing file.",
-  },
-  {
-    name: "apply_multiple_edits",
-    label: "Apply multiple edits",
-    description:
-      "Apply multiple exact string replacements to one file in a single call; fails without writing if any match is missing or duplicated.",
-  },
-  {
-    name: "shall_tool",
-    label: "Terminal",
-    description: "Run a shell command from the workspace directory.",
-  },
-  {
-    name: "shell_view",
-    label: "View shell output",
-    description:
-      "View the live buffered output of background commands started with shall_tool (wait_for_output=false), keyed by session_name.",
-  },
-  {
-    name: "bash_write_to_process",
-    label: "Write to process",
-    description:
-      "Write input to the stdin of a process running in a background shell session (started with shall_tool wait_for_output=false). Use for prompts, interactive CLIs, REPLs and dev servers.",
-  },
-  {
-    name: "web_search",
-    label: "Web search",
-    description: "Search the web for up-to-date information.",
-  },
-  {
-    name: "fatch_web_urls",
-    label: "Fetch URL",
-    description: "Fetch and extract clean content from a single URL.",
-  },
-  {
-    name: "read_image",
-    label: "Read image",
-    description:
-      "Read an image from the local workspace or a live hosted image URL and visually analyze it. Requires a vision-capable model.",
-  },
-  {
-    name: "image_search",
-    label: "Image search",
-    description:
-      "Search the web for images using a query and return direct live image URLs and source URLs.",
-  },
-  {
-    name: "wait",
-    label: "Wait",
-    description:
-      "Pause for a set number of seconds (1–180) to wait for a process, task, or external operation to complete before continuing.",
-  },
+  { name: "file_read", label: "Read file", description: "Read a file from the local filesystem (absolute path); use offset/limit for large files." },
+  { name: "file_write", label: "Write file", description: "Create a new file or fully overwrite an existing one." },
+  { name: "file_list", label: "List files", description: "List files and directories inside a workspace directory." },
+  { name: "str_replace", label: "Edit file", description: "Exact string replacement inside an existing file." },
+  { name: "apply_multiple_edits", label: "Apply multiple edits", description: "Apply several exact edits to one file in a single validated call." },
+  { name: "shall_tool", label: "Terminal", description: "Run a shell command from the workspace directory." },
+  { name: "shell_view", label: "View shell output", description: "View the live buffered output of a background shell session." },
+  { name: "bash_write_to_process", label: "Write to process", description: "Write to the stdin of a running background shell process (prompts, REPLs, dev servers)." },
+  { name: "web_search", label: "Web search", description: "Search the web for up-to-date information." },
+  { name: "image_search", label: "Image search", description: "Search the web for images and return direct image URLs and source URLs." },
+  { name: "fatch_web_urls", label: "Fetch URL", description: "Fetch and extract clean content from web URLs." },
+  { name: "read_image", label: "Read image", description: "Read an image (workspace path or hosted URL) and visually analyze it. Requires a vision model." },
+  { name: "list_skills", label: "List skills", description: "List the available skills (name, description, and file tree of each skill folder)." },
+  { name: "skill_initialize", label: "Initialize skill", description: "Materialize one or more skills onto disk so their files can be read." },
+  { name: "create_skill", label: "Create skill", description: "Package a folder into a reusable skill and save it for later use." },
+  { name: "memory_list", label: "List memory", description: "Discover memory files with their sizes and limits." },
+  { name: "memory_search", label: "Search memory", description: "Find which memory files/line numbers contain a query, without loading contents." },
+  { name: "memory_read", label: "Read memory", description: "Load a memory file's contents by exact path." },
+  { name: "memory_write", label: "Write memory", description: "Create or fully replace a memory file." },
+  { name: "memory_edit", label: "Edit memory", description: "Exact old→new replacement inside a memory file." },
+  { name: "memory_delete", label: "Delete memory", description: "Delete a non-pre-added memory file." },
+  { name: "knowledge_list", label: "List knowledge", description: "List the user's knowledge base files." },
+  { name: "knowledge_search", label: "Search knowledge", description: "Find which knowledge files/line numbers contain a query, without loading contents." },
+  { name: "knowledge_read", label: "Read knowledge", description: "Load a knowledge file's contents by exact path." },
+  { name: "knowledge_create", label: "Create knowledge", description: "Create a new knowledge file." },
+  { name: "knowledge_edit", label: "Edit knowledge", description: "Exact old→new replacement inside a knowledge file." },
+  { name: "knowledge_delete", label: "Delete knowledge", description: "Delete a knowledge file." },
+  { name: "wait", label: "Wait", description: "Pause for a set number of seconds (1–180) before continuing." },
 ] as const;
 
-export const SUB_AGENT_TOOL_NAMES: readonly string[] = SUB_AGENT_TOOLS.map((t) => t.name);
-
-const TOOL_LABELS: Record<string, string> = Object.fromEntries(
-  SUB_AGENT_TOOLS.map((t) => [t.name, t.label]),
-);
-
-/** Human-friendly label for a tool name, falling back to the raw name. */
-export function toolLabel(name: string): string {
-  return TOOL_LABELS[name] ?? name;
+/**
+ * Fetch the sub-agent-grantable tools from the backend. Returns the tools with a derived,
+ * human-friendly label per tool. Throws on failure so the caller can fall back to SUB_AGENT_TOOLS.
+ */
+export async function fetchSubAgentTools(signal?: AbortSignal): Promise<SubAgentToolMeta[]> {
+  const data = await requestJson<{ tools?: BackendToolInfo[] }>(
+    routeUrl(API_ROUTES.toolsList),
+    undefined,
+    signal,
+  );
+  const tools = Array.isArray(data.tools) ? data.tools : [];
+  return tools
+    .filter((t) => t && typeof t.name === "string" && t.name.length > 0)
+    .map((t) => ({
+      name: t.name,
+      label: humanizeToolName(t.name),
+      description: cleanToolDescription(typeof t.description === "string" ? t.description : ""),
+    }));
 }

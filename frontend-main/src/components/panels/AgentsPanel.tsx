@@ -1,14 +1,26 @@
-import { useMemo, useState } from "react";
-import { Bot, Check, ChevronLeft, Pencil, Plus, Search, Wrench, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bot, Check, ChevronLeft, Pencil, Plus, RefreshCw, Search, Trash2, Wrench, X } from "lucide-react";
 import { useStore } from "@/store/useStore";
 
-import { SUB_AGENT_TOOLS } from "@/lib/subAgentTools";
+import { SUB_AGENT_TOOLS, fetchSubAgentTools, type SubAgentToolMeta } from "@/lib/subAgentTools";
 import { Modal } from "@/components/ui/Modal";
 import { Button, Field, PanelHeader, TextArea, TextInput, Toggle } from "@/components/ui/primitives";
 import { cn } from "@/utils/cn";
 
 const NAME_MAX = 70;
 const DESC_MAX = 300;
+/** A valid sub-agent name: lowercase, no spaces/tabs, only lowercase letters/digits and single -/_. */
+const NAME_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
+
+/** Sanitize a typed sub-agent name: force lowercase and drop anything that is not [a-z0-9_-]. */
+function sanitizeSubAgentName(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+}
+
+/** Built-in defaults have ids prefixed with "default-" and can never be deleted. */
+function isDefaultSubAgent(id: string): boolean {
+  return id.startsWith("default-");
+}
 
 interface Draft {
   id: string | null;
@@ -25,16 +37,69 @@ export function AgentsPanel() {
   const subAgents = useStore((s) => s.subAgents);
   const addSubAgent = useStore((s) => s.addSubAgent);
   const updateSubAgent = useStore((s) => s.updateSubAgent);
+  const deleteSubAgent = useStore((s) => s.deleteSubAgent);
   const toggleSubAgent = useStore((s) => s.toggleSubAgent);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The catalog of grantable tools, fetched live from the backend (restricted tools already
+  // excluded server-side). Falls back to the bundled list if the backend is unreachable.
+  const [tools, setTools] = useState<SubAgentToolMeta[]>([...SUB_AGENT_TOOLS]);
+  // Start in the loading state: the mount effect fetches immediately. Keeping the flag's initial
+  // value true means no state is set synchronously inside the effect.
+  const [toolsLoading, setToolsLoading] = useState(true);
+  const [toolsError, setToolsError] = useState<string | null>(null);
+
+  // Every state update happens after the awaited fetch (or in catch/finally), never synchronously.
+  const loadTools = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const fetched = await fetchSubAgentTools(signal);
+      if (signal?.aborted) return;
+      if (fetched.length > 0) setTools(fetched);
+      setToolsError(null);
+    } catch {
+      if (signal?.aborted) return;
+      // Keep whatever list we already have (bundled fallback) and surface a hint.
+      setToolsError("Couldn't load the live tool list — showing the bundled set. Try refetch.");
+    } finally {
+      if (!signal?.aborted) setToolsLoading(false);
+    }
+  }, []);
+
+  // Fetch once on mount so the popup always reflects the backend's real tool registry. State is
+  // only updated from the promise callbacks (never synchronously in the effect body).
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchSubAgentTools(controller.signal)
+      .then((fetched) => {
+        if (controller.signal.aborted) return;
+        if (fetched.length > 0) setTools(fetched);
+        setToolsError(null);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setToolsError("Couldn't load the live tool list — showing the bundled set. Try refetch.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setToolsLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
+
+  // Manual refetch from the popup — set the spinner in the event handler (not in an effect).
+  const refetchTools = () => {
+    setToolsLoading(true);
+    void loadTools();
+  };
+
   const save = () => {
     if (!draft) return;
-    const name = draft.name.trim();
+    const name = sanitizeSubAgentName(draft.name.trim());
     if (!name) return setError("A name is required.");
     if (name.length > NAME_MAX) return setError(`Name must be ${NAME_MAX} characters or fewer.`);
+    if (!NAME_PATTERN.test(name))
+      return setError("Name must be lowercase with no spaces — use letters, digits and single -/_ (e.g. deepexplorer).");
     if (draft.description.length > DESC_MAX) return setError(`Description must be ${DESC_MAX} characters or fewer.`);
     if (!draft.systemPrompt.trim()) return setError("A system prompt is required.");
     const clash = subAgents.some((a) => a.id !== draft.id && a.name.trim().toLowerCase() === name.toLowerCase());
@@ -67,12 +132,15 @@ export function AgentsPanel() {
         </div>
       ) : (
         <ul className="grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2">
-          {subAgents.map((agent) => (
+          {subAgents.map((agent) => {
+            const isDefault = isDefaultSubAgent(agent.id);
+            return (
             <li key={agent.id}>
               <article className="flex h-full flex-col rounded-[var(--radius-xl)] bg-[var(--bg)] p-5 transition-colors hover:bg-[var(--chip)]" style={{ boxShadow: "var(--shadow-chip)" }}>
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-serif-display m-0 text-2xl text-[var(--fg)]">{agent.name}</h3>
                   <div className="flex items-center gap-1.5">
+                    {isDefault && <span className="rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--subtle)]">default</span>}
                     <Toggle checked={agent.enabled} onChange={() => toggleSubAgent(agent.id)} label="Enabled" />
                   </div>
                 </div>
@@ -92,10 +160,22 @@ export function AgentsPanel() {
                   <Button variant="ghost" className="px-2" onClick={() => { setError(null); setDraft({ id: agent.id, name: agent.name, description: agent.description, systemPrompt: agent.systemPrompt, tools: [...agent.tools], enabled: agent.enabled }); }}>
                     <Pencil className="h-3.5 w-3.5" /> Edit
                   </Button>
+                  {/* Only user- or LLM-created sub-agents can be deleted; built-in defaults cannot. */}
+                  {!isDefault && (
+                    <Button
+                      variant="ghost"
+                      className="px-2 text-[var(--subtle)] hover:text-[var(--danger)]"
+                      onClick={() => deleteSubAgent(agent.id)}
+                      title="Delete sub-agent"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </Button>
+                  )}
                 </div>
               </article>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 
@@ -120,7 +200,14 @@ export function AgentsPanel() {
         {draft && (
           <div className="space-y-4 p-5">
             <Field label="Sub-agent name" hint={`${draft.name.length}/${NAME_MAX}`} hintError={draft.name.length > NAME_MAX}>
-              <TextInput value={draft.name} maxLength={NAME_MAX} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. deepexplorer" />
+              <TextInput
+                value={draft.name}
+                maxLength={NAME_MAX}
+                onChange={(e) => setDraft({ ...draft, name: sanitizeSubAgentName(e.target.value) })}
+                placeholder="e.g. deepexplorer"
+                className="font-mono"
+              />
+              <p className="mt-1 text-[10px] text-[var(--subtle)]">Lowercase only, no spaces or tabs (letters, digits, and single -/_).</p>
             </Field>
             <Field label="Short description" hint={`${draft.description.length}/${DESC_MAX}`} hintError={draft.description.length > DESC_MAX}>
               <TextArea rows={2} maxLength={DESC_MAX} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
@@ -129,8 +216,23 @@ export function AgentsPanel() {
               <TextArea rows={7} value={draft.systemPrompt} onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })} className="font-mono text-xs" />
             </Field>
             <div>
-              <div className="mb-1.5 text-xs font-medium text-[var(--muted)]">Allowed tools</div>
-              <ToolMultiSelect selected={draft.tools} onChange={(tools) => setDraft({ ...draft, tools })} />
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-xs font-medium text-[var(--muted)]">
+                  Allowed tools <span className="text-[var(--subtle)]">({tools.length} available)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={refetchTools}
+                  disabled={toolsLoading}
+                  className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border)] px-2 py-1 text-[10px] text-[var(--muted)] hover:border-[var(--secondary)] disabled:opacity-50"
+                  title="Refetch the available tools from the backend"
+                >
+                  <RefreshCw className={cn("h-3 w-3", toolsLoading && "animate-spin")} />
+                  Refetch
+                </button>
+              </div>
+              {toolsError && <p className="mb-1.5 text-[10px] text-[var(--subtle)]">{toolsError}</p>}
+              <ToolMultiSelect tools={tools} selected={draft.tools} onChange={(t) => setDraft({ ...draft, tools: t })} />
             </div>
             <div className="flex items-center gap-2">
               <Toggle checked={draft.enabled} onChange={(v) => setDraft({ ...draft, enabled: v })} />
@@ -144,14 +246,14 @@ export function AgentsPanel() {
   );
 }
 
-function ToolMultiSelect({ selected, onChange }: { selected: string[]; onChange: (tools: string[]) => void }) {
+function ToolMultiSelect({ tools, selected, onChange }: { tools: SubAgentToolMeta[]; selected: string[]; onChange: (tools: string[]) => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return SUB_AGENT_TOOLS;
-    return SUB_AGENT_TOOLS.filter((t) => `${t.name} ${t.label} ${t.description}`.toLowerCase().includes(q));
-  }, [query]);
+    if (!q) return tools;
+    return tools.filter((t) => `${t.name} ${t.label} ${t.description}`.toLowerCase().includes(q));
+  }, [query, tools]);
 
   const toggle = (name: string) =>
     onChange(selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name]);

@@ -9,6 +9,16 @@ const NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const NAME_MAX = 70;
 const DESC_MAX = 300;
 
+/** Replace any whitespace the user types in a skill name with a hyphen (skill names allow no spaces). */
+function sanitizeSkillName(raw: string): string {
+  return raw.replace(/\s/g, "-");
+}
+
+/** Built-in default skills have ids prefixed with "default-" and can never be deleted. */
+function isDefaultSkill(id: string): boolean {
+  return id.startsWith("default-");
+}
+
 interface DraftFile extends SkillFile {
   key: string;
 }
@@ -103,13 +113,17 @@ export function SkillsPanel() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
+                {isDefaultSkill(skill.id) && <span className="rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--subtle)]">default</span>}
                 <Toggle checked={skill.enabled} onChange={() => toggleSkill(skill.id)} />
                 <button onClick={() => { setError(null); setDraft({ id: skill.id, name: skill.name, description: skill.description, skillFile: skill.skillFile || "SKILL.md", skillContent: skill.skillContent, files: skill.files.map((f) => ({ ...f, key: nextKey() })), enabled: skill.enabled }); }} title="Edit" className="grid h-8 w-8 place-items-center rounded-[var(--radius-md)] text-[var(--subtle)] hover:bg-[var(--chip-hover)] hover:text-[var(--fg)]">
                   <Pencil className="h-4 w-4" />
                 </button>
-                <button onClick={() => deleteSkill(skill.id)} title="Delete" className="grid h-8 w-8 place-items-center rounded-[var(--radius-md)] text-[var(--subtle)] hover:text-[var(--danger)]">
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {/* Only user- or LLM-created skills can be deleted; built-in defaults cannot. */}
+                {!isDefaultSkill(skill.id) && (
+                  <button onClick={() => deleteSkill(skill.id)} title="Delete" className="grid h-8 w-8 place-items-center rounded-[var(--radius-md)] text-[var(--subtle)] hover:text-[var(--danger)]">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </li>
           ))}
@@ -155,7 +169,7 @@ function SkillEditor({ draft, error, setDraft, onClose, onSave }: { draft: Draft
       {draft && (
         <div className="space-y-4 p-5">
           <Field label="Skill name" hint={`${draft.name.length}/${NAME_MAX}`} hintError={draft.name.length > NAME_MAX}>
-            <TextInput value={draft.name} maxLength={NAME_MAX} onChange={(e) => patch({ name: e.target.value })} placeholder="e.g. git-workflow" className="font-mono" />
+            <TextInput value={draft.name} maxLength={NAME_MAX} onChange={(e) => patch({ name: sanitizeSkillName(e.target.value) })} placeholder="e.g. git-workflow" className="font-mono" />
           </Field>
           <Field label="Short description" hint={`${draft.description.length}/${DESC_MAX}`} hintError={draft.description.length > DESC_MAX}>
             <TextArea rows={2} maxLength={DESC_MAX} value={draft.description} onChange={(e) => patch({ description: e.target.value })} />
