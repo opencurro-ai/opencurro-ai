@@ -185,6 +185,53 @@ describe("create_skill tool", () => {
     assert.equal((longDesc.error as { code: string }).code, "invalid_arguments");
   });
 
+  it("rejects a skill name containing uppercase (capital) letters", async () => {
+    await seedSkillDir("egskill");
+    const source = path.join(workspace, "egskill");
+
+    for (const badName of ["GitWorkflow", "git-Workflow", "GIT", "myTool"]) {
+      const result = await registry.execute(
+        "create_skill",
+        { name: badName, description: "Work with Git.", source_path: source },
+        ctxFor(),
+      );
+      assert.equal(result.ok, false, `name "${badName}" must be rejected`);
+      assert.equal((result.error as { code: string }).code, "invalid_arguments");
+      assert.match(
+        (result.error as { message: string }).message,
+        /lowercase/i,
+        `error for "${badName}" should explain the lowercase rule`,
+      );
+    }
+  });
+
+  it("rejects skill names that skill_initialize could not initialize (spaces, underscores, symbols)", async () => {
+    await seedSkillDir("egskill");
+    const source = path.join(workspace, "egskill");
+
+    for (const badName of ["git workflow", "git_workflow", "git--workflow", "-git", "git.workflow"]) {
+      const result = await registry.execute(
+        "create_skill",
+        { name: badName, description: "Work with Git.", source_path: source },
+        ctxFor(),
+      );
+      assert.equal(result.ok, false, `name "${badName}" must be rejected`);
+      assert.equal((result.error as { code: string }).code, "invalid_arguments");
+    }
+  });
+
+  it("accepts a lowercase, hyphen-separated skill name with digits", async () => {
+    await seedSkillDir("egskill");
+    const source = path.join(workspace, "egskill");
+    const result = await registry.execute(
+      "create_skill",
+      { name: "git-workflow-2", description: "Work with Git.", source_path: source },
+      ctxFor(),
+    );
+    assert.equal(result.ok, true);
+    assert.equal((result.data as { created_skill: { name: string } }).created_skill.name, "git-workflow-2");
+  });
+
   it("exposes a clear UI label", () => {
     assert.equal(createSkillTool.label({ name: "gitworkflow", description: "d", source_path: "/x" }), "Create Skill: gitworkflow");
   });

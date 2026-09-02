@@ -120,6 +120,12 @@ export const buildSubAgentTool = defineTool({
         enabled: true,
       };
 
+      // Register the sub-agent into the live turn so it is immediately callable by call_sub_agent /
+      // call_multiple_sub_agents and visible to list_sub_agents in the SAME turn — without waiting
+      // for the frontend to persist it and echo it back on the next turn. The frontend still
+      // persists it (via the returned created_sub_agent payload) so it survives across turns.
+      ctx.subAgents?.register(created);
+
       return {
         ok: true,
         data: {

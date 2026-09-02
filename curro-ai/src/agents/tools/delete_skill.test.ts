@@ -14,6 +14,9 @@ function makeRuntime(definitions: SkillDefinition[]): SkillRuntime {
   return {
     definitions,
     list: () => [],
+    register: (skill) => {
+      definitions.push(skill);
+    },
     initialize: async (): Promise<SkillInitializeResult> => ({
       success: true,
       initialized: [],
