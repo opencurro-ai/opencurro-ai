@@ -13,6 +13,14 @@ export const MAX_SKILL_DESC_CHARS = 300;
 /** Default entry file name looked for at the root of the skill source directory. */
 export const DEFAULT_SKILL_ENTRY_FILE = "SKILL.md";
 
+/**
+ * The skill name becomes the installed skill's folder / storage identifier, so it must be
+ * lowercase — any uppercase (capital) ASCII letter is rejected.
+ */
+export const SKILL_NAME_NO_UPPERCASE_MESSAGE =
+  "The skill name must not contain uppercase (capital) letters. Use only lowercase letters, " +
+  "digits, hyphens or underscores (for example: git-workflow, not Git-Workflow).";
+
 const schema = z.object({
   name: z
     .string()
@@ -22,9 +30,11 @@ const schema = z.object({
       MAX_SKILL_NAME_CHARS,
       `The skill name must be ${MAX_SKILL_NAME_CHARS} characters or fewer.`,
     )
+    .refine((value) => !/[A-Z]/.test(value), SKILL_NAME_NO_UPPERCASE_MESSAGE)
     .describe(
       "The name of the custom skill. This name becomes the installed skill's folder or storage " +
-        "identifier. Use a concise, unique, filesystem-safe skill name. Maximum 70 characters.",
+        "identifier. Use a concise, unique, filesystem-safe skill name. It must be lowercase — " +
+        "uppercase (capital) letters are not allowed. Maximum 70 characters.",
     ),
   description: z
     .string()
