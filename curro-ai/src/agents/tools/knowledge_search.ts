@@ -11,17 +11,17 @@ const schema = z
 type KnowledgeSearchArgs = z.infer<typeof schema>;
 
 /**
- * knowledge_search — search the persistent knowledge base with a natural-language query and return
- * ONLY the locations of matches: the file paths and the 1-based line numbers where the query was
- * found. It intentionally does NOT return file contents — the agent follows up with knowledge_read
- * at those exact paths/lines to load what it needs.
+ * knowledge_search — search the persistent knowledge base with a natural-language query and return,
+ * for every matching file, the 1-based line numbers where the query was found AND each matching
+ * line's content (rendered as `LINE <n>: <content>`). The agent follows up with knowledge_read at
+ * those exact paths/lines only when it needs the surrounding context.
  */
 export const knowledgeSearchTool = defineTool({
   name: "knowledge_search",
   description:
-    "Search the persistent knowledge base using a natural-language query. Returns only the file " +
-    "paths where the query was found and the line numbers where each match occurs (no file " +
-    "contents). Use knowledge_read on those paths/lines to load the actual text.",
+    "Search the persistent knowledge base using a natural-language query. Returns the matching file " +
+    "paths and, for each match, the line number together with that line's content (rendered as " +
+    "`LINE <n>: <content>`). Use knowledge_read on those paths/lines to load the surrounding context.",
   schema,
   label: (args: KnowledgeSearchArgs) => {
     const query = typeof args.query === "string" ? args.query.trim() : "";
