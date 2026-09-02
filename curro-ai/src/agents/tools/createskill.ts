@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { defineTool, type SkillFileDefinition, type ToolContext, type ToolResult } from "./types.js";
 import { safeResolve } from "../../utils/paths.js";
+import { SKILL_NAME_PATTERN } from "./skill_initialize.js";
 
 /** Maximum length of the skill name (its folder / storage identifier). */
 export const MAX_SKILL_NAME_CHARS = 70;
@@ -14,12 +15,16 @@ export const MAX_SKILL_DESC_CHARS = 300;
 export const DEFAULT_SKILL_ENTRY_FILE = "SKILL.md";
 
 /**
- * The skill name becomes the installed skill's folder / storage identifier, so it must be
- * lowercase — any uppercase (capital) ASCII letter is rejected.
+ * The skill name becomes the installed skill's folder / storage identifier and must exactly match
+ * the format skill_initialize (and the rest of the skill system) accepts: lowercase alphanumeric
+ * segments separated by single hyphens. In particular any uppercase (capital) letter is rejected,
+ * and — crucially — a name that create_skill accepts is always initializable, so a freshly created
+ * skill can be materialized in the same turn.
  */
-export const SKILL_NAME_NO_UPPERCASE_MESSAGE =
-  "The skill name must not contain uppercase (capital) letters. Use only lowercase letters, " +
-  "digits, hyphens or underscores (for example: git-workflow, not Git-Workflow).";
+export const SKILL_NAME_FORMAT_MESSAGE =
+  "The skill name must be lowercase alphanumeric segments separated by single hyphens (for " +
+  "example: git-workflow). Uppercase (capital) letters, spaces, underscores and other symbols " +
+  "are not allowed.";
 
 const schema = z.object({
   name: z
@@ -30,11 +35,12 @@ const schema = z.object({
       MAX_SKILL_NAME_CHARS,
       `The skill name must be ${MAX_SKILL_NAME_CHARS} characters or fewer.`,
     )
-    .refine((value) => !/[A-Z]/.test(value), SKILL_NAME_NO_UPPERCASE_MESSAGE)
+    .refine((value) => SKILL_NAME_PATTERN.test(value), SKILL_NAME_FORMAT_MESSAGE)
     .describe(
       "The name of the custom skill. This name becomes the installed skill's folder or storage " +
-        "identifier. Use a concise, unique, filesystem-safe skill name. It must be lowercase — " +
-        "uppercase (capital) letters are not allowed. Maximum 70 characters.",
+        "identifier. It must be lowercase alphanumeric segments separated by single hyphens (e.g. " +
+        "git-workflow); uppercase (capital) letters, spaces and underscores are not allowed. " +
+        "Maximum 70 characters.",
     ),
   description: z
     .string()
@@ -175,14 +181,27 @@ export const createSkillTool = defineTool({
       }
 
       const name = args.name.trim();
+      const description = args.description.trim();
       const entryFile = determineEntryFile(files);
+
+      // Register the skill into the live turn so it is immediately discoverable by list_skills and
+      // can be materialized by skill_initialize in the SAME turn — without waiting for the frontend
+      // to persist it and echo it back on the next turn. The frontend still persists it (via the
+      // returned created_skill payload) so it survives across turns.
+      ctx.skills?.register({
+        name,
+        description,
+        skillFile: entryFile,
+        files,
+        enabled: true,
+      });
 
       return {
         ok: true,
         data: {
           created_skill: {
             name,
-            description: args.description.trim(),
+            description,
             skill_file: entryFile,
             files,
             enabled: true,

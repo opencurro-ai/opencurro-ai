@@ -333,6 +333,13 @@ export interface SkillRuntime {
   /** Enabled skills, each with its file tree — what list_skills returns. */
   list(): SkillListEntry[];
   /**
+   * Add (or replace, matched case-insensitively by name) a skill definition in the live turn so a
+   * skill just created with create_skill is immediately discoverable by list_skills and can be
+   * materialized by skill_initialize within the same turn — without waiting for the frontend to
+   * persist it and send it back on the next turn.
+   */
+  register(skill: SkillDefinition): void;
+  /**
    * Create a ".curro/skills" directory under `filePath` (if missing) and write each requested skill's
    * files into it. Skills that are unknown, disabled, or already initialized are reported in
    * `failed` without aborting the others.

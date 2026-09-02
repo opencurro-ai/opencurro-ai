@@ -6,8 +6,9 @@ import path from "node:path";
 import { ToolRegistry } from "./registry.js";
 import { listSkillsTool } from "./list_skills.js";
 import { skillInitializeTool } from "./skill_initialize.js";
+import { createSkillTool } from "./createskill.js";
 import { createSkillRuntime } from "../skills.js";
-import type { SkillDefinition, ToolContext } from "./types.js";
+import type { SkillDefinition, SkillRuntime, ToolContext } from "./types.js";
 
 function makeSkills(): SkillDefinition[] {
   return [
@@ -198,6 +199,66 @@ describe("skills tools", () => {
     );
     assert.equal(result.ok, false);
     assert.equal(result.error?.code, "invalid_arguments");
+
+    await fs.rm(workspace, { recursive: true, force: true });
+  });
+
+  it("a skill created with create_skill can be initialized in the SAME turn", async () => {
+    // Registry with all three tools, as the main agent has.
+    const fullRegistry = new ToolRegistry().registerAll([
+      createSkillTool,
+      listSkillsTool,
+      skillInitializeTool,
+    ]);
+
+    // A single shared skill runtime for the whole turn (starts with no user skills).
+    const runtime: SkillRuntime = createSkillRuntime([]);
+    const ctx: ToolContext = { workspaceRoot: workspace, shellTimeoutMs: 10_000, skills: runtime };
+
+    // Author the skill's source directory on disk.
+    const source = path.join(workspace, "src-skill");
+    await fs.mkdir(path.join(source, "references"), { recursive: true });
+    await fs.writeFile(path.join(source, "SKILL.md"), "# Deploy\nHow to deploy.", "utf8");
+    await fs.writeFile(path.join(source, "references", "steps.md"), "steps", "utf8");
+
+    // 1) create_skill
+    const created = await fullRegistry.execute(
+      "create_skill",
+      { name: "deploy-helper", description: "Helps deploy.", source_path: source },
+      ctx,
+    );
+    assert.equal(created.ok, true, "create_skill should succeed");
+
+    // 2) list_skills must now surface the freshly created skill (same turn, same runtime).
+    const listed = await fullRegistry.execute("list_skills", {}, ctx);
+    const listData = listed.data as { skills: Array<{ name: string }> };
+    assert.ok(
+      listData.skills.some((s) => s.name === "deploy-helper"),
+      "list_skills should include the newly created skill",
+    );
+
+    // 3) skill_initialize must find and materialize it — this is the reported bug.
+    const initialized = await fullRegistry.execute(
+      "skill_initialize",
+      { file_path: workspace, skill_names: ["deploy-helper"] },
+      ctx,
+    );
+    assert.equal(initialized.ok, true);
+    const initData = initialized.data as {
+      success: boolean;
+      initialized: Array<{ skill_name: string }>;
+      failed: Array<{ skill_name: string; error: string }>;
+    };
+    assert.equal(initData.success, true, `expected success, got failures: ${JSON.stringify(initData.failed)}`);
+    assert.equal(initData.initialized.length, 1);
+    assert.equal(initData.initialized[0].skill_name, "deploy-helper");
+
+    // Files actually landed on disk.
+    const md = await fs.readFile(
+      path.join(workspace, ".curro", "skills", "deploy-helper", "SKILL.md"),
+      "utf8",
+    );
+    assert.match(md, /# Deploy/);
 
     await fs.rm(workspace, { recursive: true, force: true });
   });

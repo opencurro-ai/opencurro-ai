@@ -199,22 +199,37 @@ describe("create_skill tool", () => {
       assert.equal((result.error as { code: string }).code, "invalid_arguments");
       assert.match(
         (result.error as { message: string }).message,
-        /uppercase/i,
-        `error for "${badName}" should explain the uppercase rule`,
+        /lowercase/i,
+        `error for "${badName}" should explain the lowercase rule`,
       );
     }
   });
 
-  it("accepts a lowercase skill name with digits, hyphens and underscores", async () => {
+  it("rejects skill names that skill_initialize could not initialize (spaces, underscores, symbols)", async () => {
+    await seedSkillDir("egskill");
+    const source = path.join(workspace, "egskill");
+
+    for (const badName of ["git workflow", "git_workflow", "git--workflow", "-git", "git.workflow"]) {
+      const result = await registry.execute(
+        "create_skill",
+        { name: badName, description: "Work with Git.", source_path: source },
+        ctxFor(),
+      );
+      assert.equal(result.ok, false, `name "${badName}" must be rejected`);
+      assert.equal((result.error as { code: string }).code, "invalid_arguments");
+    }
+  });
+
+  it("accepts a lowercase, hyphen-separated skill name with digits", async () => {
     await seedSkillDir("egskill");
     const source = path.join(workspace, "egskill");
     const result = await registry.execute(
       "create_skill",
-      { name: "git-workflow_2", description: "Work with Git.", source_path: source },
+      { name: "git-workflow-2", description: "Work with Git.", source_path: source },
       ctxFor(),
     );
     assert.equal(result.ok, true);
-    assert.equal((result.data as { created_skill: { name: string } }).created_skill.name, "git-workflow_2");
+    assert.equal((result.data as { created_skill: { name: string } }).created_skill.name, "git-workflow-2");
   });
 
   it("exposes a clear UI label", () => {

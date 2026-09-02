@@ -28,12 +28,28 @@ export function createSkillRuntime(definitions: SkillDefinition[]): SkillRuntime
   return {
     definitions,
     list: () => runner.list(),
+    register: (skill) => runner.register(skill),
     initialize: (params, ctx) => runner.initialize(params, ctx),
   };
 }
 
 class SkillRunner {
   constructor(private readonly definitions: SkillDefinition[]) {}
+
+  /**
+   * Add a skill definition to the live turn (or replace an existing one matched case-insensitively
+   * by name). Mutates the shared `definitions` array in place so the SkillRuntime's exposed
+   * `definitions`, `list()`, and `initialize()` all see the new skill immediately.
+   */
+  register(skill: SkillDefinition): void {
+    const target = skill.name.trim().toLowerCase();
+    const index = this.definitions.findIndex((def) => def.name.trim().toLowerCase() === target);
+    if (index >= 0) {
+      this.definitions[index] = skill;
+    } else {
+      this.definitions.push(skill);
+    }
+  }
 
   /** Enabled skills with a normalized, de-duplicated file list and a rendered tree. */
   list(): SkillListEntry[] {

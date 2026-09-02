@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineTool, type ToolContext, type ToolResult } from "./types.js";
 
 /** Skill names are lowercase, digit, and hyphen-separated segments (e.g. "git-workflow"). */
-const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const schema = z.object({
   file_path: z
