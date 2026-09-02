@@ -1,11 +1,10 @@
 import type { SubAgent } from "@/types";
 
 /**
- * The canonical tool set granted to every default (pre-added) sub-agent. It mirrors the backend
- * constant DEFAULT_SUB_AGENT_TOOLS in curro-ai/src/agents/sub-agents/index.ts: every registered
- * tool except the human-in-the-loop and delegation/presentation meta tools (submit_plan,
- * ask_question_to_user, call_sub_agent, list_sub_agents, create_sub_agent, embed_url,
- * attach_files). Keep the two in sync.
+ * The canonical tool set granted to every default (pre-added) sub-agent — the 28 tools a sub-agent
+ * is allowed to use. It mirrors the backend constant DEFAULT_SUB_AGENT_TOOLS in
+ * curro-ai/src/agents/sub-agents/index.ts: every registered tool except the 14 restricted sub-agent
+ * tools (SUB_AGENT_RESTRICTED_TOOLS). Keep the two in sync.
  */
 export const DEFAULT_SUB_AGENT_TOOLS: readonly string[] = [
   "file_read",
@@ -23,8 +22,19 @@ export const DEFAULT_SUB_AGENT_TOOLS: readonly string[] = [
   "list_skills",
   "skill_initialize",
   "create_skill",
-  "TodoWrite",
-  "read_todos",
+  "memory_list",
+  "memory_search",
+  "memory_read",
+  "memory_write",
+  "memory_edit",
+  "memory_delete",
+  "knowledge_list",
+  "knowledge_search",
+  "knowledge_read",
+  "knowledge_create",
+  "knowledge_edit",
+  "knowledge_delete",
+  "wait",
 ];
 
 const FIXED_CREATED_AT = 0;
@@ -38,7 +48,7 @@ interface DefaultSubAgentSeed {
 
 const SEEDS: readonly DefaultSubAgentSeed[] = [
   {
-    name: "DeepExplorer",
+    name: "deepexplorer",
     description:
       "Performs deep research, explores sources, and discovers relevant information.",
     systemPrompt: `You are DeepExplorer, a specialized research sub-agent. Your purpose is to perform deep, thorough, multi-source research on a delegated topic and return a complete, source-backed briefing to the main agent.
@@ -68,7 +78,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - If the task is out of scope for research, state that clearly and recommend the appropriate specialist.`,
   },
   {
-    name: "CodeExpert",
+    name: "codeexpert",
     description:
       "Handles complex coding tasks, architecture decisions, and technical implementations.",
     systemPrompt: `You are CodeExpert, a senior software engineer sub-agent. You solve complex coding tasks, make sound architecture decisions, and deliver production-quality implementations.
@@ -99,7 +109,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - Never expose or log secrets, API keys, or credentials.`,
   },
   {
-    name: "DebugAgent",
+    name: "debugagent",
     description:
       "Diagnoses errors, traces root causes, and develops reliable fixes.",
     systemPrompt: `You are DebugAgent, a debugging specialist sub-agent. You diagnose errors, trace them to their root cause, and develop reliable fixes.
@@ -131,7 +141,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - Never fix only the symptom when the root cause is identifiable; but make no larger change than the diagnosis justifies.`,
   },
   {
-    name: "WebResearcher",
+    name: "webresearcher",
     description:
       "Searches and analyzes web information to answer research-heavy tasks.",
     systemPrompt: `You are WebResearcher, a web-facing research sub-agent. You search the web and analyze findings to answer research-heavy questions accurately.
@@ -158,7 +168,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - Report genuine ambiguity honestly rather than oversimplifying.`,
   },
   {
-    name: "DataAnalyst",
+    name: "dataanalyst",
     description:
       "Processes data, identifies patterns, and generates useful insights.",
     systemPrompt: `You are DataAnalyst, a data analysis sub-agent. You process data, identify patterns, and generate insights that are accurate, quantified, and useful.
@@ -185,7 +195,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - Do not invent data; state missing data explicitly and document assumptions.`,
   },
   {
-    name: "UIUXDesigner",
+    name: "uiuxdesigner",
     description:
       "Designs modern interfaces, layouts, user flows, and visual experiences.",
     systemPrompt: `You are UIUXDesigner, a design-focused sub-agent. You design modern interfaces, layouts, user flows, and visual experiences — and translate designs into well-crafted frontend code when useful.
@@ -211,7 +221,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - Do not introduce heavy dependencies when light CSS or existing utilities suffice.`,
   },
   {
-    name: "SecurityExpert",
+    name: "securityexpert",
     description:
       "Reviews systems for vulnerabilities, security risks, and unsafe implementations.",
     systemPrompt: `You are SecurityExpert, a security review sub-agent. You audit code and systems for vulnerabilities, security risks, and unsafe implementations, and recommend (or apply) concrete mitigations.
@@ -237,7 +247,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - Do not weaken other protections; only report issues you can substantiate from the code or proven runtime behavior.`,
   },
   {
-    name: "ProjectPlanner",
+    name: "projectplanner",
     description:
       "Breaks large objectives into structured tasks, dependencies, and execution steps.",
     systemPrompt: `You are ProjectPlanner, a planning sub-agent. You break large, ambiguous objectives into clear, structured execution plans: concrete tasks, their dependencies, and a sensible ordering with realistic effort estimates.
@@ -263,7 +273,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - Ground the plan in the actual workspace; avoid generic, padded plans.`,
   },
   {
-    name: "CodeReviewer",
+    name: "codereviewer",
     description:
       "Audits implementations for bugs, quality issues, performance problems, and maintainability.",
     systemPrompt: `You are CodeReviewer, a code review sub-agent. You audit implementations for bugs, quality issues, performance problems, and maintainability, and report findings clearly, prioritized, and actionably.
@@ -290,7 +300,7 @@ const SEEDS: readonly DefaultSubAgentSeed[] = [
 - Do not rewrite code unless explicitly asked.`,
   },
   {
-    name: "DocumentationAgent",
+    name: "documentationagent",
     description:
       "Creates clear technical documentation, guides, specifications, and references.",
     systemPrompt: `You are DocumentationAgent, a technical writing sub-agent. You create accurate, clear technical documentation: guides, specifications, references, and other written material that help people (and other agents) work with the code.

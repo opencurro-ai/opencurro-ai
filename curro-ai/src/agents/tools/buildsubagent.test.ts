@@ -100,7 +100,8 @@ describe("create_sub_agent tool", () => {
     assert.ok(tools.includes("file_read"), "must grant ordinary tools like file_read");
     assert.ok(tools.includes("web_search"), "must grant web_search");
     assert.ok(tools.includes("create_skill"), "must grant create_skill");
-    assert.ok(tools.includes("create_sub_agent"), "must grant create_sub_agent");
+    assert.ok(tools.includes("list_skills"), "must grant the skill discovery tools");
+    assert.ok(!tools.includes("create_sub_agent"), "must not grant the restricted create_sub_agent");
     // Every granted tool must exist in the source list and be unique.
     assert.equal(new Set(tools).size, tools.length, "granted tools must be unique");
     for (const t of tools) assert.ok(AVAILABLE_TOOL_NAMES.includes(t));

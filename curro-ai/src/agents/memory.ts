@@ -61,8 +61,14 @@ class MemoryRunner {
   }
 
   /**
-   * The context block appended to the user's FIRST message of the conversation. Contains only the
-   * three pre-added files (MEMORY.md, SOUL.md, USER.md). Returns "" if none carry content.
+   * The context block appended to the user's FIRST message of the conversation. It contains two
+   * parts, mirroring how the knowledge system surfaces itself on the first message:
+   *  1. The three pre-added core files (MEMORY.md, SOUL.md, USER.md) with their full contents, so
+   *     the agent starts every chat already knowing its accumulated self/user context.
+   *  2. The COMPLETE memory file structure (the full tree of every memory file the user has),
+   *     so the agent knows exactly which additional memory files exist and can memory_read them
+   *     on demand. Only the core three are auto-loaded here; everything else is read explicitly.
+   * Always returns a non-empty block (the three core files always exist).
    */
   firstMessageContext(): string {
     const sections: string[] = [];
@@ -71,6 +77,14 @@ class MemoryRunner {
       const content = (file?.content ?? "").trim();
       sections.push(`## ${name}\n${content.length > 0 ? content : "(empty)"}`);
     }
+
+    // The full memory file structure — every memory file the user has, as a tree. This is the
+    // "the user has memory files" signal: the agent sees the whole layout up front (like the
+    // knowledge base) and reads any non-core file with memory_read when it becomes relevant.
+    const paths = this.current.map((f) => f.path);
+    const total = paths.length;
+    const tree = buildTree(paths);
+
     return [
       "<persistent_memory>",
       "The following is your persistent, self-maintained memory for this user, loaded automatically",
@@ -81,7 +95,18 @@ class MemoryRunner {
       "once, here at the start — later turns will not repeat it, so rely on the `memory` tool to",
       "read anything you need again.",
       "",
+      "## Auto-loaded core files",
+      "",
       sections.join("\n\n"),
+      "",
+      `## Memory file structure (${total} file${total === 1 ? "" : "s"})`,
+      "The user has the following memory files. Only the three core files above are auto-loaded; all",
+      "other files are NOT loaded here — call `memory_read` with an exact path to load any of them",
+      "when it becomes relevant, and `memory_list` / `memory_search` to explore further.",
+      "",
+      "```",
+      tree,
+      "```",
       "</persistent_memory>",
     ].join("\n");
   }

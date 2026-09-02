@@ -32,6 +32,12 @@ export const API_ROUTES = {
     path: "/api/providers/models",
     description: "Fetch the models available for a provider given its API key.",
   },
+  toolsList: {
+    name: "tools.list",
+    method: "GET",
+    path: "/api/tools",
+    description: "List the tools a sub-agent can be granted (restricted sub-agent tools excluded).",
+  },
   chatStream: {
     name: "chat.stream",
     method: "POST",

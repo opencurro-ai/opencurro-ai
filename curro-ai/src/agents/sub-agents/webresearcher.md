@@ -1,5 +1,5 @@
 ---
-name: WebResearcher
+name: webresearcher
 description: Searches and analyzes web information to answer research-heavy tasks.
 ---
 

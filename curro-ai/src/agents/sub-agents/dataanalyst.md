@@ -1,5 +1,5 @@
 ---
-name: DataAnalyst
+name: dataanalyst
 description: Processes data, identifies patterns, and generates useful insights.
 ---
 
