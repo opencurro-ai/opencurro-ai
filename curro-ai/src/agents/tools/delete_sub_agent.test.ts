@@ -12,6 +12,9 @@ function makeRuntime(definitions: SubAgentDefinition[]): SubAgentRuntime {
       definitions
         .filter((d) => d.enabled !== false)
         .map((d) => ({ name: d.name, description: d.description })),
+    register: (subAgent) => {
+      definitions.push(subAgent);
+    },
     run: async (): Promise<ToolResult> => ({ ok: true }),
     runMany: async (): Promise<ToolResult> => ({ ok: true }),
     listSessions: () => [],

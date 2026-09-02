@@ -7,7 +7,42 @@ import { callSubAgentTool } from "./call_sub_agent.js";
 import { fileReadTool } from "./fileRead.js";
 import { askUserTool } from "./askuser.js";
 import { submitPlanTool } from "./submit_plan.js";
-import type { ToolContext } from "./types.js";
+import type { SubAgentDefinition, SubAgentRuntime, ToolContext, ToolResult } from "./types.js";
+
+/**
+ * A minimal SubAgentRuntime backed by a shared `definitions` array. It mirrors the real runtime's
+ * register/available/find semantics so the create -> call flow can be exercised without spinning up
+ * a provider. `run` resolves the definition the same way the real runner does.
+ */
+function makeRuntime(definitions: SubAgentDefinition[]): SubAgentRuntime {
+  const find = (name: string) =>
+    definitions.find(
+      (d) => d.enabled !== false && d.name.trim().toLowerCase() === name.trim().toLowerCase(),
+    );
+  return {
+    definitions,
+    available: () =>
+      definitions
+        .filter((d) => d.enabled !== false && d.name.trim().length > 0)
+        .map((d) => ({ name: d.name, description: d.description ?? "" })),
+    register: (subAgent) => {
+      const target = subAgent.name.trim().toLowerCase();
+      const index = definitions.findIndex((d) => d.name.trim().toLowerCase() === target);
+      if (index >= 0) definitions[index] = subAgent;
+      else definitions.push(subAgent);
+    },
+    run: async (params): Promise<ToolResult> => {
+      const def = find(params.agent ?? "");
+      if (!def) {
+        return { ok: false, error: { code: "unknown_sub_agent", message: `Unknown sub-agent "${params.agent}".` } };
+      }
+      return { ok: true, data: { agent: def.name, output: "ok" } };
+    },
+    runMany: async (): Promise<ToolResult> => ({ ok: true }),
+    listSessions: () => [],
+    reuseSession: async (): Promise<ToolResult> => ({ ok: true }),
+  };
+}
 
 /** The full set of tools that would be granted to an LLM-created sub-agent by default. */
 const AVAILABLE_TOOL_NAMES = [
@@ -200,6 +235,43 @@ describe("create_sub_agent tool", () => {
     );
     assert.equal(result.ok, false);
     assert.equal((result.error as { code: string }).code, "invalid_arguments");
+  });
+
+  it("registers the created sub-agent so it is callable/listable in the SAME turn", async () => {
+    // A single shared runtime for the whole turn, starting with no user sub-agents.
+    const definitions: SubAgentDefinition[] = [];
+    const runtime = makeRuntime(definitions);
+    const ctx = ctxFor({ subAgents: runtime });
+
+    // 1) create_sub_agent
+    const created = await registry.execute(
+      "create_sub_agent",
+      {
+        name: "codereviewer",
+        description: "Reviews diffs for bugs.",
+        system_prompt: "You review code changes and report issues.",
+      },
+      ctx,
+    );
+    assert.equal(created.ok, true, "create_sub_agent should succeed");
+
+    // 2) The live runtime must now know about it (this is the reported bug).
+    assert.ok(
+      runtime.available().some((a) => a.name === "codereviewer"),
+      "the new sub-agent must be available in the same turn",
+    );
+
+    // 3) list_sub_agents (which reads ctx.subAgents.available()) must surface it too.
+    const listed = await registry.execute("list_sub_agents", {}, ctx);
+    const listData = listed.data as { available_sub_agents: Array<{ name: string }> };
+    assert.ok(
+      listData.available_sub_agents.some((a) => a.name === "codereviewer"),
+      "list_sub_agents must include the freshly created sub-agent",
+    );
+
+    // 4) Calling it resolves the definition instead of failing as unknown.
+    const call = await runtime.run({ agent: "codereviewer", task: "review this" }, ctx);
+    assert.equal(call.ok, true, "the freshly created sub-agent must be callable in the same turn");
   });
 
   it("exposes a clear UI label", () => {

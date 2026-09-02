@@ -85,6 +85,13 @@ export interface SubAgentRuntime {
   /** Names + descriptions of the sub-agents that can currently be called (enabled only). */
   available(): Array<{ name: string; description: string }>;
   /**
+   * Add (or replace, matched case-insensitively by name) a sub-agent definition in the live turn so
+   * a sub-agent just created with create_sub_agent is immediately callable by call_sub_agent /
+   * call_multiple_sub_agents and visible to list_sub_agents within the SAME turn — without waiting
+   * for the frontend to persist it and send it back on the next turn.
+   */
+  register(subAgent: SubAgentDefinition): void;
+  /**
    * Execute a sub-agent for the given task. When `wait_for_output` is true (default) the sub-agent
    * runs to completion and its final output is returned directly. When false the sub-agent is
    * launched in the background — fully detached from the main turn — and the tool returns

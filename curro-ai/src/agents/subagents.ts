@@ -68,6 +68,7 @@ export function createSubAgentRuntime(deps: SubAgentRuntimeDeps): SubAgentRuntim
   return {
     definitions: deps.definitions,
     available: () => runner.available(),
+    register: (subAgent) => runner.register(subAgent),
     run: (params, ctx) => runner.run(params, ctx),
     runMany: (params, ctx) => runner.runMany(params, ctx),
     listSessions: () => runner.listSessions(),
@@ -97,6 +98,23 @@ class SubAgentRunner {
     return this.deps.definitions
       .filter((def) => def.enabled !== false && def.name.trim().length > 0)
       .map((def) => ({ name: def.name, description: def.description ?? "" }));
+  }
+
+  /**
+   * Add a sub-agent definition to the live turn (or replace an existing one matched
+   * case-insensitively by name). Mutates the shared `definitions` array in place so the runtime's
+   * exposed `definitions`, `available()`, and `find()` all see the new sub-agent immediately.
+   */
+  register(subAgent: SubAgentDefinition): void {
+    const target = subAgent.name.trim().toLowerCase();
+    const index = this.deps.definitions.findIndex(
+      (def) => def.name.trim().toLowerCase() === target,
+    );
+    if (index >= 0) {
+      this.deps.definitions[index] = subAgent;
+    } else {
+      this.deps.definitions.push(subAgent);
+    }
   }
 
   private find(name: string): SubAgentDefinition | undefined {
