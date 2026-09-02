@@ -365,15 +365,20 @@ export interface ToolContext {
   signal?: AbortSignal;
   /** Optional keys/provider for the web search and fetch tools. */
   web?: WebToolsConfig;
-  /** Sub-agent runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  /** Sub-agent runtime — present only for main-agent tool calls, never for sub-agent tool calls
+   * (a sub-agent must never delegate recursively). */
   subAgents?: SubAgentRuntime;
-  /** Skill runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  /** Skill runtime — present for main-agent tool calls and forwarded to sub-agent tool calls so a
+   * sub-agent granted list_skills / skill_initialize / create_skill can use them. */
   skills?: SkillRuntime;
-  /** Todo runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  /** Todo runtime — present only for main-agent tool calls, never for sub-agent tool calls
+   * (the todo tools are restricted from sub-agents). */
   todos?: TodoRuntime;
-  /** Memory runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  /** Memory runtime — present for main-agent tool calls and forwarded to sub-agent tool calls so a
+   * sub-agent granted the memory_* tools can read/maintain the shared memory base. */
   memory?: MemoryRuntime;
-  /** Knowledge runtime — present only for main-agent tool calls, never for sub-agent tool calls. */
+  /** Knowledge runtime — present for main-agent tool calls and forwarded to sub-agent tool calls so
+   * a sub-agent granted the knowledge_* tools can read/maintain the shared knowledge base. */
   knowledge?: KnowledgeRuntime;
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
