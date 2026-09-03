@@ -1,4 +1,5 @@
 import { OpenAICompatibleProvider } from "./base.js";
+import { applyReasoningEffort } from "./reasoning.js";
 import type { ChatCompletionOptions, ProviderModel } from "./types.js";
 
 /**
@@ -56,13 +57,14 @@ class CohereProvider extends OpenAICompatibleProvider {
 
   protected override buildRequestBody(options: ChatCompletionOptions): Record<string, unknown> {
     const hasTools = Array.isArray(options.tools) && options.tools.length > 0;
-    return {
+    const body: Record<string, unknown> = {
       model: options.model,
       messages: options.messages,
       ...(hasTools ? { tools: options.tools, tool_choice: "auto" } : {}),
       temperature: options.temperature ?? 0.2,
       stream: true,
     };
+    return applyReasoningEffort(body, options.effort);
   }
 
   private fallbackModels(): ProviderModel[] {

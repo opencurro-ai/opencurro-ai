@@ -3,7 +3,7 @@ import { Check, Pencil, Plug, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { fetchModels, fetchProviders } from "@/lib/api";
 import { FALLBACK_PROVIDERS, isCustomProviderId } from "@/lib/providers";
-import type { CustomHeader, CustomProvider } from "@/types";
+import { EFFORT_PRESETS, type CustomHeader, type CustomProvider } from "@/types";
 import { Modal } from "@/components/ui/Modal";
 import { Button, Field, Select, TextInput } from "@/components/ui/primitives";
 import { cn } from "@/utils/cn";
@@ -31,10 +31,22 @@ export function SettingsModal() {
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Whether the effort control is in "custom string" mode vs. preset buttons.
+  const [effortCustom, setEffortCustom] = useState(false);
 
   useEffect(() => {
     if (open && providers.length === 0) fetchProviders().then(setProviders).catch(() => {});
   }, [open, providers.length, setProviders]);
+
+  // Defensive fallbacks for settings hydrated before these fields existed.
+  const effort = settings.effort ?? "high";
+  const temperature = typeof settings.temperature === "number" ? settings.temperature : 0.6;
+  const effortIsPreset = (EFFORT_PRESETS as readonly string[]).includes(effort);
+  // When the modal opens, reflect the stored effort: custom mode iff it's not a preset.
+  useEffect(() => {
+    if (open) setEffortCustom(!effortIsPreset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const builtIns = providers.length > 0 ? providers : FALLBACK_PROVIDERS;
   const isCustom = isCustomProviderId(settings.provider);
@@ -175,6 +187,87 @@ export function SettingsModal() {
             )}
           </section>
 
+          {/* Model behavior: reasoning effort + temperature */}
+          <section className="space-y-4 border-t border-[var(--border)] pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Model behavior</h3>
+
+            {/* Reasoning effort */}
+            <Field label="Reasoning effort">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {EFFORT_PRESETS.map((level) => {
+                  const active = !effortCustom && effort === level;
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => { setEffortCustom(false); setSettings({ effort: level }); }}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors",
+                        active
+                          ? "border-[var(--secondary)] bg-[var(--secondary)] text-[var(--secondary-fg)]"
+                          : "border-[var(--border)] text-[var(--fg)] hover:border-[var(--secondary)]",
+                      )}
+                    >
+                      {level}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setEffortCustom(true)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    effortCustom
+                      ? "border-[var(--secondary)] bg-[var(--secondary)] text-[var(--secondary-fg)]"
+                      : "border-[var(--border)] text-[var(--fg)] hover:border-[var(--secondary)]",
+                  )}
+                >
+                  Custom
+                </button>
+              </div>
+            </Field>
+            {effortCustom && (
+              <TextInput
+                value={effort}
+                onChange={(e) => setSettings({ effort: e.target.value })}
+                placeholder="Custom effort (e.g. minimal, xhigh) — passed to the model"
+                className="font-mono text-xs"
+              />
+            )}
+            <p className="text-xs text-[var(--muted)]">
+              Higher effort lets reasoning models think longer before answering. Models without
+              reasoning support ignore this and run normally. Default is <strong>high</strong>.
+            </p>
+
+            {/* Temperature */}
+            <Field label="Temperature" hint={temperature.toFixed(2)}>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  value={settings.temperature}
+                  onChange={(e) => setSettings({ temperature: clampTemp(Number(e.target.value)) })}
+                  className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--border)] accent-[var(--secondary)]"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  value={settings.temperature}
+                  onChange={(e) => setSettings({ temperature: clampTemp(Number(e.target.value)) })}
+                  className="w-20 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--secondary)]"
+                />
+              </div>
+            </Field>
+            <p className="text-xs text-[var(--muted)]">
+              Lower values make responses more focused and deterministic; higher values more creative.
+              Range 0–2. Models that don't support custom temperatures ignore this.
+            </p>
+          </section>
+
           {/* Web search */}
           <section className="space-y-3 border-t border-[var(--border)] pt-5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Web search</h3>
@@ -287,6 +380,12 @@ export function SettingsModal() {
       )}
     </>
   );
+}
+
+/** Clamp an untrusted temperature to the provider-safe 0–2 range (NaN → 0.6 default). */
+function clampTemp(value: number): number {
+  if (!Number.isFinite(value)) return 0.6;
+  return Math.min(2, Math.max(0, Math.round(value * 100) / 100));
 }
 
 function CustomProviderEditor({

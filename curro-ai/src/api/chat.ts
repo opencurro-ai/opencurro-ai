@@ -6,6 +6,7 @@ import type { SessionStore, StoredMessage } from "../services/sessionStore.js";
 import type { PlanApprovalStore } from "../services/planApprovalStore.js";
 import type { QuestionStore } from "../services/questionStore.js";
 import type { SkillDefinition, SkillFileDefinition, SubAgentDefinition } from "../agents/tools/types.js";
+import { normalizeEffort } from "../agents/providers/reasoning.js";
 import { normalizeTodos } from "../agents/todos.js";
 import { normalizeMemoryFiles } from "../agents/memory.js";
 import { normalizeKnowledgeFiles } from "../agents/knowledge.js";
@@ -15,6 +16,17 @@ import type { CurroDatabase } from "../database/index.js";
 /** Extract a string field from an untrusted object (used on the custom_provider payload). */
 function str(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * Coerce an untrusted temperature into a finite number clamped to the range every
+ * OpenAI-compatible provider accepts (0–2). Returns `undefined` when nothing usable
+ * was sent so the provider applies its own default.
+ */
+function sanitizeTemperature(value: unknown): number | undefined {
+  const num = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isFinite(num)) return undefined;
+  return Math.min(2, Math.max(0, num));
 }
 
 /** Derive the API key used for provider auth: prefer the top-level key, else custom provider's. */
@@ -39,6 +51,7 @@ interface StreamBody {
   custom_provider?: unknown;
   max_iterations?: number;
   temperature?: number;
+  effort?: string;
   since_event_id?: number;
   tavily_api_key?: string;
   exa_api_key?: string;
@@ -282,7 +295,8 @@ export function buildChatRouter(
         baseUrl: body.base_url,
         customProvider: body.custom_provider,
         maxIterations: body.max_iterations ?? config.maxIterations,
-        temperature: body.temperature,
+        temperature: sanitizeTemperature(body.temperature),
+        effort: normalizeEffort(body.effort),
         tavilyApiKey: body.tavily_api_key,
         exaApiKey: body.exa_api_key,
         serpapiApiKey: body.serpapi_api_key,

@@ -5,6 +5,7 @@ import type {
   ProviderModel,
   StreamDelta,
 } from "./types.js";
+import { applyReasoningEffort } from "./reasoning.js";
 
 /**
  * Base implementation of an OpenAI-compatible provider (chat/completions + models endpoints
@@ -74,13 +75,14 @@ export class OpenAICompatibleProvider implements Provider {
    */
   protected buildRequestBody(options: ChatCompletionOptions): Record<string, unknown> {
     const hasTools = Array.isArray(options.tools) && options.tools.length > 0;
-    return {
+    const body: Record<string, unknown> = {
       model: options.model,
       messages: options.messages,
       ...(hasTools ? { tools: options.tools, tool_choice: "auto", parallel_tool_calls: false } : {}),
       temperature: options.temperature ?? 0.2,
       stream: true,
     };
+    return applyReasoningEffort(body, options.effort);
   }
 
   async *streamChatCompletion(options: ChatCompletionOptions): AsyncGenerator<StreamDelta, void, unknown> {

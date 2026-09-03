@@ -49,7 +49,19 @@ export interface ChatCompletionOptions {
   messages: Array<Record<string, unknown>>;
   tools: unknown[];
   baseUrl?: string;
+  /**
+   * Sampling temperature forwarded to the provider. When omitted the provider
+   * falls back to a sensible default. Models that don't support custom
+   * temperatures simply ignore (or clamp) the value.
+   */
   temperature?: number;
+  /**
+   * Reasoning effort: one of the presets (`low` | `medium` | `high` | `max`) or
+   * a custom string the model understands. Applied as `reasoning_effort` (or the
+   * provider's equivalent). Omitted/empty means "use the provider default", and
+   * models without reasoning support ignore it.
+   */
+  effort?: string;
   signal?: AbortSignal;
 }
 
