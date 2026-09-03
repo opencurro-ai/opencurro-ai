@@ -256,6 +256,8 @@ const defaultSettings: Settings = {
   serpapiApiKey: "",
   firecrawlApiKey: "",
   enableReuseSubAgentSession: "no",
+  effort: "high",
+  temperature: 0.2,
 };
 
 function touch(conv: Conversation): Conversation {

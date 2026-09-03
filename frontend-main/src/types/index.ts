@@ -478,7 +478,22 @@ export interface Settings {
    * "yes" enables them so the agent can continue previously run sub-agent sessions.
    */
   enableReuseSubAgentSession: "no" | "yes";
+  /**
+   * Reasoning effort forwarded to the model. One of the presets
+   * ("low" | "medium" | "high" | "max") or a custom string the model supports.
+   * Defaults to "high"; models without reasoning support ignore it.
+   */
+  effort: string;
+  /**
+   * Sampling temperature (0–2) forwarded to the model. Defaults to 0.2; models
+   * that don't support custom temperatures ignore or clamp the value.
+   */
+  temperature: number;
 }
+
+/** The four built-in reasoning-effort presets shown in Settings. */
+export const EFFORT_PRESETS = ["low", "medium", "high", "max"] as const;
+export type EffortPreset = (typeof EFFORT_PRESETS)[number];
 
 /** Provider-format message sent to the backend to preserve history across turns. */
 export interface BackendMessage {
@@ -498,6 +513,8 @@ export interface StreamRequest {
   custom_provider?: CustomProviderConfig;
   max_iterations?: number;
   temperature?: number;
+  /** Reasoning effort preset or custom string; forwarded to the provider. */
+  effort?: string;
   since_event_id?: number;
   tavily_api_key?: string;
   exa_api_key?: string;

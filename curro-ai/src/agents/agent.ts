@@ -37,6 +37,11 @@ export interface RunAgentRequest {
   customProvider?: unknown;
   maxIterations: number;
   temperature?: number;
+  /**
+   * Reasoning effort chosen in Settings: a preset (`low` | `medium` | `high` | `max`)
+   * or a custom string. Forwarded to the provider; ignored by models without reasoning.
+   */
+  effort?: string;
   /** Per-request web tool keys/provider (from frontend Settings); falls back to env config. */
   tavilyApiKey?: string;
   exaApiKey?: string;
@@ -168,6 +173,7 @@ export class AgentRunner {
         apiKey: request.apiKey,
         baseUrl: request.baseUrl,
         temperature: request.temperature,
+        effort: request.effort,
         send,
         // Snapshot the live conversation so a call_sub_agent with send_my_context=true can share
         // the surrounding context. Returns the current messages at the moment the sub-agent is called.
@@ -215,6 +221,7 @@ export class AgentRunner {
             tools: toolSchemas,
             baseUrl: request.baseUrl,
             temperature: request.temperature,
+            effort: request.effort,
             signal,
           });
 

@@ -49,6 +49,8 @@ export interface SubAgentRuntimeDeps {
   apiKey: string;
   baseUrl?: string;
   temperature?: number;
+  /** Reasoning effort (preset or custom string) forwarded to the provider. */
+  effort?: string;
   /** Emit an SSE side-channel event onto the turn's event buffer. */
   send: (event: string, data: Record<string, unknown>) => void;
   /**
@@ -896,6 +898,7 @@ class SubAgentRunner {
             tools: toolSchemas,
             baseUrl: this.deps.baseUrl,
             temperature: this.deps.temperature,
+            effort: this.deps.effort,
             signal,
           });
 

@@ -79,6 +79,8 @@ function buildStartRequest(convId: string, text: string): StreamRequest {
     custom_provider:
       isCustom && customProvider ? toCustomProviderConfig(customProvider, settings.model) : undefined,
     max_iterations: 1000,
+    temperature: typeof settings.temperature === "number" ? settings.temperature : undefined,
+    effort: settings.effort?.trim() || undefined,
     tavily_api_key: settings.tavilyApiKey || undefined,
     exa_api_key: settings.exaApiKey || undefined,
     serpapi_api_key: settings.serpapiApiKey || undefined,
