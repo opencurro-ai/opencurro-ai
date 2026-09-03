@@ -40,7 +40,7 @@ export function SettingsModal() {
 
   // Defensive fallbacks for settings hydrated before these fields existed.
   const effort = settings.effort ?? "high";
-  const temperature = typeof settings.temperature === "number" ? settings.temperature : 0.2;
+  const temperature = typeof settings.temperature === "number" ? settings.temperature : 0.6;
   const effortIsPreset = (EFFORT_PRESETS as readonly string[]).includes(effort);
   // When the modal opens, reflect the stored effort: custom mode iff it's not a preset.
   useEffect(() => {
@@ -382,9 +382,9 @@ export function SettingsModal() {
   );
 }
 
-/** Clamp an untrusted temperature to the provider-safe 0–2 range (NaN → 0.2 default). */
+/** Clamp an untrusted temperature to the provider-safe 0–2 range (NaN → 0.6 default). */
 function clampTemp(value: number): number {
-  if (!Number.isFinite(value)) return 0.2;
+  if (!Number.isFinite(value)) return 0.6;
   return Math.min(2, Math.max(0, Math.round(value * 100) / 100));
 }
 

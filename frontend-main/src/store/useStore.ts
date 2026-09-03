@@ -257,7 +257,7 @@ const defaultSettings: Settings = {
   firecrawlApiKey: "",
   enableReuseSubAgentSession: "no",
   effort: "high",
-  temperature: 0.2,
+  temperature: 0.6,
 };
 
 function touch(conv: Conversation): Conversation {
