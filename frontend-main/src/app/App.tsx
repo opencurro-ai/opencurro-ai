@@ -12,9 +12,12 @@ import { SettingsModal } from "@/components/editors/SettingsModal";
 import { TodoPanel } from "@/components/overlays/TodoPanel";
 import { FilesPanel } from "@/components/overlays/FilesPanel";
 import { PreviewPanel } from "@/components/overlays/PreviewPanel";
+import { MemoryAgentPanel } from "@/components/overlays/MemoryAgentPanel";
+import { MemoryAgentSessionsPanel } from "@/components/overlays/MemoryAgentSessionsPanel";
 import { useStore } from "@/store/useStore";
 import { useChatStream, useConnectionWatch } from "@/hooks/useChatStream";
 import { fetchProviders } from "@/lib/api";
+import { attachLatestMemoryAgentRun } from "@/lib/memoryAgent";
 import {
   bootstrapFromBackend,
   loadConversationIfNeeded,
@@ -48,6 +51,10 @@ export function App() {
       const activeId = store.currentId;
       if (activeId) await loadConversationIfNeeded(activeId);
       useStore.getState().ensureConversation();
+
+      // Load the memory-agent sessions overview and re-attach to any run the backend
+      // queue is still executing (the agent keeps running regardless of the browser).
+      void attachLatestMemoryAgentRun();
 
       // Re-attach to a still-running stream (survives refresh/close/reconnect).
       const running = payload.sessions.find((s) => s.running);
@@ -96,6 +103,8 @@ export function App() {
       <TodoPanel />
       <FilesPanel />
       <PreviewPanel />
+      <MemoryAgentPanel />
+      <MemoryAgentSessionsPanel />
     </div>
   );
 }

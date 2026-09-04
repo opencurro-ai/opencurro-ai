@@ -599,4 +599,59 @@ export interface SSEEventData {
   // attach_files fields
   files?: AttachedFile[];
   file_count?: number;
+  // memory-agent fields (memory_agent_queued / memory_agent_start / done)
+  /** 10-character id of the background memory-agent run/session. */
+  run_id?: string;
+  /** Memory file paths a finished memory-agent run wrote/edited/deleted. */
+  updated_files?: string[];
+  /** How many memory-build requests were waiting behind this run when it started. */
+  queued_remaining?: number;
+  /** True when a replayed run was interrupted (e.g. backend restart) before finishing. */
+  interrupted?: boolean;
+}
+
+/** Lifecycle states of a background memory-agent run. */
+export type MemoryAgentRunStatus = "queued" | "running" | "completed" | "failed";
+
+/**
+ * Metadata of one background memory-agent session, stored in the backend SQLite database.
+ * A new run is created every time the main agent completes a turn; runs execute strictly
+ * one at a time through the backend queue.
+ */
+export interface MemoryAgentRunMeta {
+  id: string;
+  chatSessionId: string;
+  status: MemoryAgentRunStatus;
+  provider: string;
+  model: string;
+  summary: string;
+  error?: string | null;
+  updatedFiles: string[];
+  queuedAt: number;
+  startedAt?: number | null;
+  finishedAt?: number | null;
+}
+
+/** Counters for the memory-agent sessions popup. */
+export interface MemoryAgentRunCounts {
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+  total: number;
+}
+
+/**
+ * Live (streamed) state of one memory-agent run, rendered in the memory-agent popup.
+ * Ephemeral — rebuilt from the run's SSE stream (live or replayed); the durable record
+ * lives in the backend SQLite database.
+ */
+export interface MemoryAgentLiveRun {
+  id: string;
+  reasoning: string;
+  output: string;
+  tools: ToolActivity[];
+  status: "running" | "completed" | "failed";
+  error?: string;
+  updatedFiles: string[];
 }

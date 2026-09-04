@@ -24,7 +24,8 @@ import { resolveDefaultSubAgents, mergeDefaultSubAgents } from "./sub-agents/ind
 import { createTodoRuntime } from "./todos.js";
 import { createMemoryRuntime } from "./memory.js";
 import { createKnowledgeRuntime } from "./knowledge.js";
-import type { KnowledgeFile, MemoryFile, TodoItem } from "./tools/types.js";
+import type { KnowledgeFile, MemoryFile, MemoryRuntime, TodoItem } from "./tools/types.js";
+import type { MemoryAgentService } from "./memoryagent/index.js";
 
 export interface RunAgentRequest {
   chatId: string;
@@ -83,6 +84,12 @@ export class AgentRunner {
     private readonly config: AppConfig,
     private readonly planApprovals: PlanApprovalStore,
     private readonly askQuestions: QuestionStore,
+    /**
+     * Optional background memory agent. When present, every completed turn enqueues a
+     * memory-build run that receives this turn's FULL context (untruncated transcript +
+     * final memory state) and updates the user's memory files autonomously.
+     */
+    private readonly memoryAgent?: MemoryAgentService,
   ) {}
 
   /**
@@ -98,6 +105,11 @@ export class AgentRunner {
   ): Promise<void> {
     const send = (event: string, data: Record<string, unknown>) => buffer.append(event, data);
 
+    // Hoisted so the post-turn memory-agent trigger (in `finally`) can hand the background
+    // memory agent the FINAL memory state of this turn, including the main agent's own writes.
+    let memoryRuntime: MemoryRuntime | undefined;
+    let turnOk = false;
+
     try {
       let provider: Provider;
       try {
@@ -108,11 +120,12 @@ export class AgentRunner {
         return;
       }
 
-      // Memory runtime for this turn — a browser-backed snapshot of the user's memory files that
-      // the `memory` tool reads and mutates. Present only for main-agent tool calls. The three
-      // pre-added files (MEMORY.md, SOUL.md, USER.md) are auto-appended to the user's FIRST message
-      // of a chat so the agent starts every conversation already knowing its accumulated context.
-      const memoryRuntime = createMemoryRuntime(request.memory ?? []);
+      // Memory runtime for this turn — a snapshot of the user's memory files that the `memory`
+      // tool reads and mutates. Present only for main-agent tool calls. The four pre-added files
+      // (MEMORY.md, SOUL.md, USER.md, session-memory.md) are auto-appended to the user's FIRST
+      // message of a chat so the agent starts every conversation already knowing its accumulated
+      // context.
+      memoryRuntime = createMemoryRuntime(request.memory ?? []);
 
       // Knowledge runtime for this turn — a browser-backed snapshot of the user's knowledge base
       // (a file-tree of durable reference material) that the knowledge_* tools read and mutate.
@@ -351,6 +364,7 @@ export class AgentRunner {
           reasoning: visibleReasoning.length > 0 ? visibleReasoning.join("") : null,
           iteration_count: iteration,
         });
+        turnOk = true;
         send("done", { ok: true });
         return;
       }
@@ -361,6 +375,36 @@ export class AgentRunner {
       });
       send("done", { ok: false });
     } finally {
+      // The main agent's turn is over — hand the COMPLETE turn context (full untruncated
+      // transcript, the triggering user prompt, and the FINAL memory state) to the background
+      // memory agent. Every trigger starts a brand-new memory-agent session; the service's
+      // FIFO queue serializes overlapping requests. Enqueued BEFORE the buffer closes so the
+      // `memory_agent_queued` notice still reaches any attached client.
+      if (this.memoryAgent && memoryRuntime && session.messages.some((m) => m.role === "user")) {
+        try {
+          const runId = this.memoryAgent.enqueue({
+            chatId: request.chatId,
+            userMessage: request.userMessage,
+            transcript: session.messages.map((m) => ({ ...m })),
+            memoryFiles: memoryRuntime.files,
+            turnOk,
+            aborted: signal.aborted,
+            provider: request.provider,
+            model: request.model,
+            apiKey: request.apiKey,
+            baseUrl: request.baseUrl,
+            customProvider: request.customProvider,
+            temperature: request.temperature,
+            effort: request.effort,
+          });
+          if (runId) {
+            send("memory_agent_queued", { run_id: runId, chat_id: request.chatId });
+          }
+        } catch {
+          // The memory agent must never break the chat flow.
+        }
+      }
+
       buffer.setDone();
       session.running = false;
       session.updatedAt = Date.now();

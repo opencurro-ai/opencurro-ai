@@ -102,6 +102,39 @@ CREATE TABLE IF NOT EXISTS app_state (
   value      TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 ) WITHOUT ROWID;
+
+-- One row per background memory-agent run. A run is enqueued every time the main agent
+-- finishes a turn; the queue executes runs strictly one at a time, each in a brand-new
+-- session (sessions are never reused).
+CREATE TABLE IF NOT EXISTS memory_agent_runs (
+  id              TEXT PRIMARY KEY,           -- 10-char memory-agent run/session id
+  chat_session_id TEXT NOT NULL,              -- chat session whose turn triggered this run
+  status          TEXT NOT NULL DEFAULT 'queued', -- queued | running | completed | failed
+  provider        TEXT NOT NULL DEFAULT '',
+  model           TEXT NOT NULL DEFAULT '',
+  summary         TEXT NOT NULL DEFAULT '',   -- the agent's final message
+  error           TEXT,
+  updated_files   TEXT NOT NULL DEFAULT '[]', -- JSON array of memory paths written/edited/deleted
+  last_event_id   INTEGER NOT NULL DEFAULT -1,
+  queued_at       INTEGER NOT NULL,
+  started_at      INTEGER,
+  finished_at     INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_agent_runs_queued ON memory_agent_runs (queued_at DESC);
+
+-- Full stream event log of every memory-agent run (tokens, reasoning, tool calls,
+-- tool results, memory updates...). Consecutive token/reasoning deltas are coalesced
+-- into single rows by the memory-agent event persister.
+CREATE TABLE IF NOT EXISTS memory_agent_events (
+  run_id         TEXT NOT NULL,
+  event_id       INTEGER NOT NULL,            -- LAST event id covered by this row
+  first_event_id INTEGER NOT NULL,            -- FIRST event id covered (== event_id unless coalesced)
+  event          TEXT NOT NULL,
+  data           TEXT NOT NULL,
+  created_at     INTEGER NOT NULL,
+  PRIMARY KEY (run_id, event_id)
+) WITHOUT ROWID;
 `;
 
 /** Create all tables/indexes (idempotent) and stamp the schema version. */

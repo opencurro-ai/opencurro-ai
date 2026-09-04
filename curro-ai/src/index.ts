@@ -13,6 +13,8 @@ import { buildFilesRouter } from "./api/files.js";
 import { buildScrapeRouter } from "./api/scrape.js";
 import { buildStateRouter, buildSessionsRouter } from "./api/state.js";
 import { buildToolsRouter } from "./api/tools.js";
+import { buildMemoryAgentRouter } from "./api/memoryagent.js";
+import { MemoryAgentService } from "./agents/memoryagent/index.js";
 import { CurroDatabase } from "./database/index.js";
 
 function main(): void {
@@ -26,7 +28,10 @@ function main(): void {
   const store = new SessionStore();
   const planApprovals = new PlanApprovalStore();
   const askQuestions = new QuestionStore();
-  const agent = new AgentRunner(providers, tools, config, planApprovals, askQuestions);
+  // The background memory agent: runs entirely in the backend, triggered after every
+  // completed main-agent turn, persisting everything into the local SQLite database.
+  const memoryAgent = new MemoryAgentService(providers, tools, config, db);
+  const agent = new AgentRunner(providers, tools, config, planApprovals, askQuestions, memoryAgent);
 
   const app = express();
   app.use(
@@ -57,6 +62,7 @@ function main(): void {
   app.use("/api/scrape", buildScrapeRouter(config));
   app.use("/api/state", buildStateRouter(db));
   app.use("/api/sessions", buildSessionsRouter(db));
+  app.use("/api/memory-agent", buildMemoryAgentRouter(memoryAgent));
 
   const server = app.listen(config.port, () => {
     // eslint-disable-next-line no-console

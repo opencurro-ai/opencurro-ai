@@ -7,19 +7,27 @@ import type {
 } from "./tools/types.js";
 
 /**
- * The three memory files that are always pre-added for every user and can never be deleted. Their
- * contents are the agent's long-term self: MEMORY.md (durable facts/knowledge), SOUL.md (the
- * agent's evolving persona/principles) and USER.md (who the user is and how they like to work).
- * These three — and only these three — are auto-appended to the user's FIRST message of a chat so
- * the agent starts every conversation already knowing its accumulated context.
+ * The four memory files that are always pre-added for every user and can never be deleted. Their
+ * contents are the agent's persistent self: MEMORY.md (long-term durable facts/knowledge), SOUL.md
+ * (the agent's evolving persona/principles), USER.md (who the user is and how they like to work)
+ * and session-memory.md (short-term memory of the current/most-recent working session, maintained
+ * continuously by the background memory agent). These four — and only these four — are
+ * auto-appended to the user's FIRST message of a chat so the agent starts every conversation
+ * already knowing its accumulated context.
  */
-export const PREADDED_MEMORY_FILES = ["MEMORY.md", "SOUL.md", "USER.md"] as const;
+export const PREADDED_MEMORY_FILES = [
+  "MEMORY.md",
+  "SOUL.md",
+  "USER.md",
+  "session-memory.md",
+] as const;
 
 /** Per-file character limits. Pre-added files are capped; custom files have no limit. */
 export const MEMORY_CHAR_LIMITS: Readonly<Record<string, number>> = {
   "MEMORY.md": 8000,
   "SOUL.md": 2000,
   "USER.md": 2000,
+  "session-memory.md": 5000,
 };
 
 /** Virtual root every memory path lives under (used only for display/labels). */
@@ -63,12 +71,13 @@ class MemoryRunner {
   /**
    * The context block appended to the user's FIRST message of the conversation. It contains two
    * parts, mirroring how the knowledge system surfaces itself on the first message:
-   *  1. The three pre-added core files (MEMORY.md, SOUL.md, USER.md) with their full contents, so
-   *     the agent starts every chat already knowing its accumulated self/user context.
+   *  1. The four pre-added core files (MEMORY.md, SOUL.md, USER.md, session-memory.md) with their
+   *     full contents, so the agent starts every chat already knowing its accumulated self/user
+   *     context plus the short-term memory of the most recent working session.
    *  2. The COMPLETE memory file structure (the full tree of every memory file the user has),
    *     so the agent knows exactly which additional memory files exist and can memory_read them
-   *     on demand. Only the core three are auto-loaded here; everything else is read explicitly.
-   * Always returns a non-empty block (the three core files always exist).
+   *     on demand. Only the core four are auto-loaded here; everything else is read explicitly.
+   * Always returns a non-empty block (the four core files always exist).
    */
   firstMessageContext(): string {
     const sections: string[] = [];
@@ -100,7 +109,7 @@ class MemoryRunner {
       sections.join("\n\n"),
       "",
       `## Memory file structure (${total} file${total === 1 ? "" : "s"})`,
-      "The user has the following memory files. Only the three core files above are auto-loaded; all",
+      "The user has the following memory files. Only the four core files above are auto-loaded; all",
       "other files are NOT loaded here — call `memory_read` with an exact path to load any of them",
       "when it becomes relevant, and `memory_list` / `memory_search` to explore further.",
       "",
@@ -127,9 +136,9 @@ class MemoryRunner {
         files,
         tree: buildTree(this.current.map((f) => f.path)),
         message:
-          "Use memory_read with an exact path to load a file's contents. MEMORY.md, SOUL.md and " +
-          "USER.md are auto-loaded on the first message of a chat; all other files must be read " +
-          "explicitly.",
+          "Use memory_read with an exact path to load a file's contents. MEMORY.md, SOUL.md, " +
+          "USER.md and session-memory.md are auto-loaded on the first message of a chat; all " +
+          "other files must be read explicitly.",
       },
     };
   }
@@ -345,8 +354,9 @@ class MemoryRunner {
           code: "memory_delete_forbidden",
           message:
             `"${MEMORY_ROOT}${canonicalPath(norm.path)}" is a pre-added core memory file and cannot be ` +
-            "deleted. These three files (MEMORY.md, SOUL.md, USER.md) are permanent. If you want to " +
-            "clear it, use memory_write with an empty or summarized content instead of deleting it.",
+            "deleted. These four files (MEMORY.md, SOUL.md, USER.md, session-memory.md) are permanent. " +
+            "If you want to clear it, use memory_write with an empty or summarized content instead of " +
+            "deleting it.",
           preadded_files: [...PREADDED_MEMORY_FILES],
         },
       };
@@ -393,7 +403,7 @@ class MemoryRunner {
 
 // ---- Pure helpers ---------------------------------------------------------
 
-/** True when the (normalized) path is one of the three permanent pre-added files. */
+/** True when the (normalized) path is one of the four permanent pre-added files. */
 export function isPreadded(path: string): boolean {
   const key = canonicalPath(path).toLowerCase();
   return PREADDED_MEMORY_FILES.some((name) => name.toLowerCase() === key);
@@ -516,7 +526,7 @@ export function normalizeMemoryPath(raw: unknown): { path: string; error?: undef
 
 /**
  * Defensively coerce arbitrary client input into a well-typed memory file list. Non-arrays become
- * an empty list; invalid/duplicate/traversing paths are dropped; the three pre-added files are
+ * an empty list; invalid/duplicate/traversing paths are dropped; the four pre-added files are
  * guaranteed to be present (added empty if missing) so they always exist to read and to append to
  * the first message. Never throws.
  */
@@ -541,7 +551,7 @@ export function normalizeMemoryFiles(raw: unknown): MemoryFile[] {
     }
   }
 
-  // Guarantee the three permanent files always exist.
+  // Guarantee the four permanent files always exist.
   for (const name of PREADDED_MEMORY_FILES) {
     if (!seen.has(name.toLowerCase())) {
       seen.add(name.toLowerCase());

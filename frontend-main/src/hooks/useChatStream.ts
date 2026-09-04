@@ -3,6 +3,7 @@ import { abortChat } from "@/lib/api";
 import { runChatStream, type StreamPhase, type StreamResult } from "@/lib/chatStream";
 import { StreamBatcher } from "@/lib/streamBatcher";
 import { dispatchStreamEvent } from "@/lib/streamDispatch";
+import { attachLatestMemoryAgentRun } from "@/lib/memoryAgent";
 import { CUSTOM_PROVIDER_PREFIX, toCustomProviderConfig } from "@/lib/providers";
 import { useStore, type ActiveRun } from "@/store/useStore";
 import { uid } from "@/utils/id";
@@ -154,6 +155,11 @@ export function useChatStream(onFilesChanged?: () => void) {
         store.setActiveRun(null);
         store.setConnection(navigator.onLine === false ? "offline" : "online");
         onFilesChanged?.();
+
+        // The finished turn enqueued a background memory-build run on the backend. The
+        // `memory_agent_queued` SSE event normally attaches the watcher already; this is
+        // the fallback that also refreshes the sessions list (idempotent per run).
+        void attachLatestMemoryAgentRun();
       }
     },
     [onFilesChanged],

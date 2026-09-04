@@ -9,6 +9,7 @@ import { EventsRepo } from "./repositories/eventsRepo.js";
 import { SubAgentRunsRepo } from "./repositories/subAgentRunsRepo.js";
 import { SnapshotsRepo } from "./repositories/snapshotsRepo.js";
 import { AppStateRepo } from "./repositories/appStateRepo.js";
+import { MemoryAgentRunsRepo } from "./repositories/memoryAgentRunsRepo.js";
 
 export { createChatSessionId, createSubAgentSessionId, isSafeSessionId } from "./ids.js";
 export { resolveDatabasePath, CURRO_DATA_DIR, DATABASE_FILE_NAME } from "./connection.js";
@@ -16,6 +17,12 @@ export { APP_STATE_KEYS, isAppStateKey, type AppStateKey } from "./repositories/
 export type { SessionRow } from "./repositories/sessionsRepo.js";
 export type { StoredStreamEvent } from "./repositories/eventsRepo.js";
 export type { SubAgentRunRow } from "./repositories/subAgentRunsRepo.js";
+export type {
+  MemoryAgentRunRow,
+  MemoryAgentRunStatus,
+  MemoryAgentRunCounts,
+  StoredMemoryAgentEvent,
+} from "./repositories/memoryAgentRunsRepo.js";
 
 /**
  * The application's persistence facade. Everything the system produces — main-agent
@@ -31,6 +38,7 @@ export class CurroDatabase {
   readonly subAgentRuns: SubAgentRunsRepo;
   readonly snapshots: SnapshotsRepo;
   readonly appState: AppStateRepo;
+  readonly memoryAgentRuns: MemoryAgentRunsRepo;
   readonly queue: DatabaseWriteQueue;
 
   private readonly maintenance: DatabaseMaintenance;
@@ -46,6 +54,7 @@ export class CurroDatabase {
     this.subAgentRuns = new SubAgentRunsRepo(db);
     this.snapshots = new SnapshotsRepo(db);
     this.appState = new AppStateRepo(db);
+    this.memoryAgentRuns = new MemoryAgentRunsRepo(db);
     this.queue = new DatabaseWriteQueue(db);
     this.maintenance = new DatabaseMaintenance(db);
   }
@@ -60,6 +69,7 @@ export class CurroDatabase {
     const instance = new CurroDatabase(db, dbPath);
     // After a restart nothing can still be running.
     instance.sessions.resetRunningFlags();
+    instance.memoryAgentRuns.failInterrupted();
     instance.maintenance.start();
 
     // eslint-disable-next-line no-console
