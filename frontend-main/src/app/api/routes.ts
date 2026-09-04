@@ -122,6 +122,24 @@ export const API_ROUTES = {
     path: "/api/sessions/:id",
     description: "Delete a session and all of its stored data from SQLite.",
   },
+  memoryAgentRuns: {
+    name: "memoryAgent.runs",
+    method: "GET",
+    path: "/api/memory-agent/runs",
+    description: "List background memory-agent sessions (queued/running/completed/failed) + counts.",
+  },
+  memoryAgentRunGet: {
+    name: "memoryAgent.run.get",
+    method: "GET",
+    path: "/api/memory-agent/runs/:id",
+    description: "Load one memory-agent run's metadata from the backend SQLite database.",
+  },
+  memoryAgentRunStream: {
+    name: "memoryAgent.run.stream",
+    method: "POST",
+    path: "/api/memory-agent/runs/:id/stream",
+    description: "Attach to a memory-agent run's SSE stream (live) or replay a finished run.",
+  },
 } as const satisfies Record<string, ApiRoute>;
 
 export type ApiRouteName = keyof typeof API_ROUTES;

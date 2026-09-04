@@ -1,17 +1,23 @@
 import type { MemoryFile } from "@/types";
 
 /**
- * The three permanent, pre-added memory files. These — and only these — are auto-loaded into the
+ * The four permanent, pre-added memory files. These — and only these — are auto-loaded into the
  * agent's context on the FIRST message of every chat, and they can never be deleted. Their order
  * here is the canonical display order.
  */
-export const PREADDED_MEMORY_FILES = ["MEMORY.md", "SOUL.md", "USER.md"] as const;
+export const PREADDED_MEMORY_FILES = [
+  "MEMORY.md",
+  "SOUL.md",
+  "USER.md",
+  "session-memory.md",
+] as const;
 
 /** Per-file character limits. Pre-added files are capped; custom files are uncapped. */
 export const MEMORY_CHAR_LIMITS: Readonly<Record<string, number>> = {
   "MEMORY.md": 8000,
   "SOUL.md": 2000,
   "USER.md": 2000,
+  "session-memory.md": 5000,
 };
 
 /** Virtual root every memory file lives under (used only for display). */
@@ -36,6 +42,13 @@ this user over time. Refine this as you learn how best to help them (max 2000 ch
 
 Who the user is: their name, role, goals, preferences, constraints, and how they like to
 communicate. Update this as you learn more about them (max 2000 characters).
+
+`,
+  "session-memory.md": `# Session Memory
+
+Short-term memory of the current working session — what was worked on, key decisions, current
+state, and open threads. A background memory agent rebuilds this automatically after every
+completed turn, and it resets for each new day/chat session (max 5000 characters).
 
 `,
 };

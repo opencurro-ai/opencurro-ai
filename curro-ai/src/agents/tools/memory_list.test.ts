@@ -50,7 +50,7 @@ describe("memory_list tool", () => {
     const { ctx } = ctxFor([{ path: "projects/app.md", content: "x" }]);
     const result = await registry.execute("memory_list", {}, ctx);
     const data = result.data as { count: number; tree: string };
-    assert.equal(data.count, 4); // 3 pre-added + 1 custom
+    assert.equal(data.count, 5); // 4 pre-added + 1 custom
     assert.ok(data.tree.includes("memory/"));
     assert.ok(data.tree.includes("app.md"));
   });

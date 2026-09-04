@@ -10,6 +10,9 @@ import type {
   FetchProvider,
   KnowledgeFile,
   KnowledgeSource,
+  MemoryAgentLiveRun,
+  MemoryAgentRunCounts,
+  MemoryAgentRunMeta,
   MemoryFile,
   ModelInfo,
   PlanApprovalStatus,
@@ -89,6 +92,17 @@ interface AppState {
   filesVersion: number;
   preview: BrowserPreview;
   attachedFiles: AttachedFile[];
+
+  // Background memory agent (all data lives in the backend SQLite database; this is
+  // purely the ephemeral view used to WATCH the agent's stream + sessions).
+  memoryAgentOpen: boolean;
+  memoryAgentSessionsOpen: boolean;
+  /** Run currently shown in the memory-agent popup; null = the newest run. */
+  memoryAgentSelectedId: string | null;
+  memoryAgentRuns: MemoryAgentRunMeta[];
+  memoryAgentCounts: MemoryAgentRunCounts;
+  /** Streamed live state per run id (rebuilt from the SSE stream, live or replayed). */
+  memoryAgentLive: Record<string, MemoryAgentLiveRun>;
 
   // Hydration from the backend SQLite database
   hydrateFromBackend: (payload: BackendBootPayload) => void;
@@ -242,6 +256,23 @@ interface AppState {
   setStreaming: (v: boolean) => void;
   setConnection: (c: Connection) => void;
   bumpFiles: () => void;
+
+  // Background memory agent (watch-only)
+  setMemoryAgentOpen: (v: boolean) => void;
+  setMemoryAgentSessionsOpen: (v: boolean) => void;
+  setMemoryAgentSelectedId: (id: string | null) => void;
+  setMemoryAgentRuns: (runs: MemoryAgentRunMeta[], counts: MemoryAgentRunCounts) => void;
+  /** Create/reset the live view of a run (called when its stream attaches/replays). */
+  startMemoryAgentLive: (runId: string) => void;
+  applyMemoryAgentDelta: (
+    runId: string,
+    delta: { reasoningDelta?: string; outputDelta?: string },
+  ) => void;
+  upsertMemoryAgentTool: (runId: string, tool: ToolActivity) => void;
+  finishMemoryAgentLive: (
+    runId: string,
+    outcome: { status: "completed" | "failed"; error?: string; updatedFiles?: string[] },
+  ) => void;
 }
 
 const defaultSettings: Settings = {
@@ -372,6 +403,13 @@ export const useStore = create<AppState>()(
       filesVersion: 0,
       preview: { url: "", open: false },
       attachedFiles: [],
+
+      memoryAgentOpen: false,
+      memoryAgentSessionsOpen: false,
+      memoryAgentSelectedId: null,
+      memoryAgentRuns: [],
+      memoryAgentCounts: { queued: 0, running: 0, completed: 0, failed: 0, total: 0 },
+      memoryAgentLive: {},
 
       hydrateFromBackend: (payload) => {
         const state = payload.state ?? {};
@@ -898,7 +936,7 @@ export const useStore = create<AppState>()(
 
         const original = originalPath ? canonicalMemoryPath(originalPath) : "";
         if (original && isPreaddedMemory(original) && original.toLowerCase() !== cleanPath.toLowerCase()) {
-          return "The three core files (MEMORY.md, SOUL.md, USER.md) cannot be renamed.";
+          return "The four core files (MEMORY.md, SOUL.md, USER.md, session-memory.md) cannot be renamed.";
         }
 
         const clash = get().memory.some(
@@ -1092,5 +1130,68 @@ export const useStore = create<AppState>()(
         }),
       setFilesOpen: (filesOpen) => set({ filesOpen }),
       bumpFiles: () => set((s) => ({ filesVersion: s.filesVersion + 1 })),
+
+      // ---- Background memory agent (watch-only) ----------------------------------
+      setMemoryAgentOpen: (memoryAgentOpen) => set({ memoryAgentOpen }),
+      setMemoryAgentSessionsOpen: (memoryAgentSessionsOpen) => set({ memoryAgentSessionsOpen }),
+      setMemoryAgentSelectedId: (memoryAgentSelectedId) => set({ memoryAgentSelectedId }),
+      setMemoryAgentRuns: (memoryAgentRuns, memoryAgentCounts) =>
+        set({ memoryAgentRuns, memoryAgentCounts }),
+      startMemoryAgentLive: (runId) =>
+        set((s) => ({
+          memoryAgentLive: {
+            ...s.memoryAgentLive,
+            [runId]: {
+              id: runId,
+              reasoning: "",
+              output: "",
+              tools: [],
+              status: "running",
+              updatedFiles: [],
+            },
+          },
+        })),
+      applyMemoryAgentDelta: (runId, delta) =>
+        set((s) => {
+          const run = s.memoryAgentLive[runId];
+          if (!run) return {};
+          return {
+            memoryAgentLive: {
+              ...s.memoryAgentLive,
+              [runId]: {
+                ...run,
+                reasoning: delta.reasoningDelta ? run.reasoning + delta.reasoningDelta : run.reasoning,
+                output: delta.outputDelta ? run.output + delta.outputDelta : run.output,
+              },
+            },
+          };
+        }),
+      upsertMemoryAgentTool: (runId, tool) =>
+        set((s) => {
+          const run = s.memoryAgentLive[runId];
+          if (!run) return {};
+          const index = run.tools.findIndex((t) => t.id === tool.id);
+          const tools =
+            index === -1
+              ? [...run.tools, tool]
+              : run.tools.map((t, i) => (i === index ? { ...t, ...tool } : t));
+          return { memoryAgentLive: { ...s.memoryAgentLive, [runId]: { ...run, tools } } };
+        }),
+      finishMemoryAgentLive: (runId, outcome) =>
+        set((s) => {
+          const run = s.memoryAgentLive[runId];
+          if (!run) return {};
+          return {
+            memoryAgentLive: {
+              ...s.memoryAgentLive,
+              [runId]: {
+                ...run,
+                status: outcome.status,
+                error: outcome.error,
+                updatedFiles: outcome.updatedFiles ?? run.updatedFiles,
+              },
+            },
+          };
+        }),
     }),
 );

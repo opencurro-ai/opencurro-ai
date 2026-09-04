@@ -1,5 +1,6 @@
 import { useStore } from "@/store/useStore";
 import { uid } from "@/utils/id";
+import { watchMemoryAgentRun } from "@/lib/memoryAgent";
 import type { StreamBatcher } from "@/lib/streamBatcher";
 import type {
   AttachedFile,
@@ -272,6 +273,14 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
 
     case "memory_updated":
       if (Array.isArray(data.memoryFiles)) s.setMemory(data.memoryFiles as MemoryFile[]);
+      break;
+
+    case "memory_agent_queued":
+      // The turn just enqueued a background memory-build run — attach to its stream so the
+      // popup can show it live and the agent's memory updates mirror into this browser.
+      if (typeof data.run_id === "string" && data.run_id.length > 0) {
+        watchMemoryAgentRun(data.run_id);
+      }
       break;
 
     case "knowledge_updated":

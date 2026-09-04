@@ -58,8 +58,8 @@ export function MemoryPanel() {
     <div className="mx-auto w-full max-w-2xl panel-in">
       <PanelHeader kicker="Kept across threads" title="Memory" />
       <p className="mb-4 text-sm leading-relaxed text-[var(--muted)]">
-        Durable notes the agent keeps and maintains across every conversation. The three core files
-        (MEMORY.md, SOUL.md, USER.md) load at the start of each chat and cannot be deleted.
+        Durable notes the agent keeps and maintains across every conversation. The four core files
+        (MEMORY.md, SOUL.md, USER.md, session-memory.md) load at the start of each chat and cannot be deleted.
       </p>
 
       {memory.length === 0 ? (

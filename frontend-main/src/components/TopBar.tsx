@@ -1,4 +1,4 @@
-import { Plus, Settings, ListTodo, Paperclip } from "lucide-react";
+import { Plus, Settings, ListTodo, Paperclip, Brain, History } from "lucide-react";
 import { useStore, type Section } from "@/store/useStore";
 import { cn } from "@/utils/cn";
 
@@ -23,6 +23,9 @@ export function TopBar() {
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const setTodosOpen = useStore((s) => s.setTodosOpen);
   const setFilesOpen = useStore((s) => s.setFilesOpen);
+  const setMemoryAgentOpen = useStore((s) => s.setMemoryAgentOpen);
+  const setMemoryAgentSessionsOpen = useStore((s) => s.setMemoryAgentSessionsOpen);
+  const memoryAgentCounts = useStore((s) => s.memoryAgentCounts);
   const knowledge = useStore((s) => s.knowledge);
   const subAgents = useStore((s) => s.subAgents);
   const skills = useStore((s) => s.skills);
@@ -62,6 +65,16 @@ export function TopBar() {
           )
         )}
 
+        <TopIcon
+          title="Memory agent"
+          onClick={() => setMemoryAgentOpen(true)}
+          count={memoryAgentCounts.running + memoryAgentCounts.queued}
+        >
+          <Brain className="h-[18px] w-[18px]" strokeWidth={1.7} />
+        </TopIcon>
+        <TopIcon title="Memory agent sessions" onClick={() => setMemoryAgentSessionsOpen(true)}>
+          <History className="h-[18px] w-[18px]" strokeWidth={1.7} />
+        </TopIcon>
         <TopIcon title="Todo list" onClick={() => setTodosOpen(true)} count={todos.length}>
           <ListTodo className="h-[18px] w-[18px]" strokeWidth={1.7} />
         </TopIcon>
