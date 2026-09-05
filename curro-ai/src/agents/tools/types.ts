@@ -357,6 +357,73 @@ export interface SkillRuntime {
   ): Promise<SkillInitializeResult>;
 }
 
+/** Public identity of a team member (or the leader) as surfaced by list_agent_team_members. */
+export interface TeamMemberInfo {
+  /** The member's exact agent id (the member's name doubles as its id). */
+  agent_id: string;
+  /** Human readable name of the member. */
+  name: string;
+  /** Short description of the member's specialization/role. */
+  description: string;
+  /** "head" for the team leader, "member" for a regular member. */
+  role: "head" | "member";
+}
+
+/** The status a team member can be reported in by get_team_members_status. */
+export type TeamMemberStatus = "idle" | "queued" | "working" | "done" | "failed" | "unknown";
+
+/** A single status record returned by get_team_members_status. */
+export interface TeamMemberStatusRecord {
+  agent_id: string;
+  name: string;
+  role: "head" | "member";
+  status: TeamMemberStatus;
+  /** Number of messages currently waiting in this member's inbox. */
+  queued_messages: number;
+}
+
+/** The outcome of delivering messages to one or more agents (delegate / send_message). */
+export interface TeamDeliveryResult {
+  /** Agent ids the message was successfully queued for. */
+  delivered: string[];
+  /** Agent ids that could not be matched to a team member. */
+  unknown: string[];
+}
+
+/**
+ * Runtime bridge injected into the ToolContext for a multi-agent team run so the team tools
+ * (delegate_task_or_send_message, get_team_members_status, list_agent_team_members,
+ * send_message_to_team, message_team_leader) can enumerate members, route messages between agents,
+ * and report status. Every message is delivered into the recipient's inbox and scheduled by the
+ * orchestrator's bounded-concurrency scheduler — never by spawning a fresh LLM call inline — so the
+ * same agent session/context is always reused and no runaway fan-out is possible. Absent from
+ * single-agent runs and from sub-agent tool calls.
+ */
+export interface TeamRuntime {
+  /** The id of the agent whose tool call is currently executing. */
+  readonly selfId: string;
+  /** The name of the agent whose tool call is currently executing. */
+  readonly selfName: string;
+  /** Whether the current agent is the team head/leader or a regular member. */
+  readonly selfRole: "head" | "member";
+  /** The team leader's agent id. */
+  readonly leaderId: string;
+  /** The team leader's name. */
+  readonly leaderName: string;
+  /** Whether the user enabled agent-to-agent messaging (the send_message_to_team tool). */
+  readonly messagingEnabled: boolean;
+  /** Every team member (leader excluded) with its id + description — what list_agent_team_members returns. */
+  listMembers(): TeamMemberInfo[];
+  /** Head-only: deliver task/messages to one or more members. Runs are scheduled asynchronously. */
+  delegate(messages: Array<{ agent_id: string; message: string }>): TeamDeliveryResult;
+  /** Deliver messages to other team members (head or member sender). */
+  sendToTeam(recipients: Array<{ agent_id: string; message: string }>): TeamDeliveryResult;
+  /** Member-only: deliver a message/report to the team leader. */
+  messageLeader(fromName: string, message: string): { delivered: boolean };
+  /** Head-only: current status of the requested agents. */
+  status(agentIds: string[]): TeamMemberStatusRecord[];
+}
+
 /** Runtime context handed to a tool on execution. */
 export interface ToolContext {
   /** Absolute path all file operations are sandboxed to. */
@@ -406,6 +473,12 @@ export interface ToolContext {
   model?: string;
   /** Whether the selected model accepts image inputs; false blocks the read_image tool. */
   visionCapable?: boolean;
+  /**
+   * Multi-agent team runtime — present ONLY when the tool call is made by an agent running inside a
+   * multi-agent team (the head/leader or a member). Absent from single-agent runs and from sub-agent
+   * tool calls. It routes messages between agents (delegate / send / report) and reports status.
+   */
+  team?: TeamRuntime;
 }
 
 /**

@@ -4,6 +4,7 @@ import { config, ensureWorkspace } from "./config.js";
 import { createProviderRegistry } from "./agents/providers/registry.js";
 import { createToolRegistry } from "./agents/tools/index.js";
 import { AgentRunner } from "./agents/agent.js";
+import { MultiAgentRunner } from "./agents/multiagent/index.js";
 import { SessionStore } from "./services/sessionStore.js";
 import { PlanApprovalStore } from "./services/planApprovalStore.js";
 import { QuestionStore } from "./services/questionStore.js";
@@ -32,6 +33,9 @@ function main(): void {
   // completed main-agent turn, persisting everything into the local SQLite database.
   const memoryAgent = new MemoryAgentService(providers, tools, config, db);
   const agent = new AgentRunner(providers, tools, config, planApprovals, askQuestions, memoryAgent);
+  // The multi-agent team runner: a real team of full agents (head + members) collaborating on one
+  // turn, with bounded concurrency + a message-budget circuit breaker so it can never freeze the app.
+  const multiAgent = new MultiAgentRunner(providers, tools, config, planApprovals, askQuestions);
 
   const app = express();
   app.use(
@@ -57,7 +61,10 @@ function main(): void {
 
   app.use("/api/providers", buildProviderRouter(providers));
   app.use("/api/tools", buildToolsRouter(tools));
-  app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals, askQuestions, db));
+  app.use(
+    "/api/chat",
+    buildChatRouter(agent, multiAgent, store, config, planApprovals, askQuestions, db),
+  );
   app.use("/api/files", buildFilesRouter(config));
   app.use("/api/scrape", buildScrapeRouter(config));
   app.use("/api/state", buildStateRouter(db));

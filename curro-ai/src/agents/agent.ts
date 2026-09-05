@@ -77,6 +77,19 @@ const SESSION_REUSE_TOOLS: readonly string[] = [
   "reuse_same_sub_agent_session",
 ];
 
+/**
+ * The multi-agent team tools are NEVER available to the ordinary single agent — they only exist for
+ * agents running inside a multi-agent team (the head/leader and members), advertised per-role by the
+ * team orchestrator. They are always filtered out of the single-agent tool schemas.
+ */
+const TEAM_ONLY_TOOLS: readonly string[] = [
+  "delegate_task_or_send_message",
+  "get_team_members_status",
+  "list_agent_team_members",
+  "send_message_to_team",
+  "message_team_leader",
+];
+
 export class AgentRunner {
   constructor(
     private readonly providers: ProviderRegistry,
@@ -155,9 +168,12 @@ export class AgentRunner {
       });
       // Expose the sub-agent session tools to the model only when the setting is on. Everything else
       // in the registry is always available; the two session tools are filtered out otherwise.
-      const toolSchemas = reuseSessionsEnabled
-        ? this.tools.schemas
-        : this.tools.schemas.filter((s) => !SESSION_REUSE_TOOLS.includes(s.function.name));
+      const hiddenTools = reuseSessionsEnabled
+        ? TEAM_ONLY_TOOLS
+        : [...SESSION_REUSE_TOOLS, ...TEAM_ONLY_TOOLS];
+      const toolSchemas = this.tools.schemas.filter(
+        (s) => !hiddenTools.includes(s.function.name),
+      );
       const maxIterations = clampIterations(request.maxIterations, this.config.maxIterations);
       const visionCapable = isVisionCapableModel(request.model, this.config);
       const web: WebToolsConfig = {

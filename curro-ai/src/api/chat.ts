@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import type { AppConfig } from "../config.js";
 import { AgentRunner, type RunAgentRequest } from "../agents/agent.js";
+import { MultiAgentRunner, normalizeTeam } from "../agents/multiagent/index.js";
+import type { MultiAgentRunRequest } from "../agents/multiagent/index.js";
 import { SessionEventBuffer } from "../services/eventBuffer.js";
 import type { SessionStore, StoredMessage } from "../services/sessionStore.js";
 import type { PlanApprovalStore } from "../services/planApprovalStore.js";
@@ -65,6 +67,12 @@ interface StreamBody {
   memory?: unknown;
   knowledge?: unknown;
   enable_reuse_sub_agent_session?: unknown;
+  /** Multi-agent team mode: when true and a valid `team` is provided, the head leads the turn. */
+  multi_agent?: unknown;
+  /** The active team definition (leader + members) authored in the frontend. */
+  team?: unknown;
+  /** Whether the send_message_to_team (agent-to-agent messaging) tool is enabled. */
+  enable_team_messaging?: unknown;
 }
 
 /** Defensively coerce the client-provided sub-agent definitions into safe, well-typed values. */
@@ -136,6 +144,7 @@ function normalizeSkills(raw: unknown): SkillDefinition[] {
 
 export function buildChatRouter(
   agent: AgentRunner,
+  multiAgent: MultiAgentRunner,
   store: SessionStore,
   config: AppConfig,
   planApprovals: PlanApprovalStore,
@@ -285,6 +294,56 @@ export function buildChatRouter(
       session.eventBuffer = buffer;
       session.abortController = abortController;
       session.running = true;
+
+      // Multi-agent team mode: when the frontend enabled it and sent a valid active team, the whole
+      // turn is run by the team (head + members collaborating) instead of the single agent.
+      const wantsTeam = body.multi_agent === true || body.multi_agent === "yes";
+      const team = wantsTeam ? normalizeTeam(body.team) : undefined;
+
+      if (team) {
+        const multiRequest: MultiAgentRunRequest = {
+          chatId,
+          userMessage: body.user_message!,
+          provider: body.provider!,
+          model: body.model!,
+          apiKey: effectiveApiKey(body),
+          baseUrl: body.base_url,
+          customProvider: body.custom_provider,
+          temperature: sanitizeTemperature(body.temperature),
+          effort: normalizeEffort(body.effort),
+          team,
+          enableTeamMessaging:
+            body.enable_team_messaging === true || body.enable_team_messaging === "yes",
+          tavilyApiKey: body.tavily_api_key,
+          exaApiKey: body.exa_api_key,
+          serpapiApiKey: body.serpapi_api_key,
+          firecrawlApiKey: body.firecrawl_api_key,
+          searchProvider: body.search_provider,
+          fetchProvider: body.fetch_provider,
+          subAgents: normalizeSubAgents(body.sub_agents),
+          skills: normalizeSkills(body.skills),
+          todos: normalizeTodos(body.todos),
+          memory: normalizeMemoryFiles(body.memory),
+          knowledge: normalizeKnowledgeFiles(body.knowledge),
+        };
+
+        void multiAgent
+          .run(multiRequest, session, buffer, abortController.signal)
+          .catch((error) => {
+            buffer.append("error", {
+              code: "team_crashed",
+              message: error instanceof Error ? error.message : String(error),
+            });
+            buffer.setDone();
+            session.running = false;
+          })
+          .finally(() => {
+            settleTurn(chatId, session, buffer);
+          });
+
+        await streamFromBuffer(res, buffer, body.since_event_id ?? -1);
+        return;
+      }
 
       const runRequest: RunAgentRequest = {
         chatId,

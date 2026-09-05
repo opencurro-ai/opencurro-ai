@@ -36,6 +36,12 @@ export const SUB_AGENT_RESTRICTED_TOOLS: readonly string[] = [
   "attach_files",
   "TodoWrite",
   "read_todos",
+  // Multi-agent team tools: a sub-agent spawned by a team member must never manage the team.
+  "delegate_task_or_send_message",
+  "get_team_members_status",
+  "list_agent_team_members",
+  "send_message_to_team",
+  "message_team_leader",
 ];
 
 /** Fast membership test for the restricted set. */

@@ -42,6 +42,18 @@ export interface AppConfig {
   visionModelPatterns: string[];
   /** Model-id substrings that are always treated as text-only (read_image tool). */
   textOnlyModelPatterns: string[];
+  /**
+   * Maximum number of team agents that may run their LLM stream at the same time in a multi-agent
+   * team turn. This is the primary safeguard against runaway concurrency/token flooding: excess
+   * runnable agents wait in a queue and start as slots free up. Clamped to a sane range.
+   */
+  maxTeamConcurrency: number;
+  /**
+   * Hard safety ceiling on the total number of inter-agent messages delivered during a single
+   * multi-agent team turn. It is a circuit-breaker against pathological agent-to-agent ping-pong
+   * (NOT a per-agent iteration limit — each agent's own loop stays unbounded). Generous by default.
+   */
+  maxTeamMessages: number;
 }
 
 function parseCorsOrigins(raw: string | undefined): string[] | "*" {
@@ -64,6 +76,12 @@ function parseFetchProvider(raw: string | undefined): "builtin" | "firecrawl" {
   if (value === "firecrawl") return "firecrawl";
   // The built-in scraper is free and keyless.
   return "builtin";
+}
+
+/** Clamp a possibly-invalid integer into [min, max], falling back to a default when unusable. */
+function clampInt(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(value)));
 }
 
 /** Parse a comma-separated list of model-id substrings from an env var. */
@@ -90,6 +108,8 @@ export const config: AppConfig = {
   firecrawlApiKey: process.env.FIRECRAWL_API_KEY?.trim() ?? "",
   visionModelPatterns: parsePatterns(process.env.VISION_MODEL_PATTERNS),
   textOnlyModelPatterns: parsePatterns(process.env.TEXT_ONLY_MODEL_PATTERNS),
+  maxTeamConcurrency: clampInt(Number(process.env.MULTI_AGENT_MAX_CONCURRENCY ?? 3), 1, 8, 3),
+  maxTeamMessages: clampInt(Number(process.env.MULTI_AGENT_MAX_MESSAGES ?? 400), 20, 5000, 400),
 };
 
 /** Ensure the workspace directory exists so file tools never hit permission/ENOENT errors. */
