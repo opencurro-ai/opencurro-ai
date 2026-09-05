@@ -14,6 +14,8 @@ export class StreamBatcher {
   private reasoning = "";
   private cursor: number | null = null;
   private readonly sub = new Map<string, { output: string; reasoning: string }>();
+  /** Per-team-activation coalesced deltas, keyed by activation id. */
+  private readonly team = new Map<string, { output: string; reasoning: string }>();
   private frame: number | null = null;
   private disposed = false;
 
@@ -47,6 +49,16 @@ export class StreamBatcher {
     this.schedule();
   }
 
+  teamToken(activationId: string, delta: string): void {
+    this.teamBucket(activationId).output += delta;
+    this.schedule();
+  }
+
+  teamReasoning(activationId: string, delta: string): void {
+    this.teamBucket(activationId).reasoning += delta;
+    this.schedule();
+  }
+
   /** Flush immediately (used before any non-delta event so ordering stays correct). */
   flush(): void {
     if (this.frame !== null) {
@@ -66,6 +78,15 @@ export class StreamBatcher {
     if (!b) {
       b = { output: "", reasoning: "" };
       this.sub.set(toolId, b);
+    }
+    return b;
+  }
+
+  private teamBucket(activationId: string) {
+    let b = this.team.get(activationId);
+    if (!b) {
+      b = { output: "", reasoning: "" };
+      this.team.set(activationId, b);
     }
     return b;
   }
@@ -108,6 +129,18 @@ export class StreamBatcher {
         }
       }
       this.sub.clear();
+    }
+
+    if (this.team.size > 0) {
+      for (const [activationId, b] of this.team) {
+        if (b.output || b.reasoning) {
+          store.applyTeamAgentDelta(this.convId, this.msgId, activationId, {
+            contentDelta: b.output || undefined,
+            reasoningDelta: b.reasoning || undefined,
+          });
+        }
+      }
+      this.team.clear();
     }
   }
 }

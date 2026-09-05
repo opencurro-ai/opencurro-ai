@@ -329,6 +329,38 @@ export function SettingsModal() {
             </p>
           </section>
 
+          {/* Multi-agent teams */}
+          <section className="space-y-3 border-t border-[var(--border)] pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Multi-agent teams</h3>
+            <Field label="Multi-agent mode">
+              <Select
+                value={settings.multiAgent ?? "no"}
+                onChange={(e) => setSettings({ multiAgent: e.target.value === "yes" ? "yes" : "no" })}
+              >
+                <option value="no">No — use the single agent</option>
+                <option value="yes">Yes — route to the active team's leader</option>
+              </Select>
+            </Field>
+            <p className="text-xs text-[var(--muted)]">
+              When enabled, your message goes to the active team's leader, who delegates to team
+              members that work in parallel and report back. Create and activate teams on the Agent
+              teams page (in the sidebar).
+            </p>
+            <Field label="Member-to-member messaging">
+              <Select
+                value={settings.sendMessageToTeam ?? "no"}
+                onChange={(e) => setSettings({ sendMessageToTeam: e.target.value === "yes" ? "yes" : "no" })}
+              >
+                <option value="no">No — members report to the leader only</option>
+                <option value="yes">Yes — members can message each other</option>
+              </Select>
+            </Field>
+            <p className="text-xs text-[var(--muted)]">
+              Controls the send_message_to_team tool. When off (default), members coordinate through
+              the leader; when on, members can also message each other directly.
+            </p>
+          </section>
+
           {/* Custom providers */}
           <section className="space-y-3 border-t border-[var(--border)] pt-5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Custom providers</h3>

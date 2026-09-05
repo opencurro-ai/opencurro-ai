@@ -206,6 +206,99 @@ export interface ChatMessage {
   tools?: ToolActivity[];
   streaming?: boolean;
   createdAt: number;
+  /**
+   * Multi-agent team run attached to an assistant message. When present, the message renders the
+   * team's collaboration (head + members streaming as their own blocks) instead of a single answer.
+   */
+  team?: TeamRun;
+}
+
+/* ----------------------------------------------------------------- multi-agent teams */
+
+/** A single team member (worker) of a multi-agent collaboration team. */
+export interface TeamMember {
+  /** Unique id + display name (user-typed). Other agents address this member by this id. */
+  id: string;
+  description: string;
+  systemPrompt: string;
+  enabled: boolean;
+}
+
+/** A full multi-agent team, stored in the backend SQLite database (like sub-agents/skills). */
+export interface AgentTeam {
+  id: string;
+  name: string;
+  /** The head/leader's display name. */
+  headName: string;
+  /** The head/leader's system prompt. */
+  headSystemPrompt: string;
+  members: TeamMember[];
+  /** Whether this team is the currently active team (only one is active at a time). */
+  active: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Team definition in the backend/wire format sent with each turn. */
+export interface BackendTeam {
+  id: string;
+  name: string;
+  head: { name: string; system_prompt: string };
+  members: Array<{ id: string; description: string; system_prompt: string; enabled: boolean }>;
+  enabled: boolean;
+}
+
+/** Lifecycle state of a team agent (for the monitoring panel). */
+export type TeamAgentStatus = "idle" | "running" | "queued" | "completed" | "failed";
+
+/** Live streaming state of a single team-agent activation, rendered as its own block in chat. */
+export interface TeamActivation {
+  /** Activation id (agentId::seq) — unique per activation. */
+  id: string;
+  agentId: string;
+  name: string;
+  role: "head" | "member";
+  /** Short description of what triggered this activation (e.g. "user request", "message from Niko"). */
+  trigger: string;
+  reasoning: string;
+  content: string;
+  tools: ToolActivity[];
+  status: ToolActivityStatus;
+  error?: string;
+}
+
+/** The whole team run attached to an assistant message. */
+export interface TeamRun {
+  teamId: string;
+  teamName: string;
+  headName: string;
+  members: Array<{ id: string; name: string; description: string }>;
+  /** Every activation keyed by activation id. */
+  activations: Record<string, TeamActivation>;
+  /** Chronological render order of activation ids. */
+  order: string[];
+  sendMessageToTeamEnabled?: boolean;
+}
+
+/** A logged inter-agent message (shown in the monitoring panel). */
+export interface TeamMessageLog {
+  id: string;
+  fromId: string;
+  fromName: string;
+  toId: string;
+  toName: string;
+  kind: "task" | "message";
+  message: string;
+  at: number;
+}
+
+/** Per-agent live status snapshot (shown in the monitoring panel). */
+export interface TeamAgentStatusEntry {
+  id: string;
+  name: string;
+  role: "head" | "member";
+  status: TeamAgentStatus;
+  queued: number;
 }
 
 export interface Conversation {
@@ -479,6 +572,16 @@ export interface Settings {
    */
   enableReuseSubAgentSession: "no" | "yes";
   /**
+   * Whether multi-agent team mode is enabled. When "yes" and a team is active, the first user
+   * message of a turn goes to the team's head/leader agent instead of the single agent. Default "no".
+   */
+  multiAgent: "no" | "yes";
+  /**
+   * Whether team members may message each other directly (gates the send_message_to_team tool).
+   * Default "no" — members report to the leader, who coordinates. Only meaningful in team mode.
+   */
+  sendMessageToTeam: "no" | "yes";
+  /**
    * Reasoning effort forwarded to the model. One of the presets
    * ("low" | "medium" | "high" | "max") or a custom string the model supports.
    * Defaults to "high"; models without reasoning support ignore it.
@@ -529,6 +632,12 @@ export interface StreamRequest {
   knowledge?: KnowledgeFile[];
   /** Mirrors settings.enableReuseSubAgentSession; gates the sub-agent session tools this turn. */
   enable_reuse_sub_agent_session?: "no" | "yes";
+  /** Multi-agent team mode. When "yes" with a valid `team`, the turn is routed to the team runner. */
+  multi_agent_enabled?: "no" | "yes";
+  /** Whether members may message each other (gates send_message_to_team). */
+  send_message_to_team_enabled?: "no" | "yes";
+  /** The active agent team definition sent with the turn. */
+  team?: BackendTeam;
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */
@@ -608,6 +717,33 @@ export interface SSEEventData {
   queued_remaining?: number;
   /** True when a replayed run was interrupted (e.g. backend restart) before finishing. */
   interrupted?: boolean;
+  // ---- multi-agent team fields ---------------------------------------------
+  /** team_start: the team id/name. */
+  team_id?: string;
+  team_name?: string;
+  /** team_start: the head/leader. */
+  head?: { id?: string; name?: string };
+  /** team_start: the members (id + name + description). */
+  members?: Array<{ id?: string; name?: string; description?: string }>;
+  /** team_agent_*: the id of the agent this event belongs to. */
+  agent_id?: string;
+  /** team_agent_* / team_start: the role of the agent. */
+  role?: "head" | "member" | string;
+  /** team_agent_start: what triggered this activation. */
+  trigger?: string;
+  /** team_status: per-agent status snapshot. */
+  team_agents?: Array<{ id?: string; name?: string; role?: string; status?: string; queued?: number }>;
+  /** team_status: coordination counters. */
+  pending?: number;
+  activations?: number;
+  /** team_message: routing metadata. */
+  from_id?: string;
+  from_name?: string;
+  to_id?: string;
+  to_name?: string;
+  kind?: "task" | "message" | string;
+  /** team_start: whether member-to-member messaging is enabled. */
+  send_message_to_team_enabled?: boolean;
 }
 
 /** Lifecycle states of a background memory-agent run. */

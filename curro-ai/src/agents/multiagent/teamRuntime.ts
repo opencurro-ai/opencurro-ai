@@ -607,7 +607,7 @@ class TeamOrchestrator implements TeamRuntime {
 
   private emitStatus(): void {
     this.deps.send("team_status", {
-      agents: Array.from(this.agents.values()).map((a) => ({
+      team_agents: Array.from(this.agents.values()).map((a) => ({
         id: a.id,
         name: a.name,
         role: a.role,

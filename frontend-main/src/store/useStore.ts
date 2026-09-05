@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AgentTeam,
   AskQuestionInfo,
   AskQuestionStatus,
   AttachedFile,
@@ -22,6 +23,9 @@ import type {
   Skill,
   SubAgent,
   SubAgentRun,
+  TeamActivation,
+  TeamAgentStatusEntry,
+  TeamMessageLog,
   TodoItem,
   ToolActivity,
 } from "@/types";
@@ -37,9 +41,10 @@ import {
   mergeMemoryWithDefaults,
 } from "@/lib/defaultMemory";
 import { hasUnsafeSegment, normalizeKnowledgePath, sanitizeKnowledge } from "@/lib/defaultKnowledge";
+import { DEFAULT_TEAMS, enforceSingleActive, mergeTeamsWithDefaults } from "@/lib/defaultTeams";
 
-/** The five workspace sections the rail switches between. */
-export type Section = "chat" | "memory" | "knowledge" | "agents" | "skills";
+/** The workspace sections the rail switches between. */
+export type Section = "chat" | "memory" | "knowledge" | "agents" | "skills" | "team";
 
 /** Connection state surfaced to the user. Slow ≠ offline; only a lost connection is "offline". */
 export type Connection = "online" | "reconnecting" | "offline";
@@ -75,6 +80,7 @@ interface AppState {
   knowledge: KnowledgeFile[];
   knowledgeSources: Record<string, KnowledgeSource>;
   customProviders: CustomProvider[];
+  agentTeams: AgentTeam[];
   activeRun: ActiveRun | null;
 
   // Ephemeral UI
@@ -87,6 +93,15 @@ interface AppState {
   settingsOpen: boolean;
   todosOpen: boolean;
   filesOpen: boolean;
+  /** Multi-agent monitoring panel (queue + agent statuses + inter-agent messages). */
+  teamMonitorOpen: boolean;
+  /** Live per-agent status snapshot of the most recent team run (for the monitor). */
+  teamStatus: TeamAgentStatusEntry[];
+  /** Live log of inter-agent messages of the most recent team run (for the monitor). */
+  teamMessages: TeamMessageLog[];
+  /** Coordination counters from the latest team_status event. */
+  teamPending: number;
+  teamActivations: number;
   streaming: boolean;
   connection: Connection;
   filesVersion: number;
@@ -207,6 +222,52 @@ interface AppState {
     patch: { status: SubAgentRun["status"]; output?: string; error?: string },
   ) => void;
 
+  // Multi-agent team management
+  addTeam: (input: Omit<AgentTeam, "id" | "createdAt" | "updatedAt" | "active">) => string;
+  updateTeam: (id: string, patch: Partial<Omit<AgentTeam, "id" | "createdAt">>) => void;
+  deleteTeam: (id: string) => void;
+  setActiveTeam: (id: string, active: boolean) => void;
+
+  // Multi-agent team run (attached to an assistant message) + monitor
+  startTeamRun: (
+    convId: string,
+    msgId: string,
+    run: {
+      teamId: string;
+      teamName: string;
+      headName: string;
+      members: Array<{ id: string; name: string; description: string }>;
+      sendMessageToTeamEnabled?: boolean;
+    },
+  ) => void;
+  startTeamActivation: (
+    convId: string,
+    msgId: string,
+    activation: Pick<TeamActivation, "id" | "agentId" | "name" | "role" | "trigger">,
+  ) => void;
+  applyTeamAgentDelta: (
+    convId: string,
+    msgId: string,
+    activationId: string,
+    delta: { contentDelta?: string; reasoningDelta?: string },
+  ) => void;
+  upsertTeamAgentTool: (
+    convId: string,
+    msgId: string,
+    activationId: string,
+    tool: ToolActivity,
+  ) => void;
+  finishTeamActivation: (
+    convId: string,
+    msgId: string,
+    activationId: string,
+    patch: { status: TeamActivation["status"]; output?: string; error?: string },
+  ) => void;
+  setTeamMonitorOpen: (v: boolean) => void;
+  setTeamStatus: (agents: TeamAgentStatusEntry[], pending: number, activations: number) => void;
+  addTeamMessage: (message: TeamMessageLog) => void;
+  resetTeamMonitor: () => void;
+
   // Sub-agent management
   addSubAgent: (input: Omit<SubAgent, "id" | "createdAt" | "updatedAt">) => void;
   updateSubAgent: (id: string, patch: Partial<Omit<SubAgent, "id" | "createdAt">>) => void;
@@ -287,6 +348,8 @@ const defaultSettings: Settings = {
   serpapiApiKey: "",
   firecrawlApiKey: "",
   enableReuseSubAgentSession: "no",
+  multiAgent: "no",
+  sendMessageToTeam: "no",
   effort: "high",
   temperature: 0.6,
 };
@@ -369,6 +432,52 @@ function patchMultiRun(
 }
 
 /**
+ * Patch a single team activation inside an assistant message's `team` run. Locates the message by id,
+ * then updates `team.activations[activationId]` (creating it via `createIfMissing` when absent). A
+ * no-op when the message/run/activation can't be resolved and no creator is given.
+ */
+function patchTeamActivation(
+  conversations: Conversation[],
+  convId: string,
+  msgId: string,
+  activationId: string,
+  updater: (activation: TeamActivation) => TeamActivation,
+  createIfMissing?: () => TeamActivation,
+): Conversation[] {
+  return conversations.map((c) =>
+    c.id === convId
+      ? {
+          ...c,
+          messages: c.messages.map((m) => {
+            if (m.id !== msgId || !m.team) return m;
+            const existing = m.team.activations[activationId] ?? (createIfMissing ? createIfMissing() : undefined);
+            if (!existing) return m;
+            const activations = { ...m.team.activations, [activationId]: updater(existing) };
+            const order = m.team.order.includes(activationId)
+              ? m.team.order
+              : [...m.team.order, activationId];
+            return { ...m, team: { ...m.team, activations, order } };
+          }),
+        }
+      : c,
+  );
+}
+
+const emptyActivation = (
+  a: Pick<TeamActivation, "id" | "agentId" | "name" | "role" | "trigger">,
+): TeamActivation => ({
+  id: a.id,
+  agentId: a.agentId,
+  name: a.name,
+  role: a.role,
+  trigger: a.trigger,
+  reasoning: "",
+  content: "",
+  tools: [],
+  status: "running",
+});
+
+/**
  * Runtime store. NOTHING here touches browser storage (no localStorage, no
  * sessionStorage, no IndexedDB, no cookies): all durable data lives in the backend
  * SQLite database. The store hydrates from `GET /api/state` at boot (see
@@ -388,6 +497,7 @@ export const useStore = create<AppState>()(
       knowledge: [],
       knowledgeSources: {},
       customProviders: [],
+      agentTeams: mergeTeamsWithDefaults(DEFAULT_TEAMS.map((t) => ({ ...t }))),
       activeRun: null,
 
       hydrated: false,
@@ -398,6 +508,11 @@ export const useStore = create<AppState>()(
       settingsOpen: false,
       todosOpen: false,
       filesOpen: false,
+      teamMonitorOpen: false,
+      teamStatus: [],
+      teamMessages: [],
+      teamPending: 0,
+      teamActivations: 0,
       streaming: false,
       connection: "online",
       filesVersion: 0,
@@ -449,6 +564,7 @@ export const useStore = create<AppState>()(
               ? (p.knowledgeSources as Record<string, KnowledgeSource>)
               : s.knowledgeSources,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : s.customProviders,
+          agentTeams: mergeTeamsWithDefaults(Array.isArray(p.agentTeams) ? p.agentTeams : s.agentTeams),
         }));
       },
 
@@ -519,7 +635,7 @@ export const useStore = create<AppState>()(
                   ...c,
                   messages: c.messages.map((m) =>
                     m.id === msgId
-                      ? { ...m, content: "", reasoning: "", tools: [], streaming: true }
+                      ? { ...m, content: "", reasoning: "", tools: [], team: undefined, streaming: true }
                       : m,
                   ),
                 }
@@ -862,6 +978,126 @@ export const useStore = create<AppState>()(
             () => emptyRun({ agent: "", task: "" }),
           ),
         })),
+
+      // ---- Multi-agent teams -------------------------------------------------
+      addTeam: (input) => {
+        const now = Date.now();
+        const id = uid("team");
+        const team: AgentTeam = { id, active: false, createdAt: now, updatedAt: now, ...input };
+        set((s) => ({ agentTeams: [team, ...s.agentTeams] }));
+        return id;
+      },
+
+      updateTeam: (id, patch) =>
+        set((s) => ({
+          agentTeams: enforceSingleActive(
+            s.agentTeams.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t)),
+          ),
+        })),
+
+      deleteTeam: (id) => set((s) => ({ agentTeams: s.agentTeams.filter((t) => t.id !== id) })),
+
+      setActiveTeam: (id, active) =>
+        set((s) => ({
+          agentTeams: s.agentTeams.map((t) =>
+            t.id === id
+              ? { ...t, active, updatedAt: Date.now() }
+              : active
+                ? { ...t, active: false } // only one team active at a time
+                : t,
+          ),
+        })),
+
+      // ---- Multi-agent team run + monitor ------------------------------------
+      startTeamRun: (convId, msgId, run) =>
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === convId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === msgId
+                      ? {
+                          ...m,
+                          team: {
+                            teamId: run.teamId,
+                            teamName: run.teamName,
+                            headName: run.headName,
+                            members: run.members,
+                            sendMessageToTeamEnabled: run.sendMessageToTeamEnabled,
+                            // Preserve any activations already created (idempotent across replays).
+                            activations: m.team?.activations ?? {},
+                            order: m.team?.order ?? [],
+                          },
+                        }
+                      : m,
+                  ),
+                }
+              : c,
+          ),
+        })),
+
+      startTeamActivation: (convId, msgId, activation) =>
+        set((s) => ({
+          conversations: patchTeamActivation(
+            s.conversations,
+            convId,
+            msgId,
+            activation.id,
+            (existing) => ({
+              ...existing,
+              agentId: activation.agentId || existing.agentId,
+              name: activation.name || existing.name,
+              role: activation.role || existing.role,
+              trigger: activation.trigger || existing.trigger,
+            }),
+            () => emptyActivation(activation),
+          ),
+        })),
+
+      applyTeamAgentDelta: (convId, msgId, activationId, delta) =>
+        set((s) => ({
+          conversations: patchTeamActivation(s.conversations, convId, msgId, activationId, (a) => ({
+            ...a,
+            content: delta.contentDelta ? a.content + delta.contentDelta : a.content,
+            reasoning: delta.reasoningDelta ? a.reasoning + delta.reasoningDelta : a.reasoning,
+          })),
+        })),
+
+      upsertTeamAgentTool: (convId, msgId, activationId, tool) =>
+        set((s) => ({
+          conversations: patchTeamActivation(
+            s.conversations,
+            convId,
+            msgId,
+            activationId,
+            (a) => {
+              const tools = [...a.tools];
+              const idx = tools.findIndex((t) => t.id === tool.id);
+              if (idx === -1) tools.push(tool);
+              else tools[idx] = { ...tools[idx], ...tool };
+              return { ...a, tools };
+            },
+            () => emptyActivation({ id: activationId, agentId: "", name: "", role: "member", trigger: "" }),
+          ),
+        })),
+
+      finishTeamActivation: (convId, msgId, activationId, patch) =>
+        set((s) => ({
+          conversations: patchTeamActivation(s.conversations, convId, msgId, activationId, (a) => ({
+            ...a,
+            status: patch.status,
+            content: patch.output != null && patch.output.length > a.content.length ? patch.output : a.content,
+            error: patch.error,
+          })),
+        })),
+
+      setTeamMonitorOpen: (teamMonitorOpen) => set({ teamMonitorOpen }),
+      setTeamStatus: (teamStatus, teamPending, teamActivations) =>
+        set({ teamStatus, teamPending, teamActivations }),
+      addTeamMessage: (message) =>
+        set((s) => ({ teamMessages: [...s.teamMessages, message].slice(-200) })),
+      resetTeamMonitor: () => set({ teamStatus: [], teamMessages: [], teamPending: 0, teamActivations: 0 }),
 
       addSubAgent: (input) =>
         set((s) => {

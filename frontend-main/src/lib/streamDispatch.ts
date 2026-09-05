@@ -55,6 +55,15 @@ function multiSubAgentLabel(children: Array<{ run: { agent: string } }>): string
   return `Sub-Agents (${children.length}): ${shown}${extra}`.trim();
 }
 
+/** Coerce a backend team-agent status string into the union the store expects. */
+function normalizeTeamStatus(
+  raw: unknown,
+): "idle" | "running" | "queued" | "completed" | "failed" {
+  return raw === "running" || raw === "queued" || raw === "completed" || raw === "failed"
+    ? raw
+    : "idle";
+}
+
 function extractUrl(raw: unknown): string {
   if (!raw || typeof raw !== "object") return "";
   const record = raw as Record<string, unknown>;
@@ -159,6 +168,12 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
       return;
     case "sub_agent_token":
       batcher.subToken(String(data.id ?? ""), String(data.value ?? ""));
+      return;
+    case "team_agent_reasoning":
+      batcher.teamReasoning(String(data.id ?? ""), String(data.value ?? ""));
+      return;
+    case "team_agent_token":
+      batcher.teamToken(String(data.id ?? ""), String(data.value ?? ""));
       return;
   }
 
@@ -398,6 +413,103 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
       else s.finishSubAgent(convId, msgId, String(data.id ?? ""), patch);
       break;
     }
+
+    // ---- multi-agent team events -------------------------------------------
+    case "team_start": {
+      s.resetTeamMonitor();
+      s.startTeamRun(convId, msgId, {
+        teamId: String(data.team_id ?? ""),
+        teamName: String(data.team_name ?? "Agent team"),
+        headName: String(data.head?.name ?? "Team Leader"),
+        members: (data.members ?? []).map((m) => ({
+          id: String(m?.id ?? ""),
+          name: String(m?.name ?? m?.id ?? ""),
+          description: String(m?.description ?? ""),
+        })),
+        sendMessageToTeamEnabled: data.send_message_to_team_enabled === true,
+      });
+      break;
+    }
+
+    case "team_agent_start":
+      s.startTeamActivation(convId, msgId, {
+        id: String(data.id ?? uid("act")),
+        agentId: String(data.agent_id ?? ""),
+        name: String(data.name ?? data.agent_id ?? ""),
+        role: data.role === "head" ? "head" : "member",
+        trigger: String(data.trigger ?? ""),
+      });
+      break;
+
+    case "team_agent_tool_call":
+      s.upsertTeamAgentTool(convId, msgId, String(data.id ?? ""), {
+        id: String(data.tool_id ?? uid("teamtool")),
+        name: String(data.name ?? "tool"),
+        label: String(data.label ?? data.name ?? "tool"),
+        status: "running",
+        args: (data.args as Record<string, unknown> | undefined) ?? undefined,
+        filePath: (data.args as Record<string, unknown> | undefined)?.file_path as string | undefined,
+      });
+      break;
+
+    case "team_agent_tool_result":
+      s.upsertTeamAgentTool(convId, msgId, String(data.id ?? ""), {
+        id: String(data.tool_id ?? uid("teamtool")),
+        name: String(data.name ?? "tool"),
+        label: String(data.label ?? data.name ?? "tool"),
+        status: data.ok ? "ok" : "error",
+        result: data.result,
+      });
+      ctx.onFilesChanged?.();
+      break;
+
+    case "team_agent_done":
+      s.finishTeamActivation(convId, msgId, String(data.id ?? ""), {
+        status: data.ok ? "ok" : "error",
+        output: data.output != null ? String(data.output) : undefined,
+        error: data.error != null ? String(data.error) : undefined,
+      });
+      break;
+
+    case "team_status":
+      s.setTeamStatus(
+        (data.team_agents ?? []).map((a) => ({
+          id: String(a?.id ?? ""),
+          name: String(a?.name ?? a?.id ?? ""),
+          role: a?.role === "head" ? "head" : "member",
+          status: normalizeTeamStatus(a?.status),
+          queued: typeof a?.queued === "number" ? a.queued : 0,
+        })),
+        typeof data.pending === "number" ? data.pending : 0,
+        typeof data.activations === "number" ? data.activations : 0,
+      );
+      break;
+
+    case "team_message":
+      s.addTeamMessage({
+        id: uid("tmsg"),
+        fromId: String(data.from_id ?? ""),
+        fromName: String(data.from_name ?? data.from_id ?? ""),
+        toId: String(data.to_id ?? ""),
+        toName: String(data.to_name ?? data.to_id ?? ""),
+        kind: data.kind === "task" ? "task" : "message",
+        message: String(data.message ?? ""),
+        at: Date.now(),
+      });
+      break;
+
+    case "team_warning":
+      s.addTeamMessage({
+        id: uid("tmsg"),
+        fromId: "system",
+        fromName: "System",
+        toId: "",
+        toName: "",
+        kind: "message",
+        message: `⚠️ ${String(data.message ?? "Team warning")}`,
+        at: Date.now(),
+      });
+      break;
 
     case "error":
       s.applyAssistantDelta(convId, msgId, {
