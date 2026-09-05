@@ -17,6 +17,7 @@ export const APP_STATE_KEYS = [
   "knowledge",
   "knowledgeSources",
   "customProviders",
+  "agentTeams",
   "currentSessionId",
 ] as const;
 

@@ -6,7 +6,13 @@ export function MessageList({ messages }: { messages: ChatMessage[] }) {
   // A cheap streaming signal: message count + the tail message's size. Avoids scanning the
   // whole conversation on every token.
   const last = messages[messages.length - 1];
-  const signal = `${messages.length}:${last?.content.length ?? 0}:${last?.reasoning?.length ?? 0}:${last?.tools?.length ?? 0}`;
+  const teamSize = last?.teamRuns
+    ? Object.values(last.teamRuns).reduce(
+        (n, r) => n + r.output.length + r.reasoning.length + r.tools.length,
+        0,
+      )
+    : 0;
+  const signal = `${messages.length}:${last?.content.length ?? 0}:${last?.reasoning?.length ?? 0}:${last?.tools?.length ?? 0}:${teamSize}`;
   const { ref, onScroll } = useAutoScroll<HTMLDivElement>(signal);
 
   return (

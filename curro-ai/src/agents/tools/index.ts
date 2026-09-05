@@ -41,6 +41,11 @@ import { deleteSubAgentTool } from "./delete_sub_agent.js";
 import { listSubAgentSessionsTool } from "./list_sub_agent_sessions.js";
 import { reuseSameSubAgentSessionTool } from "./reuse_same_sub_agent_session.js";
 import { deleteSkillTool } from "./delete_skill.js";
+import { teamDelegateTool } from "./team_delegate.js";
+import { teamStatusTool } from "./team_status.js";
+import { teamSendMessageTool } from "./team_send_message.js";
+import { teamListMembersTool } from "./team_list_members.js";
+import { teamMessageLeaderTool } from "./team_message_leader.js";
 
 export { ToolRegistry } from "./registry.js";
 export type {
@@ -61,6 +66,11 @@ export type {
   KnowledgeFile,
   KnowledgeRuntime,
   KnowledgeReadOptions,
+  TeamRuntime,
+  TeamAgentRole,
+  TeamAgentStatus,
+  TeamMemberSummary,
+  TeamMemberStatus,
 } from "./types.js";
 export { defineTool } from "./types.js";
 export { webSearchTool, SEARCH_PROVIDERS } from "./webSearch.js";
@@ -105,6 +115,17 @@ export { deleteSubAgentTool, DELETE_DEFAULT_SUB_AGENT_ERROR } from "./delete_sub
 export { listSubAgentSessionsTool } from "./list_sub_agent_sessions.js";
 export { reuseSameSubAgentSessionTool } from "./reuse_same_sub_agent_session.js";
 export { deleteSkillTool, DELETE_DEFAULT_SKILL_ERROR } from "./delete_skill.js";
+export { teamDelegateTool } from "./team_delegate.js";
+export { teamStatusTool } from "./team_status.js";
+export { teamSendMessageTool } from "./team_send_message.js";
+export { teamListMembersTool } from "./team_list_members.js";
+export { teamMessageLeaderTool } from "./team_message_leader.js";
+export {
+  TEAM_TOOLS,
+  TEAM_HEAD_TOOLS,
+  TEAM_MEMBER_TOOLS,
+  isTeamTool,
+} from "./teamTools.js";
 export type { AttachedFileInfo, AttachFileFailure } from "./attachFiles.js";
 export { shellViewTool } from "./shellView.js";
 export { bashWriteToProcessTool } from "./bashWriteToProcess.js";
@@ -161,6 +182,11 @@ export function createToolRegistry(): ToolRegistry {
     listSubAgentSessionsTool,
     reuseSameSubAgentSessionTool,
     deleteSkillTool,
+    teamDelegateTool,
+    teamStatusTool,
+    teamSendMessageTool,
+    teamListMembersTool,
+    teamMessageLeaderTool,
   ]);
 }
 
@@ -207,4 +233,9 @@ export const tools = {
   listSubAgentSessionsTool,
   reuseSameSubAgentSessionTool,
   deleteSkillTool,
+  teamDelegateTool,
+  teamStatusTool,
+  teamSendMessageTool,
+  teamListMembersTool,
+  teamMessageLeaderTool,
 };

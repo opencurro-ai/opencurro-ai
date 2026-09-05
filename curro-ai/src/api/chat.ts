@@ -12,6 +12,8 @@ import { normalizeMemoryFiles } from "../agents/memory.js";
 import { normalizeKnowledgeFiles } from "../agents/knowledge.js";
 import { initSSE, formatSSE } from "../utils/sse.js";
 import type { CurroDatabase } from "../database/index.js";
+import type { TeamAgentService, TeamRunRequest } from "../agents/multiagent/index.js";
+import type { TeamDefinition } from "../agents/multiagent/types.js";
 
 /** Extract a string field from an untrusted object (used on the custom_provider payload). */
 function str(value: unknown): string {
@@ -65,6 +67,60 @@ interface StreamBody {
   memory?: unknown;
   knowledge?: unknown;
   enable_reuse_sub_agent_session?: unknown;
+  /** When true (and a valid agent_team is supplied) the turn runs the multi-agent team. */
+  agent_team_enabled?: unknown;
+  /** The active multi-agent team definition (head + members). */
+  agent_team?: unknown;
+}
+
+/**
+ * Defensively coerce the client-provided agent-team payload into a safe TeamDefinition. Returns
+ * null when the payload is missing/invalid (no head name, or no members) so the caller falls back
+ * to the normal single-agent flow.
+ */
+function normalizeTeam(raw: unknown): TeamDefinition | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+
+  const headRaw = record.head && typeof record.head === "object" ? (record.head as Record<string, unknown>) : {};
+  const headName = typeof headRaw.name === "string" ? headRaw.name.trim() : "";
+  const headPrompt =
+    typeof headRaw.system_prompt === "string"
+      ? headRaw.system_prompt
+      : typeof headRaw.systemPrompt === "string"
+        ? (headRaw.systemPrompt as string)
+        : "";
+  if (!headName) return null;
+
+  const membersRaw = Array.isArray(record.members) ? record.members : [];
+  const members: TeamDefinition["members"] = [];
+  const seen = new Set<string>();
+  for (const item of membersRaw) {
+    if (!item || typeof item !== "object") continue;
+    const m = item as Record<string, unknown>;
+    const name = typeof m.name === "string" ? m.name.trim() : "";
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (key === headName.toLowerCase() || seen.has(key)) continue;
+    seen.add(key);
+    members.push({
+      name,
+      description: typeof m.description === "string" ? m.description : "",
+      system_prompt:
+        typeof m.system_prompt === "string"
+          ? m.system_prompt
+          : typeof m.systemPrompt === "string"
+            ? (m.systemPrompt as string)
+            : "",
+    });
+  }
+  if (members.length === 0) return null;
+
+  return {
+    name: typeof record.name === "string" && record.name.trim().length > 0 ? record.name.trim() : "Agent team",
+    head: { name: headName, system_prompt: headPrompt },
+    members,
+  };
 }
 
 /** Defensively coerce the client-provided sub-agent definitions into safe, well-typed values. */
@@ -141,6 +197,7 @@ export function buildChatRouter(
   planApprovals: PlanApprovalStore,
   askQuestions: QuestionStore,
   db: CurroDatabase,
+  teamAgent: TeamAgentService,
 ): Router {
   const router = Router();
 
@@ -285,6 +342,55 @@ export function buildChatRouter(
       session.eventBuffer = buffer;
       session.abortController = abortController;
       session.running = true;
+
+      // Multi-agent team mode: when enabled and a valid team is supplied, the user's first message
+      // goes to the team head, which delegates to members. Each agent is a real, independent agent
+      // whose context is preserved across turns. Falls through to the single agent otherwise.
+      const teamEnabled =
+        body.agent_team_enabled === true || body.agent_team_enabled === "yes";
+      const team = teamEnabled ? normalizeTeam(body.agent_team) : null;
+
+      if (team) {
+        const teamRequest: TeamRunRequest = {
+          chatId,
+          userMessage: body.user_message!,
+          team,
+          provider: body.provider!,
+          model: body.model!,
+          apiKey: effectiveApiKey(body),
+          baseUrl: body.base_url,
+          customProvider: body.custom_provider,
+          temperature: sanitizeTemperature(body.temperature),
+          effort: normalizeEffort(body.effort),
+          tavilyApiKey: body.tavily_api_key,
+          exaApiKey: body.exa_api_key,
+          serpapiApiKey: body.serpapi_api_key,
+          searchProvider: body.search_provider,
+          fetchProvider: body.fetch_provider,
+          firecrawlApiKey: body.firecrawl_api_key,
+          skills: normalizeSkills(body.skills),
+          todos: normalizeTodos(body.todos),
+          memory: normalizeMemoryFiles(body.memory),
+          knowledge: normalizeKnowledgeFiles(body.knowledge),
+        };
+
+        void teamAgent
+          .run(teamRequest, session, buffer, abortController.signal)
+          .catch((error) => {
+            buffer.append("error", {
+              code: "team_crashed",
+              message: error instanceof Error ? error.message : String(error),
+            });
+            buffer.setDone();
+            session.running = false;
+          })
+          .finally(() => {
+            settleTurn(chatId, session, buffer);
+          });
+
+        await streamFromBuffer(res, buffer, body.since_event_id ?? -1);
+        return;
+      }
 
       const runRequest: RunAgentRequest = {
         chatId,

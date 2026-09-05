@@ -55,6 +55,15 @@ function multiSubAgentLabel(children: Array<{ run: { agent: string } }>): string
   return `Sub-Agents (${children.length}): ${shown}${extra}`.trim();
 }
 
+/** Map a backend team-agent status string to the live-status union (defaults to "unknown"). */
+function normalizeLiveStatus(
+  raw: unknown,
+): "idle" | "working" | "queued" | "stopped" | "unknown" {
+  return raw === "idle" || raw === "working" || raw === "queued" || raw === "stopped"
+    ? raw
+    : "unknown";
+}
+
 function extractUrl(raw: unknown): string {
   if (!raw || typeof raw !== "object") return "";
   const record = raw as Record<string, unknown>;
@@ -159,6 +168,12 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
       return;
     case "sub_agent_token":
       batcher.subToken(String(data.id ?? ""), String(data.value ?? ""));
+      return;
+    case "team_agent_reasoning":
+      batcher.teamReasoning(String(data.agent_id ?? ""), String(data.value ?? ""));
+      return;
+    case "team_agent_token":
+      batcher.teamToken(String(data.agent_id ?? ""), String(data.value ?? ""));
       return;
   }
 
@@ -398,6 +413,88 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
       else s.finishSubAgent(convId, msgId, String(data.id ?? ""), patch);
       break;
     }
+
+    // ---- Multi-agent team events ----
+    case "team_start": {
+      if (typeof data.team === "string") s.setTeamMeta(convId, msgId, { teamName: data.team });
+      // Pre-create a block per agent in roster order so the UI shows the whole team up front.
+      const roster = Array.isArray(data.team_agents) ? data.team_agents : [];
+      for (const a of roster) {
+        const agentId = String(a?.agent_id ?? "");
+        if (!agentId) continue;
+        s.startTeamAgent(convId, msgId, agentId, {
+          name: String(a?.name ?? agentId),
+          role: a?.role === "head" ? "head" : "member",
+          description: a?.description != null ? String(a.description) : "",
+        });
+        // Reset live status to idle until the agent actually activates.
+        s.setTeamAgentStatus(convId, msgId, agentId, { liveStatus: "idle" });
+      }
+      break;
+    }
+
+    case "team_agent_start":
+      s.startTeamAgent(convId, msgId, String(data.agent_id ?? ""), {
+        name: String(data.name ?? data.agent_id ?? ""),
+        role: data.role === "head" ? "head" : "member",
+        description: data.description != null ? String(data.description) : "",
+      });
+      s.setTeamAgentStatus(convId, msgId, String(data.agent_id ?? ""), { liveStatus: "working" });
+      break;
+
+    case "team_agent_status":
+      s.setTeamAgentStatus(convId, msgId, String(data.agent_id ?? ""), {
+        liveStatus: normalizeLiveStatus(data.status),
+        queued: typeof data.queued_messages === "number" ? data.queued_messages : undefined,
+      });
+      break;
+
+    case "team_agent_message":
+      s.logTeamMessage(convId, msgId, {
+        from: String(data.from ?? ""),
+        fromLabel: String(data.from_label ?? data.from ?? ""),
+        to: String(data.to ?? ""),
+        toLabel: String(data.to_label ?? data.to ?? ""),
+        message: String(data.message ?? ""),
+      });
+      break;
+
+    case "team_agent_tool_call":
+      s.upsertTeamAgentTool(convId, msgId, String(data.agent_id ?? ""), {
+        id: String(data.tool_id ?? uid("teamtool")),
+        name: String(data.name ?? "tool"),
+        label: String(data.label ?? data.name ?? "tool"),
+        status: "running",
+        args: (data.args as Record<string, unknown> | undefined) ?? undefined,
+        filePath: (data.args as Record<string, unknown> | undefined)?.file_path as string | undefined,
+      });
+      break;
+
+    case "team_agent_tool_result":
+      s.upsertTeamAgentTool(convId, msgId, String(data.agent_id ?? ""), {
+        id: String(data.tool_id ?? uid("teamtool")),
+        name: String(data.name ?? "tool"),
+        label: String(data.label ?? data.name ?? "tool"),
+        status: data.ok ? "ok" : "error",
+        result: data.result,
+      });
+      ctx.onFilesChanged?.();
+      break;
+
+    case "team_agent_error":
+      s.finishTeamAgent(convId, msgId, String(data.agent_id ?? ""), {
+        status: "error",
+        error: data.message != null ? String(data.message) : undefined,
+      });
+      break;
+
+    case "team_agent_turn_done":
+      s.finishTeamAgent(convId, msgId, String(data.agent_id ?? ""), {
+        status: data.ok === false ? "error" : "ok",
+        error: data.error != null ? String(data.error) : undefined,
+      });
+      s.setTeamAgentStatus(convId, msgId, String(data.agent_id ?? ""), { liveStatus: "idle" });
+      break;
 
     case "error":
       s.applyAssistantDelta(convId, msgId, {

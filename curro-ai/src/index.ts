@@ -15,6 +15,7 @@ import { buildStateRouter, buildSessionsRouter } from "./api/state.js";
 import { buildToolsRouter } from "./api/tools.js";
 import { buildMemoryAgentRouter } from "./api/memoryagent.js";
 import { MemoryAgentService } from "./agents/memoryagent/index.js";
+import { TeamAgentService } from "./agents/multiagent/index.js";
 import { CurroDatabase } from "./database/index.js";
 
 function main(): void {
@@ -32,6 +33,9 @@ function main(): void {
   // completed main-agent turn, persisting everything into the local SQLite database.
   const memoryAgent = new MemoryAgentService(providers, tools, config, db);
   const agent = new AgentRunner(providers, tools, config, planApprovals, askQuestions, memoryAgent);
+  // The multi-agent collaboration team runtime: a head leader + members that work together,
+  // each a real independent agent with its own context preserved across turns.
+  const teamAgent = new TeamAgentService(providers, tools, config);
 
   const app = express();
   app.use(
@@ -57,7 +61,7 @@ function main(): void {
 
   app.use("/api/providers", buildProviderRouter(providers));
   app.use("/api/tools", buildToolsRouter(tools));
-  app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals, askQuestions, db));
+  app.use("/api/chat", buildChatRouter(agent, store, config, planApprovals, askQuestions, db, teamAgent));
   app.use("/api/files", buildFilesRouter(config));
   app.use("/api/scrape", buildScrapeRouter(config));
   app.use("/api/state", buildStateRouter(db));

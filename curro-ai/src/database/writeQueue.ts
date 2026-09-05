@@ -24,7 +24,14 @@ import type Database from "better-sqlite3";
  */
 
 /** Delta events that may be coalesced into a single row per flush window. */
-const COALESCABLE = new Set(["token", "reasoning", "sub_agent_token", "sub_agent_reasoning"]);
+const COALESCABLE = new Set([
+  "token",
+  "reasoning",
+  "sub_agent_token",
+  "sub_agent_reasoning",
+  "team_agent_token",
+  "team_agent_reasoning",
+]);
 
 const FLUSH_INTERVAL_MS = 200;
 /** Force an immediate (next-tick) flush when this many rows are pending. */
@@ -135,9 +142,15 @@ export class DatabaseWriteQueue {
     if (this.closed) return;
 
     if (COALESCABLE.has(event)) {
-      // Sub-agent deltas coalesce per sub-agent (keyed by the parent tool-call id).
-      const subId = typeof data.id === "string" ? (data.id as string) : "";
-      const key = `${event} ${subId}`;
+      // Sub-agent deltas coalesce per sub-agent (keyed by the parent tool-call id); team-agent
+      // deltas coalesce per team agent (keyed by agent_id). Main-agent deltas share one bucket.
+      const streamId =
+        typeof data.id === "string"
+          ? (data.id as string)
+          : typeof data.agent_id === "string"
+            ? (data.agent_id as string)
+            : "";
+      const key = `${event} ${streamId}`;
       const sessionHeads = this.coalesceHeads.get(sessionId);
       const head = sessionHeads?.get(key);
       const value = typeof data.value === "string" ? (data.value as string) : "";

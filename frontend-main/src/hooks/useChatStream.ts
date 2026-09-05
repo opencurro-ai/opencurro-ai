@@ -8,6 +8,7 @@ import { CUSTOM_PROVIDER_PREFIX, toCustomProviderConfig } from "@/lib/providers"
 import { useStore, type ActiveRun } from "@/store/useStore";
 import { uid } from "@/utils/id";
 import type {
+  BackendAgentTeam,
   BackendMessage,
   BackendSkill,
   BackendSubAgent,
@@ -69,6 +70,26 @@ function buildStartRequest(convId: string, text: string): StreamRequest {
   const memory: MemoryFile[] = store.memory;
   const knowledge: KnowledgeFile[] = store.knowledge;
 
+  // Multi-agent team: when enabled in settings, send the active (enabled) team so the backend
+  // routes the message to the team head instead of the single agent.
+  const teamEnabled = settings.agentTeamEnabled === "yes";
+  const activeTeam = teamEnabled ? store.agentTeams.find((t) => t.enabled) : undefined;
+  const validTeam = activeTeam && activeTeam.members.length > 0 && activeTeam.head.name.trim().length > 0;
+  const agentTeam: BackendAgentTeam | undefined =
+    teamEnabled && validTeam && activeTeam
+      ? {
+          name: activeTeam.name,
+          head: { name: activeTeam.head.name.trim(), system_prompt: activeTeam.head.systemPrompt },
+          members: activeTeam.members
+            .filter((m) => m.name.trim().length > 0)
+            .map((m) => ({
+              name: m.name.trim(),
+              description: m.description,
+              system_prompt: m.systemPrompt,
+            })),
+        }
+      : undefined;
+
   return {
     chat_id: convId,
     user_message: text,
@@ -94,6 +115,8 @@ function buildStartRequest(convId: string, text: string): StreamRequest {
     memory,
     knowledge,
     enable_reuse_sub_agent_session: settings.enableReuseSubAgentSession === "yes" ? "yes" : "no",
+    agent_team_enabled: agentTeam ? "yes" : "no",
+    agent_team: agentTeam,
   };
 }
 

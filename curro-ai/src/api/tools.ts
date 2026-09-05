@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import type { ToolRegistry } from "../agents/tools/registry.js";
 import { isSubAgentRestrictedTool } from "../agents/tools/subAgentRestrictedTools.js";
+import { isTeamTool } from "../agents/tools/teamTools.js";
 
 /** One tool entry advertised to the frontend for sub-agent creation. */
 export interface SubAgentToolInfo {
@@ -23,8 +24,11 @@ export function buildToolsRouter(tools: ToolRegistry): Router {
       description: schema.function.description,
     }));
 
-    // Only the tools a sub-agent is actually allowed to use — the restricted set is removed.
-    const subAgentTools = all.filter((tool) => !isSubAgentRestrictedTool(tool.name));
+    // Only the tools a sub-agent is actually allowed to use — the restricted set and the
+    // multi-agent team tools are removed (team tools are exposed only inside a team).
+    const subAgentTools = all.filter(
+      (tool) => !isSubAgentRestrictedTool(tool.name) && !isTeamTool(tool.name),
+    );
 
     res.json({
       total: all.length,

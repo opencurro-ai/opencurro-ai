@@ -159,6 +159,91 @@ export interface BackendSubAgent {
   enabled: boolean;
 }
 
+/** Role of an agent inside a multi-agent collaboration team. */
+export type TeamAgentRole = "head" | "member";
+
+/** The head/leader definition of a multi-agent team (name + system prompt only). */
+export interface AgentTeamHead {
+  name: string;
+  systemPrompt: string;
+}
+
+/** One member of a multi-agent team (name = agent id, plus a description and system prompt). */
+export interface AgentTeamMember {
+  /** Unique id used as a stable React key and internal identity. */
+  id: string;
+  /** The member's name — also its agent id used to address it. */
+  name: string;
+  description: string;
+  systemPrompt: string;
+}
+
+/**
+ * A user-created multi-agent collaboration team, stored in the backend SQLite database. A team is a
+ * head/leader agent plus a set of member agents that work together. Only one team is active at a
+ * time (`enabled`); the active team receives the user's messages when team mode is on in Settings.
+ */
+export interface AgentTeam {
+  id: string;
+  name: string;
+  head: AgentTeamHead;
+  members: AgentTeamMember[];
+  /** Whether this team is the active team (only one team is active at a time). */
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Team head definition in the backend/wire format sent with each turn. */
+export interface BackendTeamHead {
+  name: string;
+  system_prompt: string;
+}
+
+/** Team member definition in the backend/wire format sent with each turn. */
+export interface BackendTeamMember {
+  name: string;
+  description: string;
+  system_prompt: string;
+}
+
+/** Full team definition in the backend/wire format sent with each turn. */
+export interface BackendAgentTeam {
+  name: string;
+  head: BackendTeamHead;
+  members: BackendTeamMember[];
+}
+
+/**
+ * Live state of one team agent (head or member) inside a running team turn, rendered as its own
+ * block in the chat. Streamed token by token from the backend; every agent gets its own block.
+ */
+export interface TeamAgentRun {
+  agentId: string;
+  name: string;
+  role: TeamAgentRole;
+  description: string;
+  reasoning: string;
+  output: string;
+  tools: ToolActivity[];
+  status: ToolActivityStatus;
+  /** Public lifecycle status for the monitoring panel. */
+  liveStatus?: "idle" | "working" | "queued" | "stopped" | "unknown";
+  /** Number of messages waiting in this agent's inbox (for the monitor). */
+  queued?: number;
+  error?: string;
+}
+
+/** One routed message between team agents, shown in the team monitor. */
+export interface TeamMessageLog {
+  from: string;
+  fromLabel: string;
+  to: string;
+  toLabel: string;
+  message: string;
+  at: number;
+}
+
 /** A single file inside a skill folder — a bare name or a nested path plus its content. */
 export interface SkillFile {
   /** Path relative to the skill folder, e.g. "SKILL.md" or "references/branching.md". */
@@ -206,6 +291,17 @@ export interface ChatMessage {
   tools?: ToolActivity[];
   streaming?: boolean;
   createdAt: number;
+  /**
+   * When this assistant message is a multi-agent TEAM turn, `teamRuns` holds each participating
+   * agent's live block (head + members), keyed by agent id, and `teamOrder` preserves display order.
+   * The message renders as a stack of agent blocks streaming directly in the chat.
+   */
+  teamRuns?: Record<string, TeamAgentRun>;
+  teamOrder?: string[];
+  /** Routed inter-agent messages for this team turn (shown in the team monitor). */
+  teamMessages?: TeamMessageLog[];
+  /** The team's display name, when this is a team turn. */
+  teamName?: string;
 }
 
 export interface Conversation {
@@ -479,6 +575,11 @@ export interface Settings {
    */
   enableReuseSubAgentSession: "no" | "yes";
   /**
+   * Whether multi-agent collaboration teams are enabled. "no" (default) runs the normal single
+   * agent; "yes" routes the user's messages to the active team's head leader when a team is active.
+   */
+  agentTeamEnabled: "no" | "yes";
+  /**
    * Reasoning effort forwarded to the model. One of the presets
    * ("low" | "medium" | "high" | "max") or a custom string the model supports.
    * Defaults to "high"; models without reasoning support ignore it.
@@ -529,6 +630,10 @@ export interface StreamRequest {
   knowledge?: KnowledgeFile[];
   /** Mirrors settings.enableReuseSubAgentSession; gates the sub-agent session tools this turn. */
   enable_reuse_sub_agent_session?: "no" | "yes";
+  /** When "yes" (and agent_team is present) the turn runs the multi-agent team. */
+  agent_team_enabled?: "no" | "yes";
+  /** The active multi-agent team definition (head + members) sent with the turn. */
+  agent_team?: BackendAgentTeam;
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */
@@ -608,6 +713,28 @@ export interface SSEEventData {
   queued_remaining?: number;
   /** True when a replayed run was interrupted (e.g. backend restart) before finishing. */
   interrupted?: boolean;
+  // ---- Multi-agent team fields ----
+  /** The team name (team_start). */
+  team?: string;
+  /** The head agent id (team_start). */
+  head_agent_id?: string;
+  /** The team agent this event belongs to (team_agent_* events). */
+  agent_id?: string;
+  /** The agent's role (team_start roster / team_agent_start). */
+  role?: TeamAgentRole;
+  /** The agent's short description (team_start roster / team_agent_start). */
+  description?: string;
+  /** Public lifecycle status (team_agent_status). */
+  status?: string;
+  /** Number of queued inbox messages (team_agent_status). */
+  queued_messages?: number;
+  /** The roster of team agents (team_start). */
+  team_agents?: Array<{ agent_id?: string; name?: string; role?: TeamAgentRole; description?: string }>;
+  /** Routed message fields (team_agent_message). */
+  from?: string;
+  from_label?: string;
+  to?: string;
+  to_label?: string;
 }
 
 /** Lifecycle states of a background memory-agent run. */

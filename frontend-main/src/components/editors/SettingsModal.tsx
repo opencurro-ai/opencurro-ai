@@ -329,6 +329,25 @@ export function SettingsModal() {
             </p>
           </section>
 
+          {/* Multi-agent teams */}
+          <section className="space-y-3 border-t border-[var(--border)] pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Multi-agent teams</h3>
+            <Field label="Agent team mode">
+              <Select
+                value={settings.agentTeamEnabled ?? "no"}
+                onChange={(e) => setSettings({ agentTeamEnabled: e.target.value === "yes" ? "yes" : "no" })}
+              >
+                <option value="no">No — disabled (single agent)</option>
+                <option value="yes">Yes — enabled (use the active team)</option>
+              </Select>
+            </Field>
+            <p className="text-xs text-[var(--muted)]">
+              When enabled, your messages are handled by the active team's head leader, who delegates
+              work to the team members and reports back. Create and select teams on the{" "}
+              <strong>Agent teams</strong> page in the sidebar. Disabled by default.
+            </p>
+          </section>
+
           {/* Custom providers */}
           <section className="space-y-3 border-t border-[var(--border)] pt-5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Custom providers</h3>

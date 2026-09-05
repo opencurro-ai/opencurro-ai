@@ -7,6 +7,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { MemoryPanel } from "@/components/panels/MemoryPanel";
 import { KnowledgePanel } from "@/components/panels/KnowledgePanel";
 import { AgentsPanel } from "@/components/panels/AgentsPanel";
+import { AgentTeamsPanel } from "@/components/panels/AgentTeamsPanel";
 import { SkillsPanel } from "@/components/panels/SkillsPanel";
 import { SettingsModal } from "@/components/editors/SettingsModal";
 import { TodoPanel } from "@/components/overlays/TodoPanel";
@@ -90,6 +91,7 @@ export function App() {
               {section === "memory" && <MemoryPanel />}
               {section === "knowledge" && <KnowledgePanel />}
               {section === "agents" && <AgentsPanel />}
+              {section === "teams" && <AgentTeamsPanel />}
               {section === "skills" && <SkillsPanel />}
             </div>
           )}

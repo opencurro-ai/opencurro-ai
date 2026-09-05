@@ -6,6 +6,7 @@ import { ToolChip } from "./ToolChip";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { SubmitPlanBlock } from "./SubmitPlanBlock";
 import { AskQuestionBlock } from "./AskQuestionBlock";
+import { TeamRunView } from "./TeamRunView";
 
 function MessageItemImpl({ message }: { message: ChatMessage }) {
   const [showReasoning, setShowReasoning] = useState(false);
@@ -15,6 +16,31 @@ function MessageItemImpl({ message }: { message: ChatMessage }) {
       <div className="flex justify-end fade-in">
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-[var(--radius-lg)] rounded-br-md bg-[var(--secondary)] px-4 py-2.5 text-sm leading-relaxed text-[var(--secondary-fg)]">
           {message.content}
+        </div>
+      </div>
+    );
+  }
+
+  // Multi-agent team turn: render each agent's block streaming directly in the chat.
+  const isTeamTurn = Boolean(message.teamOrder && message.teamOrder.length > 0);
+  if (isTeamTurn) {
+    return (
+      <div className="flex gap-3 fade-in">
+        <div
+          className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--secondary)] text-[var(--secondary-fg)]"
+          aria-hidden
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="7.25" stroke="currentColor" strokeWidth="1.9" />
+          </svg>
+        </div>
+        <div className="min-w-0 flex-1 space-y-3">
+          <TeamRunView message={message} />
+          {message.content.trim().length > 0 && (
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--danger)]">
+              {message.content}
+            </div>
+          )}
         </div>
       </div>
     );

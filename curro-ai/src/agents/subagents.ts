@@ -23,6 +23,7 @@ import { createSubAgentSessionId, isSafeSessionId } from "../database/ids.js";
 import { subAgentSessionStore, type SubAgentSessionStatus } from "./subAgentSessionStore.js";
 import type { OpenAIToolSchema } from "./tools/registry.js";
 import { SUB_AGENT_RESTRICTED_TOOLS } from "./tools/subAgentRestrictedTools.js";
+import { isTeamTool } from "./tools/teamTools.js";
 
 /**
  * Tools a sub-agent may never use. This is the single canonical restricted set
@@ -721,7 +722,8 @@ class SubAgentRunner {
     const { tools } = this.deps;
     const allowed = new Set(
       (definition.tools ?? []).filter(
-        (name) => tools.has(name) && !SUB_AGENT_EXCLUDED_TOOLS.includes(name),
+        (name) =>
+          tools.has(name) && !SUB_AGENT_EXCLUDED_TOOLS.includes(name) && !isTeamTool(name),
       ),
     );
     return { allowed, toolSchemas: tools.schemasFor(allowed) };

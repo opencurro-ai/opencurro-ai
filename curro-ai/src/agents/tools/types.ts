@@ -274,6 +274,77 @@ export interface KnowledgeRuntime {
   remove(path: string, ctx: ToolContext): ToolResult;
 }
 
+/**
+ * The role an agent plays inside a multi-agent collaboration team. The `head` is the single
+ * team leader that receives the user's request, delegates work, and reviews results. `member`
+ * agents are the specialists that execute delegated work and report back.
+ */
+export type TeamAgentRole = "head" | "member";
+
+/** One team member surfaced to an agent by list_agent_team_members (name + description only). */
+export interface TeamMemberSummary {
+  /** The member's exact agent id (its name) used to address it in messages. */
+  agent_id: string;
+  /** The member's display name (identical to agent_id). */
+  name: string;
+  /** Short human description of the member's specialization. */
+  description: string;
+  /** The member's role in the team. */
+  role: TeamAgentRole;
+}
+
+/** Current lifecycle status of a team agent, as reported by get_team_members_status. */
+export type TeamAgentStatus = "idle" | "working" | "queued" | "stopped" | "unknown";
+
+/** One agent's status entry returned by get_team_members_status. */
+export interface TeamMemberStatus {
+  agent_id: string;
+  name: string;
+  role: TeamAgentRole;
+  status: TeamAgentStatus;
+  /** Number of messages currently waiting in this agent's inbox. */
+  queued_messages: number;
+}
+
+/**
+ * Runtime bridge injected into the ToolContext for a multi-agent team turn so the five team
+ * collaboration tools (delegate_task_or_send_message, get_team_members_status,
+ * send_message_to_team, list_agent_team_members, message_team_leader) can route messages between
+ * the team head and the team members WITHOUT ever creating a new agent session — every message is
+ * delivered into the target agent's existing, context-preserving conversation. Absent from the
+ * single-agent tool context (so a normal agent never sees these tools) and from sub-agent contexts.
+ */
+export interface TeamRuntime {
+  /** The head agent's id (its name). */
+  readonly headAgentId: string;
+  /** Every team member (excludes the head) — name + description + role. */
+  listMembers(): TeamMemberSummary[];
+  /** Status of the given agent ids (unknown ids are reported with status "unknown"). */
+  status(agentIds: string[]): TeamMemberStatus[];
+  /**
+   * Head-only: deliver one or more messages/tasks to team members. Each message is queued into the
+   * target member's own conversation and the member is activated to work on it (reusing its
+   * existing context). Returns immediately — members report back asynchronously.
+   */
+  delegate(
+    fromAgentId: string,
+    messages: Array<{ agent_id: string; message: string }>,
+  ): ToolResult;
+  /**
+   * Member/head: send messages to other team members (agent-to-agent communication). Each message
+   * is delivered into the recipient's existing conversation. Returns immediately.
+   */
+  sendToTeam(
+    fromAgentId: string,
+    recipients: Array<{ agent_id: string; message: string }>,
+  ): ToolResult;
+  /**
+   * Member-only: send a message (task completion report, progress update, question, …) to the team
+   * head. Delivered into the head's existing conversation. Returns immediately.
+   */
+  messageLeader(fromAgentId: string, myName: string, message: string): ToolResult;
+}
+
 /** Status a todo can be in. */
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
@@ -388,6 +459,17 @@ export interface ToolContext {
   /** Todo runtime — present only for main-agent tool calls, never for sub-agent tool calls
    * (the todo tools are restricted from sub-agents). */
   todos?: TodoRuntime;
+  /**
+   * Multi-agent team runtime — present ONLY for the tool calls of an agent participating in a
+   * multi-agent collaboration team (the head or a member). It backs the five team collaboration
+   * tools. Absent for the normal single agent and for sub-agents.
+   */
+  team?: TeamRuntime;
+  /**
+   * The id (name) of the team agent currently executing this tool call. Present only alongside
+   * `team`; used by the team tools to know who is sending a message (e.g. member-to-member routing).
+   */
+  teamAgentId?: string;
   /** Memory runtime — present for main-agent tool calls and forwarded to sub-agent tool calls so a
    * sub-agent granted the memory_* tools can read/maintain the shared memory base. */
   memory?: MemoryRuntime;
