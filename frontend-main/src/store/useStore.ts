@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AgentTeam,
   AskQuestionInfo,
   AskQuestionStatus,
   AttachedFile,
@@ -22,6 +23,9 @@ import type {
   Skill,
   SubAgent,
   SubAgentRun,
+  TeamAgentStatus,
+  TeamLiveState,
+  TeamMessageLogEntry,
   TodoItem,
   ToolActivity,
 } from "@/types";
@@ -37,9 +41,10 @@ import {
   mergeMemoryWithDefaults,
 } from "@/lib/defaultMemory";
 import { hasUnsafeSegment, normalizeKnowledgePath, sanitizeKnowledge } from "@/lib/defaultKnowledge";
+import { DEFAULT_TEAMS, DEFAULT_TEAM_ID, mergeTeamsWithDefaults } from "@/lib/defaultTeams";
 
-/** The five workspace sections the rail switches between. */
-export type Section = "chat" | "memory" | "knowledge" | "agents" | "skills";
+/** The workspace sections the rail switches between. */
+export type Section = "chat" | "memory" | "knowledge" | "agents" | "skills" | "teams";
 
 /** Connection state surfaced to the user. Slow ≠ offline; only a lost connection is "offline". */
 export type Connection = "online" | "reconnecting" | "offline";
@@ -75,6 +80,7 @@ interface AppState {
   knowledge: KnowledgeFile[];
   knowledgeSources: Record<string, KnowledgeSource>;
   customProviders: CustomProvider[];
+  agentTeams: AgentTeam[];
   activeRun: ActiveRun | null;
 
   // Ephemeral UI
@@ -92,6 +98,10 @@ interface AppState {
   filesVersion: number;
   preview: BrowserPreview;
   attachedFiles: AttachedFile[];
+
+  // Multi-agent team (ephemeral live view of the active team run)
+  teamMonitorOpen: boolean;
+  teamLive: TeamLiveState | null;
 
   // Background memory agent (all data lives in the backend SQLite database; this is
   // purely the ephemeral view used to WATCH the agent's stream + sessions).
@@ -207,6 +217,49 @@ interface AppState {
     patch: { status: SubAgentRun["status"]; output?: string; error?: string },
   ) => void;
 
+  // Multi-agent team management
+  addTeam: (input: Omit<AgentTeam, "id" | "createdAt" | "updatedAt">) => string;
+  updateTeam: (id: string, patch: Partial<Omit<AgentTeam, "id" | "createdAt">>) => void;
+  deleteTeam: (id: string) => void;
+  /** Toggle a team on/off. Enabling a team makes it the single active team (radio behaviour). */
+  toggleTeam: (id: string) => void;
+  /** Select the active team (also enables it and disables the others). */
+  setActiveTeam: (id: string) => void;
+  setTeamMonitorOpen: (v: boolean) => void;
+
+  // Multi-agent live run (driven by the SSE stream)
+  teamRunStart: (
+    convId: string,
+    meta: {
+      teamId: string;
+      teamName: string;
+      leaderName: string;
+      members: Array<{ agent_id: string; name: string; description: string }>;
+      messagingEnabled: boolean;
+      placeholderMsgId: string | null;
+    },
+  ) => void;
+  teamAgentStart: (convId: string, agentId: string, name: string, role: "head" | "member") => void;
+  applyTeamAgentDelta: (
+    convId: string,
+    agentId: string,
+    delta: { contentDelta?: string; reasoningDelta?: string },
+  ) => void;
+  upsertTeamAgentTool: (convId: string, agentId: string, tool: ToolActivity) => void;
+  teamAgentMessage: (convId: string, agentId: string, content: string) => void;
+  teamAgentDone: (convId: string, agentId: string, ok: boolean) => void;
+  teamAgentStatus: (
+    convId: string,
+    agentId: string,
+    name: string,
+    role: "head" | "member",
+    status: TeamAgentStatus,
+    queued: number,
+  ) => void;
+  teamAddMessage: (entry: TeamMessageLogEntry) => void;
+  teamAddNotice: (notice: { level: string; message: string }) => void;
+  teamRunEnd: (convId: string) => void;
+
   // Sub-agent management
   addSubAgent: (input: Omit<SubAgent, "id" | "createdAt" | "updatedAt">) => void;
   updateSubAgent: (id: string, patch: Partial<Omit<SubAgent, "id" | "createdAt">>) => void;
@@ -289,6 +342,9 @@ const defaultSettings: Settings = {
   enableReuseSubAgentSession: "no",
   effort: "high",
   temperature: 0.6,
+  multiAgentEnabled: false,
+  enableTeamMessaging: false,
+  activeTeamId: DEFAULT_TEAM_ID,
 };
 
 function touch(conv: Conversation): Conversation {
@@ -388,7 +444,11 @@ export const useStore = create<AppState>()(
       knowledge: [],
       knowledgeSources: {},
       customProviders: [],
+      agentTeams: DEFAULT_TEAMS.map((t) => ({ ...t, members: t.members.map((m) => ({ ...m })) })),
       activeRun: null,
+
+      teamMonitorOpen: false,
+      teamLive: null,
 
       hydrated: false,
       section: "chat",
@@ -449,6 +509,11 @@ export const useStore = create<AppState>()(
               ? (p.knowledgeSources as Record<string, KnowledgeSource>)
               : s.knowledgeSources,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : s.customProviders,
+          agentTeams: mergeTeamsWithDefaults(
+            Array.isArray((p as { agentTeams?: unknown }).agentTeams)
+              ? ((p as { agentTeams?: AgentTeam[] }).agentTeams as AgentTeam[])
+              : s.agentTeams,
+          ),
         }));
       },
 
@@ -862,6 +927,289 @@ export const useStore = create<AppState>()(
             () => emptyRun({ agent: "", task: "" }),
           ),
         })),
+
+      // ---- Multi-agent team management ------------------------------------------
+      addTeam: (input) => {
+        const now = Date.now();
+        const id = uid("team");
+        const team: AgentTeam = { id, createdAt: now, updatedAt: now, ...input };
+        set((s) => {
+          // A newly-enabled team becomes the single active team.
+          const agentTeams = team.enabled
+            ? [team, ...s.agentTeams].map((t) => (t.id === id ? t : { ...t, enabled: false }))
+            : [team, ...s.agentTeams];
+          const settings = team.enabled ? { ...s.settings, activeTeamId: id } : s.settings;
+          return { agentTeams, settings };
+        });
+        return id;
+      },
+
+      updateTeam: (id, patch) =>
+        set((s) => ({
+          agentTeams: s.agentTeams.map((t) =>
+            t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t,
+          ),
+        })),
+
+      deleteTeam: (id) =>
+        set((s) => {
+          const agentTeams = s.agentTeams.filter((t) => t.id !== id);
+          let settings = s.settings;
+          if (s.settings.activeTeamId === id) {
+            const nextActive = agentTeams.find((t) => t.enabled) ?? agentTeams[0];
+            settings = { ...s.settings, activeTeamId: nextActive?.id ?? "" };
+          }
+          return { agentTeams, settings };
+        }),
+
+      toggleTeam: (id) =>
+        set((s) => {
+          const target = s.agentTeams.find((t) => t.id === id);
+          if (!target) return {};
+          const enabling = !target.enabled;
+          const now = Date.now();
+          // Enabling a team makes it the single active team; disabling clears the active id if it was.
+          const agentTeams = s.agentTeams.map((t) => {
+            if (t.id === id) return { ...t, enabled: enabling, updatedAt: now };
+            return enabling ? { ...t, enabled: false } : t;
+          });
+          const settings = enabling
+            ? { ...s.settings, activeTeamId: id }
+            : s.settings.activeTeamId === id
+              ? { ...s.settings, activeTeamId: "" }
+              : s.settings;
+          return { agentTeams, settings };
+        }),
+
+      setActiveTeam: (id) =>
+        set((s) => ({
+          agentTeams: s.agentTeams.map((t) => ({ ...t, enabled: t.id === id })),
+          settings: { ...s.settings, activeTeamId: id },
+        })),
+
+      setTeamMonitorOpen: (teamMonitorOpen) => set({ teamMonitorOpen }),
+
+      // ---- Multi-agent live run --------------------------------------------------
+      teamRunStart: (convId, meta) =>
+        set(() => ({
+          teamLive: {
+            convId,
+            teamId: meta.teamId,
+            teamName: meta.teamName,
+            leaderName: meta.leaderName,
+            members: meta.members,
+            messagingEnabled: meta.messagingEnabled,
+            agents: {},
+            order: [],
+            messages: [],
+            notices: [],
+            active: true,
+            placeholderMsgId: meta.placeholderMsgId,
+            totalMessages: 0,
+          },
+        })),
+
+      teamAgentStart: (convId, agentId, name, role) =>
+        set((s) => {
+          const live = s.teamLive;
+          if (!live || live.convId !== convId) return {};
+          let msgId: string;
+          let conversations = s.conversations;
+          if (live.placeholderMsgId) {
+            // Reuse the initial assistant placeholder for the first agent (the head).
+            msgId = live.placeholderMsgId;
+            conversations = conversations.map((c) =>
+              c.id === convId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === msgId ? { ...m, teamAgent: { id: agentId, name, role }, streaming: true } : m,
+                    ),
+                  }
+                : c,
+            );
+          } else {
+            msgId = uid("msg");
+            const message: ChatMessage = {
+              id: msgId,
+              role: "assistant",
+              content: "",
+              reasoning: "",
+              tools: [],
+              streaming: true,
+              createdAt: Date.now(),
+              teamAgent: { id: agentId, name, role },
+            };
+            conversations = conversations.map((c) =>
+              c.id === convId ? touch({ ...c, messages: [...c.messages, message] }) : c,
+            );
+          }
+          const prev = live.agents[agentId];
+          const agents = {
+            ...live.agents,
+            [agentId]: {
+              id: agentId,
+              name,
+              role,
+              status: "working" as const,
+              queued: 0,
+              currentMsgId: msgId,
+              runs: (prev?.runs ?? 0) + 1,
+            },
+          };
+          const order = live.order.includes(agentId) ? live.order : [...live.order, agentId];
+          return {
+            conversations,
+            teamLive: { ...live, agents, order, placeholderMsgId: null },
+          };
+        }),
+
+      applyTeamAgentDelta: (convId, agentId, delta) =>
+        set((s) => {
+          const live = s.teamLive;
+          const msgId = live?.agents[agentId]?.currentMsgId;
+          if (!live || !msgId || (!delta.contentDelta && !delta.reasoningDelta)) return {};
+          return {
+            conversations: s.conversations.map((c) =>
+              c.id === convId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === msgId
+                        ? {
+                            ...m,
+                            content: delta.contentDelta ? m.content + delta.contentDelta : m.content,
+                            reasoning: delta.reasoningDelta
+                              ? (m.reasoning ?? "") + delta.reasoningDelta
+                              : m.reasoning,
+                          }
+                        : m,
+                    ),
+                  }
+                : c,
+            ),
+          };
+        }),
+
+      upsertTeamAgentTool: (convId, agentId, tool) =>
+        set((s) => {
+          const live = s.teamLive;
+          const msgId = live?.agents[agentId]?.currentMsgId;
+          if (!live || !msgId) return {};
+          return {
+            conversations: s.conversations.map((c) =>
+              c.id === convId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) => {
+                      if (m.id !== msgId) return m;
+                      const tools = m.tools ? [...m.tools] : [];
+                      const idx = tools.findIndex((t) => t.id === tool.id);
+                      if (idx === -1) tools.push(tool);
+                      else tools[idx] = { ...tools[idx], ...tool };
+                      return { ...m, tools };
+                    }),
+                  }
+                : c,
+            ),
+          };
+        }),
+
+      teamAgentMessage: (convId, agentId, content) =>
+        set((s) => {
+          const live = s.teamLive;
+          const msgId = live?.agents[agentId]?.currentMsgId;
+          if (!live || !msgId || !content) return {};
+          // Only fill from the final message when nothing streamed (some models emit no token deltas).
+          return {
+            conversations: s.conversations.map((c) =>
+              c.id === convId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === msgId && m.content.trim().length === 0 ? { ...m, content } : m,
+                    ),
+                  }
+                : c,
+            ),
+          };
+        }),
+
+      teamAgentDone: (convId, agentId, ok) =>
+        set((s) => {
+          const live = s.teamLive;
+          const agent = live?.agents[agentId];
+          if (!live || !agent) return {};
+          const msgId = agent.currentMsgId;
+          const conversations = msgId
+            ? s.conversations.map((c) =>
+                c.id === convId
+                  ? {
+                      ...c,
+                      messages: c.messages.map((m) => (m.id === msgId ? { ...m, streaming: false } : m)),
+                    }
+                  : c,
+              )
+            : s.conversations;
+          const agents = {
+            ...live.agents,
+            [agentId]: { ...agent, status: (ok ? "done" : "failed") as TeamAgentStatus },
+          };
+          return { conversations, teamLive: { ...live, agents } };
+        }),
+
+      teamAgentStatus: (convId, agentId, name, role, status, queued) =>
+        set((s) => {
+          const live = s.teamLive;
+          if (!live || live.convId !== convId) return {};
+          const prev = live.agents[agentId];
+          const agents = {
+            ...live.agents,
+            [agentId]: {
+              id: agentId,
+              name,
+              role,
+              currentMsgId: prev?.currentMsgId ?? null,
+              runs: prev?.runs ?? 0,
+              status,
+              queued,
+            },
+          };
+          const order = live.order.includes(agentId) ? live.order : [...live.order, agentId];
+          return { teamLive: { ...live, agents, order } };
+        }),
+
+      teamAddMessage: (entry) =>
+        set((s) => {
+          if (!s.teamLive) return {};
+          // Bound the log so a very chatty run never grows the store unboundedly.
+          const messages = [...s.teamLive.messages, entry].slice(-500);
+          return {
+            teamLive: {
+              ...s.teamLive,
+              messages,
+              totalMessages: s.teamLive.totalMessages + 1,
+            },
+          };
+        }),
+
+      teamAddNotice: (notice) =>
+        set((s) => (s.teamLive ? { teamLive: { ...s.teamLive, notices: [...s.teamLive.notices, notice] } } : {})),
+
+      teamRunEnd: (convId) =>
+        set((s) => {
+          const live = s.teamLive;
+          if (!live || live.convId !== convId) return {};
+          const agents = Object.fromEntries(
+            Object.entries(live.agents).map(([id, a]) => [
+              id,
+              a.status === "working" || a.status === "queued"
+                ? { ...a, status: "idle" as TeamAgentStatus, queued: 0 }
+                : a,
+            ]),
+          );
+          return { teamLive: { ...live, active: false, agents } };
+        }),
 
       addSubAgent: (input) =>
         set((s) => {

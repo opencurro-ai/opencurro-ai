@@ -44,6 +44,24 @@ function MessageItemImpl({ message }: { message: ChatMessage }) {
       </div>
 
       <div className="min-w-0 flex-1 space-y-2.5">
+        {message.teamAgent && (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-2.5 py-1 text-xs font-medium text-[var(--fg)]">
+              {message.teamAgent.name}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                  message.teamAgent.role === "head"
+                    ? "bg-[var(--secondary)] text-[var(--secondary-fg)]"
+                    : "border border-[var(--border)] text-[var(--muted)]",
+                )}
+              >
+                {message.teamAgent.role === "head" ? "Leader" : "Member"}
+              </span>
+            </span>
+          </div>
+        )}
+
         {message.reasoning && message.reasoning.trim().length > 0 && (
           <div className="overflow-hidden rounded-[var(--radius-md)] bg-[var(--chip)]">
             <button

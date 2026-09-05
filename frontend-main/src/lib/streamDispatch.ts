@@ -160,6 +160,12 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
     case "sub_agent_token":
       batcher.subToken(String(data.id ?? ""), String(data.value ?? ""));
       return;
+    case "agent_reasoning":
+      batcher.teamReasoning(String(data.agent_id ?? ""), String(data.value ?? ""));
+      return;
+    case "agent_token":
+      batcher.teamToken(String(data.agent_id ?? ""), String(data.value ?? ""));
+      return;
   }
 
   // Non-delta event → make sure buffered text lands first.
@@ -399,6 +405,100 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
       break;
     }
 
+    // ---- Multi-agent team events ----
+    case "team_run_start": {
+      const members = Array.isArray(data.members)
+        ? data.members.map((m) => ({
+            agent_id: String(m?.agent_id ?? m?.name ?? ""),
+            name: String(m?.name ?? m?.agent_id ?? ""),
+            description: String(m?.description ?? ""),
+          }))
+        : [];
+      s.teamRunStart(convId, {
+        teamId: String(data.team_id ?? ""),
+        teamName: String(data.team_name ?? "Agent team"),
+        leaderName: String(data.leader?.name ?? data.leader?.agent_id ?? "Leader"),
+        members,
+        messagingEnabled: data.messaging_enabled === true,
+        placeholderMsgId: msgId,
+      });
+      break;
+    }
+
+    case "agent_start":
+      s.teamAgentStart(
+        convId,
+        String(data.agent_id ?? ""),
+        String(data.name ?? data.agent_id ?? ""),
+        data.role === "head" ? "head" : "member",
+      );
+      break;
+
+    case "agent_tool_call":
+      s.upsertTeamAgentTool(convId, String(data.agent_id ?? ""), {
+        id: String(data.tool_id ?? uid("tool")),
+        name: String(data.name ?? "tool"),
+        label: String(data.label ?? data.name ?? "tool"),
+        status: "running",
+        args: (data.args as Record<string, unknown> | undefined) ?? undefined,
+        filePath: (data.args as Record<string, unknown> | undefined)?.file_path as string | undefined,
+      });
+      break;
+
+    case "agent_tool_result":
+      s.upsertTeamAgentTool(convId, String(data.agent_id ?? ""), {
+        id: String(data.tool_id ?? uid("tool")),
+        name: String(data.name ?? "tool"),
+        label: String(data.label ?? data.name ?? "tool"),
+        status: data.ok ? "ok" : "error",
+        result: data.result,
+      });
+      ctx.onFilesChanged?.();
+      break;
+
+    case "agent_message":
+      s.teamAgentMessage(convId, String(data.agent_id ?? ""), String(data.content ?? ""));
+      break;
+
+    case "agent_done":
+      s.teamAgentDone(convId, String(data.agent_id ?? ""), Boolean(data.ok));
+      break;
+
+    case "agent_status":
+      s.teamAgentStatus(
+        convId,
+        String(data.agent_id ?? ""),
+        String(data.name ?? data.agent_id ?? ""),
+        data.role === "head" ? "head" : "member",
+        normalizeTeamStatus(data.status),
+        typeof data.queued_messages === "number" ? data.queued_messages : 0,
+      );
+      break;
+
+    case "team_message":
+      s.teamAddMessage({
+        id: String(data.id ?? uid("tm")),
+        fromId: String(data.from_id ?? ""),
+        fromName: String(data.from_name ?? data.from_id ?? ""),
+        fromRole: data.from_role === "head" ? "head" : "member",
+        toId: String(data.to_id ?? ""),
+        toRole: data.to_role === "head" ? "head" : "member",
+        kind:
+          data.kind === "delegate" || data.kind === "report" || data.kind === "user"
+            ? data.kind
+            : "team_message",
+        message: String(data.message ?? ""),
+      });
+      break;
+
+    case "team_notice":
+      s.teamAddNotice({ level: String(data.level ?? "info"), message: String(data.message ?? "") });
+      break;
+
+    case "team_done":
+      s.teamRunEnd(convId);
+      break;
+
     case "error":
       s.applyAssistantDelta(convId, msgId, {
         contentDelta: `\n\n⚠️ ${String(data.message ?? "Agent error")}`,
@@ -407,5 +507,21 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
 
     default:
       break;
+  }
+}
+
+/** Coerce an untrusted team status string into a known TeamAgentStatus. */
+function normalizeTeamStatus(
+  status: unknown,
+): "idle" | "queued" | "working" | "done" | "failed" | "unknown" {
+  switch (status) {
+    case "idle":
+    case "queued":
+    case "working":
+    case "done":
+    case "failed":
+      return status;
+    default:
+      return "unknown";
   }
 }

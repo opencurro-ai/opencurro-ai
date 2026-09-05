@@ -32,6 +32,7 @@ const SYNC_KEYS = [
   "knowledge",
   "knowledgeSources",
   "customProviders",
+  "agentTeams",
 ] as const;
 
 type SyncKey = (typeof SYNC_KEYS)[number];

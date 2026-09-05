@@ -5,7 +5,7 @@ import { fetchModels, fetchProviders } from "@/lib/api";
 import { FALLBACK_PROVIDERS, isCustomProviderId } from "@/lib/providers";
 import { EFFORT_PRESETS, type CustomHeader, type CustomProvider } from "@/types";
 import { Modal } from "@/components/ui/Modal";
-import { Button, Field, Select, TextInput } from "@/components/ui/primitives";
+import { Button, Field, Select, TextInput, Toggle } from "@/components/ui/primitives";
 import { cn } from "@/utils/cn";
 
 export function SettingsModal() {
@@ -16,6 +16,9 @@ export function SettingsModal() {
   const modelsLoading = useStore((s) => s.modelsLoading);
   const settings = useStore((s) => s.settings);
   const customProviders = useStore((s) => s.customProviders);
+  const agentTeams = useStore((s) => s.agentTeams);
+  const setActiveTeam = useStore((s) => s.setActiveTeam);
+  const setSection = useStore((s) => s.setSection);
   const setProviders = useStore((s) => s.setProviders);
   const setModels = useStore((s) => s.setModels);
   const setModelsLoading = useStore((s) => s.setModelsLoading);
@@ -327,6 +330,69 @@ export function SettingsModal() {
               them with their preserved conversation context (list_sub_agent_sessions /
               reuse_same_sub_agent_session). When disabled, both tools are hidden from the agent.
             </p>
+          </section>
+
+          {/* Multi-agent team */}
+          <section className="space-y-3 border-t border-[var(--border)] pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Multi-agent team</h3>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--fg)]">Enable multi-agent team</p>
+                <p className="text-xs text-[var(--muted)]">
+                  When on, your message is handled by a team of agents — a head/leader that delegates
+                  and reviews, plus specialist members that collaborate. Off = the normal single agent.
+                </p>
+              </div>
+              <Toggle
+                checked={settings.multiAgentEnabled === true}
+                onChange={(v) => setSettings({ multiAgentEnabled: v })}
+                label="Enable multi-agent team"
+              />
+            </div>
+
+            {settings.multiAgentEnabled && (
+              <>
+                <Field label="Active team">
+                  <Select
+                    value={settings.activeTeamId}
+                    onChange={(e) => setActiveTeam(e.target.value)}
+                  >
+                    {agentTeams.length === 0 && <option value="">No teams — create one</option>}
+                    {agentTeams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} · {t.members.length} member{t.members.length === 1 ? "" : "s"}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[var(--fg)]">Agent-to-agent messaging</p>
+                    <p className="text-xs text-[var(--muted)]">
+                      Lets members message each other directly (send_message_to_team). Sensitive —
+                      default off. When off, members communicate only with the leader.
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={settings.enableTeamMessaging === true}
+                    onChange={(v) => setSettings({ enableTeamMessaging: v })}
+                    label="Agent-to-agent messaging"
+                  />
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setOpen(false);
+                    setSection("teams");
+                  }}
+                >
+                  Manage teams →
+                </Button>
+              </>
+            )}
           </section>
 
           {/* Custom providers */}

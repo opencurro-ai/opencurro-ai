@@ -5,6 +5,7 @@ import { StreamBatcher } from "@/lib/streamBatcher";
 import { dispatchStreamEvent } from "@/lib/streamDispatch";
 import { attachLatestMemoryAgentRun } from "@/lib/memoryAgent";
 import { CUSTOM_PROVIDER_PREFIX, toCustomProviderConfig } from "@/lib/providers";
+import { toBackendTeam } from "@/lib/defaultTeams";
 import { useStore, type ActiveRun } from "@/store/useStore";
 import { uid } from "@/utils/id";
 import type {
@@ -69,6 +70,12 @@ function buildStartRequest(convId: string, text: string): StreamRequest {
   const memory: MemoryFile[] = store.memory;
   const knowledge: KnowledgeFile[] = store.knowledge;
 
+  // Multi-agent team mode: send the active team when the user enabled it and a valid team is active.
+  const activeTeam = settings.multiAgentEnabled
+    ? store.agentTeams.find((t) => t.id === settings.activeTeamId && t.enabled)
+    : undefined;
+  const teamMode = Boolean(activeTeam);
+
   return {
     chat_id: convId,
     user_message: text,
@@ -94,6 +101,9 @@ function buildStartRequest(convId: string, text: string): StreamRequest {
     memory,
     knowledge,
     enable_reuse_sub_agent_session: settings.enableReuseSubAgentSession === "yes" ? "yes" : "no",
+    multi_agent: teamMode || undefined,
+    team: activeTeam ? toBackendTeam(activeTeam) : undefined,
+    enable_team_messaging: teamMode ? settings.enableTeamMessaging === true : undefined,
   };
 }
 

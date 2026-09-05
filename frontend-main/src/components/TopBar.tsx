@@ -1,4 +1,4 @@
-import { Plus, Settings, ListTodo, Paperclip, Brain, History } from "lucide-react";
+import { Plus, Settings, ListTodo, Paperclip, Brain, History, Users } from "lucide-react";
 import { useStore, type Section } from "@/store/useStore";
 import { cn } from "@/utils/cn";
 
@@ -10,6 +10,8 @@ function contextLabel(section: Section, counts: Record<string, number>): string 
       return `${counts.knowledge} source${counts.knowledge === 1 ? "" : "s"}`;
     case "agents":
       return `${counts.agents} agent${counts.agents === 1 ? "" : "s"}`;
+    case "teams":
+      return `${counts.teams} team${counts.teams === 1 ? "" : "s"}`;
     case "skills":
       return `${counts.skills} skill${counts.skills === 1 ? "" : "s"}`;
     default:
@@ -25,18 +27,26 @@ export function TopBar() {
   const setFilesOpen = useStore((s) => s.setFilesOpen);
   const setMemoryAgentOpen = useStore((s) => s.setMemoryAgentOpen);
   const setMemoryAgentSessionsOpen = useStore((s) => s.setMemoryAgentSessionsOpen);
+  const setTeamMonitorOpen = useStore((s) => s.setTeamMonitorOpen);
   const memoryAgentCounts = useStore((s) => s.memoryAgentCounts);
   const knowledge = useStore((s) => s.knowledge);
   const subAgents = useStore((s) => s.subAgents);
+  const teams = useStore((s) => s.agentTeams);
   const skills = useStore((s) => s.skills);
   const todos = useStore((s) => s.todos);
   const attachedFiles = useStore((s) => s.attachedFiles);
+  const multiAgentEnabled = useStore((s) => s.settings.multiAgentEnabled);
+  const teamLive = useStore((s) => s.teamLive);
 
   const label = contextLabel(section, {
     knowledge: knowledge.length,
     agents: subAgents.length,
+    teams: teams.length,
     skills: skills.length,
   });
+  const activeAgents = teamLive
+    ? Object.values(teamLive.agents).filter((a) => a.status === "working" || a.status === "queued").length
+    : 0;
   const isChat = section === "chat";
 
   return (
@@ -63,6 +73,16 @@ export function TopBar() {
               {label}
             </span>
           )
+        )}
+
+        {(multiAgentEnabled || teamLive) && (
+          <TopIcon
+            title="Team monitor"
+            onClick={() => setTeamMonitorOpen(true)}
+            count={activeAgents}
+          >
+            <Users className="h-[18px] w-[18px]" strokeWidth={1.7} />
+          </TopIcon>
         )}
 
         <TopIcon
