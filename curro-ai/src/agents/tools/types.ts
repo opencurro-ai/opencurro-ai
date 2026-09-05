@@ -274,6 +274,70 @@ export interface KnowledgeRuntime {
   remove(path: string, ctx: ToolContext): ToolResult;
 }
 
+/**
+ * Lifecycle state of a single agent (head or member) inside a multi-agent collaboration team.
+ * `idle` — not running and nothing queued; `running` — currently executing an activation;
+ * `queued` — has pending messages waiting to be processed once it becomes free; `completed` /
+ * `failed` — the terminal state of its most recent activation.
+ */
+export type TeamAgentStatus = "idle" | "running" | "queued" | "completed" | "failed";
+
+/** One member of a multi-agent team as surfaced to the model by list_agent_team_members. */
+export interface TeamRosterEntry {
+  /** The agent id — for team members this is also their display name. "head" for the leader. */
+  id: string;
+  /** Human-facing display name. */
+  name: string;
+  /** Whether this entry is the team head/leader or a regular member. */
+  role: "head" | "member";
+  /** Short description of the member's specialization/capabilities. */
+  description: string;
+  /** Current lifecycle state of the agent (only meaningful for status queries). */
+  status: TeamAgentStatus;
+  /** Number of messages currently queued for this agent (waiting to be processed). */
+  queued: number;
+}
+
+/**
+ * Runtime bridge injected into the ToolContext of EVERY agent (head + members) running inside a
+ * multi-agent collaboration team, so the team tools (delegate_task_or_send_message,
+ * get_team_members_status, send_message_to_team, list_agent_team_members, message_team_leader) can
+ * route messages between agents, inspect status, and enumerate the roster. It is intentionally
+ * absent from the single-agent and sub-agent tool contexts (those never form a team).
+ *
+ * Every method is fast and non-blocking: sending a message enqueues it onto the recipient's mailbox
+ * and schedules the recipient to run when free — it never waits for the recipient to reply. This is
+ * the core anti-deadlock / anti-flooding property of the runtime.
+ */
+export interface TeamRuntime {
+  /** Whether the members-only send_message_to_team tool is enabled (a user setting). */
+  readonly sendMessageToTeamEnabled: boolean;
+  /** The head/leader agent id + name (so members know who to report to). */
+  readonly head: { id: string; name: string };
+  /** All members of the team (enabled only), name + description — what list_agent_team_members returns. */
+  roster(): TeamRosterEntry[];
+  /** Current status of the requested agent ids (unknown ids are omitted). */
+  statusOf(ids: string[]): TeamRosterEntry[];
+  /**
+   * Head → one or more members. Each entry is delivered to that member's mailbox and the member is
+   * scheduled to run when free. Returns which ids were delivered and which were unknown/disabled.
+   */
+  delegate(
+    fromId: string,
+    messages: Array<{ agent_id: string; message: string }>,
+  ): { delivered: string[]; unknown: string[] };
+  /** Member → head/leader. Delivered to the head's mailbox; the head is scheduled to run when free. */
+  messageLeader(fromId: string, myName: string, message: string): { ok: boolean };
+  /**
+   * Member → one or more other members. Each entry is delivered to that member's mailbox and the
+   * member is scheduled to run when free. Returns delivered vs. unknown/disabled ids.
+   */
+  messageTeam(
+    fromId: string,
+    recipients: Array<{ agent_id: string; message: string }>,
+  ): { delivered: string[]; unknown: string[] };
+}
+
 /** Status a todo can be in. */
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
@@ -394,6 +458,16 @@ export interface ToolContext {
   /** Knowledge runtime — present for main-agent tool calls and forwarded to sub-agent tool calls so
    * a sub-agent granted the knowledge_* tools can read/maintain the shared knowledge base. */
   knowledge?: KnowledgeRuntime;
+  /**
+   * Team runtime — present ONLY for the tool calls of agents running inside a multi-agent
+   * collaboration team (the head and every member). Absent for single-agent and sub-agent calls.
+   * The team tools use it to route messages, inspect status, and list the roster.
+   */
+  team?: TeamRuntime;
+  /** The id of the team agent currently executing (head id or a member id). Present with `team`. */
+  teamSelfId?: string;
+  /** The role of the team agent currently executing. Present with `team`. */
+  teamSelfRole?: "head" | "member";
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
   /**

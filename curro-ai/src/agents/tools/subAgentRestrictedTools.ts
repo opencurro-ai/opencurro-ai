@@ -1,7 +1,7 @@
 /**
  * The single canonical list of tools that are RESTRICTED from the sub-agent system.
  *
- * These 14 tools are never available to a sub-agent — no matter how the sub-agent was created
+ * These tools are never available to a sub-agent — no matter how the sub-agent was created
  * (manually by the user in the UI, automatically by the LLM via create_sub_agent, or shipped as a
  * built-in default) and no matter how it is run. They fall into three groups:
  *
@@ -36,6 +36,12 @@ export const SUB_AGENT_RESTRICTED_TOOLS: readonly string[] = [
   "attach_files",
   "TodoWrite",
   "read_todos",
+  // Multi-agent team tools — a sub-agent is never part of an agent team.
+  "delegate_task_or_send_message",
+  "get_team_members_status",
+  "send_message_to_team",
+  "list_agent_team_members",
+  "message_team_leader",
 ];
 
 /** Fast membership test for the restricted set. */

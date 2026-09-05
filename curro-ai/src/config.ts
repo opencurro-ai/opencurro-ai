@@ -42,6 +42,18 @@ export interface AppConfig {
   visionModelPatterns: string[];
   /** Model-id substrings that are always treated as text-only (read_image tool). */
   textOnlyModelPatterns: string[];
+  /**
+   * Multi-agent teams: the maximum number of agents (head + members) allowed to stream from the
+   * provider AT THE SAME TIME. This is the primary safeguard against the token-flood that can freeze
+   * the machine — extra agents wait for a permit instead of all streaming at once.
+   */
+  multiAgentMaxConcurrency: number;
+  /**
+   * Multi-agent teams: a team-wide safety cap on the TOTAL number of agent activations in a single
+   * user turn. It is deliberately high so it never interferes with normal collaboration, but it
+   * guarantees a runaway ping-pong between agents can never loop forever and hang the app.
+   */
+  multiAgentMaxActivations: number;
 }
 
 function parseCorsOrigins(raw: string | undefined): string[] | "*" {
@@ -90,6 +102,8 @@ export const config: AppConfig = {
   firecrawlApiKey: process.env.FIRECRAWL_API_KEY?.trim() ?? "",
   visionModelPatterns: parsePatterns(process.env.VISION_MODEL_PATTERNS),
   textOnlyModelPatterns: parsePatterns(process.env.TEXT_ONLY_MODEL_PATTERNS),
+  multiAgentMaxConcurrency: Math.max(1, Number(process.env.MULTI_AGENT_MAX_CONCURRENCY ?? 3)),
+  multiAgentMaxActivations: Math.max(10, Number(process.env.MULTI_AGENT_MAX_ACTIVATIONS ?? 400)),
 };
 
 /** Ensure the workspace directory exists so file tools never hit permission/ENOENT errors. */

@@ -25,6 +25,7 @@ import { createTodoRuntime } from "./todos.js";
 import { createMemoryRuntime } from "./memory.js";
 import { createKnowledgeRuntime } from "./knowledge.js";
 import type { KnowledgeFile, MemoryFile, MemoryRuntime, TodoItem } from "./tools/types.js";
+import { TEAM_TOOLS } from "./tools/teamTools.js";
 import type { MemoryAgentService } from "./memoryagent/index.js";
 
 export interface RunAgentRequest {
@@ -154,10 +155,14 @@ export class AgentRunner {
         enableReuseSubAgentSession: reuseSessionsEnabled,
       });
       // Expose the sub-agent session tools to the model only when the setting is on. Everything else
-      // in the registry is always available; the two session tools are filtered out otherwise.
-      const toolSchemas = reuseSessionsEnabled
-        ? this.tools.schemas
-        : this.tools.schemas.filter((s) => !SESSION_REUSE_TOOLS.includes(s.function.name));
+      // in the registry is always available; the two session tools are filtered out otherwise. The
+      // multi-agent team tools NEVER appear in a normal single-agent turn (they only exist inside a
+      // team turn, handled by the separate MultiAgentRunner).
+      const toolSchemas = this.tools.schemas.filter(
+        (s) =>
+          !TEAM_TOOLS.includes(s.function.name) &&
+          (reuseSessionsEnabled || !SESSION_REUSE_TOOLS.includes(s.function.name)),
+      );
       const maxIterations = clampIterations(request.maxIterations, this.config.maxIterations);
       const visionCapable = isVisionCapableModel(request.model, this.config);
       const web: WebToolsConfig = {

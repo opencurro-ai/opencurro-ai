@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import type { AppConfig } from "../config.js";
 import { AgentRunner, type RunAgentRequest } from "../agents/agent.js";
+import { MultiAgentRunner, type RunTeamRequest } from "../agents/multiagent/index.js";
+import { normalizeTeam } from "../agents/multiagent/index.js";
 import { SessionEventBuffer } from "../services/eventBuffer.js";
 import type { SessionStore, StoredMessage } from "../services/sessionStore.js";
 import type { PlanApprovalStore } from "../services/planApprovalStore.js";
@@ -65,6 +67,12 @@ interface StreamBody {
   memory?: unknown;
   knowledge?: unknown;
   enable_reuse_sub_agent_session?: unknown;
+  /** Multi-agent team mode. When enabled and `team` is valid, the turn is routed to the team runner. */
+  multi_agent_enabled?: unknown;
+  /** Whether members may message each other (gates send_message_to_team) — mirrors the user setting. */
+  send_message_to_team_enabled?: unknown;
+  /** The selected agent team definition (name, head, members) sent with the turn. */
+  team?: unknown;
 }
 
 /** Defensively coerce the client-provided sub-agent definitions into safe, well-typed values. */
@@ -136,6 +144,7 @@ function normalizeSkills(raw: unknown): SkillDefinition[] {
 
 export function buildChatRouter(
   agent: AgentRunner,
+  multiAgent: MultiAgentRunner,
   store: SessionStore,
   config: AppConfig,
   planApprovals: PlanApprovalStore,
@@ -149,15 +158,22 @@ export function buildChatRouter(
    * `buffer` guards against stale settles: when a new turn has already replaced the
    * session's buffer (rapid abort → resend), the old turn's late `.finally` must not
    * clear the new turn's `running` flag or overwrite its `last_event_id`.
+   *
+   * `persistMessages` is false for multi-agent team turns: the team runner keeps each agent's
+   * transcript in its own store (not `session.messages`), so writing `session.messages` back would
+   * persist a stale/empty provider transcript over the real one. The user-visible stream is still
+   * durably persisted through the SSE buffer sink, and the frontend snapshot is the UI source of
+   * truth, so nothing is lost.
    */
   const settleTurn = (
     chatId: string,
     session: { messages: unknown[]; eventBuffer: SessionEventBuffer | null },
     buffer: SessionEventBuffer,
+    persistMessages = true,
   ): void => {
     if (session.eventBuffer !== buffer) return;
     try {
-      db.queue.enqueueMessages(chatId, session.messages);
+      if (persistMessages) db.queue.enqueueMessages(chatId, session.messages);
       db.sessions.finishTurn(chatId, buffer.lastEventId);
     } catch {
       // Persistence failures must never break the chat flow.
@@ -285,6 +301,58 @@ export function buildChatRouter(
       session.eventBuffer = buffer;
       session.abortController = abortController;
       session.running = true;
+
+      // Multi-agent team mode: when the user enabled it AND a valid team was supplied, route this
+      // turn to the team runner (head + members) instead of the single agent.
+      const teamEnabled =
+        body.multi_agent_enabled === true || body.multi_agent_enabled === "yes";
+      const team = teamEnabled ? normalizeTeam(body.team) : null;
+
+      if (team) {
+        const teamRequest: RunTeamRequest = {
+          chatId,
+          userMessage: body.user_message!,
+          team,
+          sendMessageToTeamEnabled:
+            body.send_message_to_team_enabled === true ||
+            body.send_message_to_team_enabled === "yes",
+          provider: body.provider!,
+          model: body.model!,
+          apiKey: effectiveApiKey(body),
+          baseUrl: body.base_url,
+          customProvider: body.custom_provider,
+          temperature: sanitizeTemperature(body.temperature),
+          effort: normalizeEffort(body.effort),
+          tavilyApiKey: body.tavily_api_key,
+          exaApiKey: body.exa_api_key,
+          serpapiApiKey: body.serpapi_api_key,
+          searchProvider: body.search_provider,
+          fetchProvider: body.fetch_provider,
+          firecrawlApiKey: body.firecrawl_api_key,
+          subAgents: normalizeSubAgents(body.sub_agents),
+          skills: normalizeSkills(body.skills),
+          memory: normalizeMemoryFiles(body.memory),
+          knowledge: normalizeKnowledgeFiles(body.knowledge),
+        };
+
+        void multiAgent
+          .run(teamRequest, buffer, abortController.signal)
+          .catch((error) => {
+            buffer.append("error", {
+              code: "team_crashed",
+              message: error instanceof Error ? error.message : String(error),
+            });
+            buffer.setDone();
+          })
+          .finally(() => {
+            session.running = false;
+            session.updatedAt = Date.now();
+            settleTurn(chatId, session, buffer, false);
+          });
+
+        await streamFromBuffer(res, buffer, body.since_event_id ?? -1);
+        return;
+      }
 
       const runRequest: RunAgentRequest = {
         chatId,
