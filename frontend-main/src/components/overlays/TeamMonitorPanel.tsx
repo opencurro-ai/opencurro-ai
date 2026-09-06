@@ -18,6 +18,7 @@ const KIND_LABEL: Record<TeamMessageKind, string> = {
   delegate: "task",
   message: "message",
   to_leader: "report",
+  system_reminder: "reminder",
 };
 
 /** Find the newest team run in the current conversation (the one the user is watching). */
@@ -117,7 +118,11 @@ export function TeamMonitorPanel() {
                     >
                       <div className="mb-1 flex items-center gap-1.5 text-xs text-[var(--muted)]">
                         <span className="font-medium text-[var(--fg)]">
-                          {e.from === "__user__" ? "user" : e.from}
+                          {e.from === "__user__"
+                            ? "user"
+                            : e.from === "__system__"
+                              ? "system"
+                              : e.from}
                         </span>
                         <ArrowRight className="h-3 w-3" />
                         <span className="font-medium text-[var(--fg)]">{e.to}</span>

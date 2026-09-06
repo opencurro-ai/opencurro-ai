@@ -26,6 +26,7 @@ import {
   EV_TEAM_MESSAGE,
   EV_TEAM_START,
   EV_TEAM_STATUS,
+  SYSTEM_SENDER_ID,
   USER_SENDER_ID,
   type AgentTeamDefinition,
   type MailboxMessage,
@@ -52,6 +53,16 @@ interface Actor {
   busy: boolean;
   status: TeamAgentStatus;
   subAgentRuntime: ReturnType<typeof createSubAgentRuntime>;
+  /**
+   * Report tracking for MEMBERS (Task: ensure a member never silently finishes a leader-assigned
+   * task without telling the leader). `awaitingReport` is armed when the member receives work from
+   * the leader; `notifiedLeader` flips once the member sends anything back to the leader;
+   * `reportNudged` guarantees the orchestrator reminds the member at most once per assignment (so a
+   * member that keeps ignoring the reminder cannot loop forever).
+   */
+  awaitingReport: boolean;
+  notifiedLeader: boolean;
+  reportNudged: boolean;
 }
 
 export interface TeamOrchestratorDeps {
@@ -140,6 +151,9 @@ export class TeamOrchestrator {
         busy: false,
         status: "idle",
         subAgentRuntime: this.buildSubAgentRuntime(context),
+        awaitingReport: false,
+        notifiedLeader: false,
+        reportNudged: false,
       });
     };
 
@@ -271,6 +285,16 @@ export class TeamOrchestrator {
         actor.status = "working";
         this.emitStatus(actor);
 
+        // Arm the "must report back" expectation whenever a member picks up work that originated
+        // from the leader (a delegated task or any direct message from the leader). Each fresh
+        // assignment re-arms it, so the member is reminded again for every new task. Messages the
+        // orchestrator itself injected (the reminder) do not re-arm it — that would loop forever.
+        if (actor.context.role === "member" && this.batchFromLeader(batch)) {
+          actor.awaitingReport = true;
+          actor.notifiedLeader = false;
+          actor.reportNudged = false;
+        }
+
         const framed = frameMailbox(actor.context.role, actor.context.id, batch);
         actor.context.messages.push({ role: "user", content: framed });
 
@@ -298,10 +322,51 @@ export class TeamOrchestrator {
       // If more work snuck in after the while-condition check, reschedule; else test for quiescence.
       if (actor.mailbox.length > 0 && !this.deps.signal.aborted) {
         this.schedule(actor.context.id);
+      } else if (this.maybeNudgeMemberToReport(actor)) {
+        // A completion reminder was queued for this member; it will run again to report to the
+        // leader, so the team is not quiescent yet.
       } else if (this.quiescent || this.deps.signal.aborted) {
         this.settle();
       }
     }
+  }
+
+  /** True when a batch of mailbox messages contains work originating from the team leader. */
+  private batchFromLeader(batch: MailboxMessage[]): boolean {
+    const leader = this.leaderId.trim().toLowerCase();
+    return batch.some((m) => m.from.trim().toLowerCase() === leader);
+  }
+
+  /**
+   * Ensure a member that just went idle after a leader-assigned task has actually reported back.
+   * If it finished without notifying the leader, inject a one-time reminder into its own mailbox and
+   * reschedule it so it can send the report. Returns true when a reminder was queued (which keeps the
+   * team alive). Members report to the leader; the leader itself answers the user, so it is skipped.
+   */
+  private maybeNudgeMemberToReport(actor: Actor): boolean {
+    if (this.deps.signal.aborted) return false;
+    if (actor.context.role !== "member") return false;
+    if (actor.mailbox.length > 0) return false;
+    // Only nudge when the member was given work by the leader, has not reported, and has not been
+    // reminded yet for this assignment.
+    if (!actor.awaitingReport || actor.notifiedLeader || actor.reportNudged) return false;
+    // Respect the turn's safety budgets — never let the reminder itself blow past a cap.
+    if (this.messageCount >= MAX_TEAM_MESSAGES || this.runCount >= MAX_AGENT_RUNS) return false;
+
+    actor.reportNudged = true;
+    const reminder = buildReportReminder(actor.context.id, this.leaderId);
+    actor.mailbox.push({ from: SYSTEM_SENDER_ID, message: reminder, kind: "system_reminder" });
+    // Surface the nudge in the team message log so it is visible in the monitoring panel.
+    this.deps.send(EV_TEAM_MESSAGE, {
+      from: SYSTEM_SENDER_ID,
+      to: actor.context.id,
+      kind: "system_reminder",
+      message: reminder,
+    });
+    actor.status = "queued";
+    this.emitStatus(actor);
+    this.schedule(actor.context.id);
+    return true;
   }
 
   private triggerLabel(batch: MailboxMessage[]): string {
@@ -448,6 +513,17 @@ export class TeamOrchestrator {
       this.messageCount += 1;
       actor.mailbox.push({ from, message, kind });
       delivered.push(actor.context.id);
+
+      // A member that sends anything to the leader has fulfilled its duty to report; clear its
+      // pending-report state so the orchestrator will not nudge it for this assignment.
+      const targetIsLeader = actor.context.id.trim().toLowerCase() === this.leaderId.trim().toLowerCase();
+      if (targetIsLeader) {
+        const sender = this.actor(from);
+        if (sender && sender.context.role === "member") {
+          sender.notifiedLeader = true;
+          sender.awaitingReport = false;
+        }
+      }
       this.deps.send(EV_TEAM_MESSAGE, {
         from,
         to: actor.context.id,
@@ -475,4 +551,23 @@ export class TeamOrchestrator {
           : undefined,
     };
   }
+}
+
+/**
+ * The reminder a member receives when it went idle after a leader-assigned task without reporting
+ * back. It is phrased as a direct, unambiguous instruction so any model understands it must either
+ * report completion (via message_team_leader) or keep working until the task is actually done.
+ */
+function buildReportReminder(memberName: string, leaderName: string): string {
+  return [
+    `SYSTEM REMINDER (not from a teammate): You stopped without reporting back to your team leader ("${leaderName}").`,
+    "",
+    `The leader assigned you work and is now waiting on you. The leader has NO WAY of knowing your status until you tell them — the task is not considered done until you report it. Do exactly one of the following now:`,
+    "",
+    `1. If the task is COMPLETE: call message_team_leader (my_name: "${memberName}") and give a concise completion report — what you did, the concrete results (file paths you created or changed, key findings, outcomes), and anything the leader needs to review or hand to the user.`,
+    `2. If the task is NOT finished yet: keep working with your tools until it is genuinely done, then report to the leader as in step 1.`,
+    `3. If you are BLOCKED or need clarification: call message_team_leader (my_name: "${memberName}") to explain exactly what is blocking you and what you need.`,
+    "",
+    "Do not stop again until you have sent a message to the team leader.",
+  ].join("\n");
 }

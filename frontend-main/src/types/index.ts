@@ -238,7 +238,7 @@ export interface BackendTeam {
 }
 
 /** How a team message was produced — shapes how the monitor labels it. */
-export type TeamMessageKind = "user" | "delegate" | "message" | "to_leader";
+export type TeamMessageKind = "user" | "delegate" | "message" | "to_leader" | "system_reminder";
 
 /** Lifecycle status of a team agent block in the live view. */
 export type TeamAgentStatus = "idle" | "working" | "queued" | "completed" | "failed";

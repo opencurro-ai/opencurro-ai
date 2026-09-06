@@ -125,10 +125,112 @@ function scriptedProvider(): Provider {
   };
 }
 
-function buildOrchestrator(events: Array<{ e: string; d: Record<string, unknown> }>, signal: AbortSignal) {
+/**
+ * A scripted provider whose member (Niko) FORGETS to report on its first run — it finishes the
+ * delegated task with a plain text answer and no message_team_leader call. Only after it receives
+ * the orchestrator's SYSTEM REMINDER does it report back to the leader. This exercises the
+ * report-nudge safety net.
+ */
+function forgetfulMemberProvider(): Provider {
+  return {
+    metadata: { id: "mock", label: "Mock", defaultBaseUrl: "" },
+    async listModels() {
+      return [];
+    },
+    async *streamChatCompletion(opts): AsyncGenerator<StreamDelta, void, unknown> {
+      const sys = String(opts.messages[0]?.content ?? "");
+      const isLeader = sys.includes('You are "Elio"');
+      const msgs = opts.messages;
+
+      if (isLeader) {
+        const hasDelegated = msgs.some(
+          (m) =>
+            m.role === "assistant" &&
+            Array.isArray(m.tool_calls) &&
+            (m.tool_calls as Array<{ function?: { name?: string } }>).some(
+              (t) => t.function?.name === "delegate_task_or_send_message",
+            ),
+        );
+        const gotReport = msgs.some(
+          (m) => m.role === "user" && String(m.content).includes("report from a team member"),
+        );
+        if (!hasDelegated) {
+          yield {
+            toolCalls: [
+              {
+                index: 0,
+                id: "t-del",
+                type: "function",
+                function: {
+                  name: "delegate_task_or_send_message",
+                  arguments: JSON.stringify({
+                    messages: [{ agent_id: "Niko", message: "Design the landing page." }],
+                  }),
+                },
+              },
+            ],
+            finishReason: "tool_calls",
+          };
+          return;
+        }
+        if (!gotReport) {
+          yield { text: "Delegated to Niko; awaiting the design." };
+          return;
+        }
+        yield { text: "All done — the team completed the landing page." };
+        return;
+      }
+
+      // Niko
+      const hasReported = msgs.some(
+        (m) =>
+          m.role === "assistant" &&
+          Array.isArray(m.tool_calls) &&
+          (m.tool_calls as Array<{ function?: { name?: string } }>).some(
+            (t) => t.function?.name === "message_team_leader",
+          ),
+      );
+      if (hasReported) {
+        yield { text: "Reported to the leader." };
+        return;
+      }
+      const gotReminder = msgs.some(
+        (m) => m.role === "user" && String(m.content).includes("SYSTEM REMINDER"),
+      );
+      if (gotReminder) {
+        yield {
+          toolCalls: [
+            {
+              index: 0,
+              id: "n-rep",
+              type: "function",
+              function: {
+                name: "message_team_leader",
+                arguments: JSON.stringify({
+                  my_name: "Niko",
+                  message: "Design complete in index.html.",
+                }),
+              },
+            },
+          ],
+          finishReason: "tool_calls",
+        };
+        return;
+      }
+      // First run: finish the task but forget to notify the leader.
+      yield { text: "Finished the design task." };
+    },
+  };
+}
+
+function buildOrchestrator(
+  events: Array<{ e: string; d: Record<string, unknown> }>,
+  signal: AbortSignal,
+  provider: Provider = scriptedProvider(),
+) {
   const tools = createToolRegistry();
   return new TeamOrchestrator({
-    provider: scriptedProvider(),
+    provider,
     tools,
     config: fakeConfig,
     team,
@@ -175,6 +277,49 @@ describe("TeamOrchestrator actor model", () => {
       (ev) => ev.e === EV_AGENT_SEGMENT && ev.d.agent_id === "Elio" && String(ev.d.content).includes("All done"),
     );
     assert.ok(finalSegment, "head should produce a final answer");
+  });
+
+  it("nudges a member that finished without reporting, so the leader still gets the report", async () => {
+    const events: Array<{ e: string; d: Record<string, unknown> }> = [];
+    const controller = new AbortController();
+    const orch = buildOrchestrator(events, controller.signal, forgetfulMemberProvider());
+
+    await orch.run("Build a landing page.", "");
+
+    // The member received a system reminder to report back to the leader.
+    const reminder = events.find(
+      (ev) => ev.e === EV_TEAM_MESSAGE && ev.d.to === "Niko" && ev.d.kind === "system_reminder",
+    );
+    assert.ok(reminder, "member should receive a report reminder after finishing silently");
+    assert.match(String(reminder!.d.message), /report/i);
+
+    // After the reminder, Niko actually reported to the leader.
+    const report = events.find(
+      (ev) => ev.e === EV_TEAM_MESSAGE && ev.d.to === "Elio" && ev.d.kind === "to_leader",
+    );
+    assert.ok(report, "member should report to the leader after being nudged");
+
+    // The head still produced its final answer, and the run reached quiescence (no hang).
+    const finalSegment = events.find(
+      (ev) =>
+        ev.e === EV_AGENT_SEGMENT &&
+        ev.d.agent_id === "Elio" &&
+        String(ev.d.content).includes("All done"),
+    );
+    assert.ok(finalSegment, "head should produce a final answer after the nudged report");
+  });
+
+  it("does not nudge when the member already reported to the leader", async () => {
+    const events: Array<{ e: string; d: Record<string, unknown> }> = [];
+    const controller = new AbortController();
+    const orch = buildOrchestrator(events, controller.signal);
+
+    await orch.run("Build a landing page.", "");
+
+    const reminder = events.find(
+      (ev) => ev.e === EV_TEAM_MESSAGE && ev.d.to === "Niko" && ev.d.kind === "system_reminder",
+    );
+    assert.equal(reminder, undefined, "a member that reported should never be nudged");
   });
 
   it("stops promptly when aborted", async () => {

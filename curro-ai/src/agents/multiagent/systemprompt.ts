@@ -127,6 +127,12 @@ export function frameMailbox(
     return batch[0]!.message;
   }
 
+  if (batch.length === 1 && batch[0]!.kind === "system_reminder") {
+    // Orchestrator-injected nudge (e.g. report-to-leader). It is already a complete instruction,
+    // so deliver it verbatim rather than wrapping it as an inter-agent message.
+    return batch[0]!.message;
+  }
+
   const parts: string[] = [];
   const header =
     batch.length === 1
@@ -135,7 +141,12 @@ export function frameMailbox(
   parts.push(header, "");
 
   batch.forEach((m, i) => {
-    const senderLabel = m.from === "__user__" ? "the user" : `"${m.from}"`;
+    const senderLabel =
+      m.from === "__user__"
+        ? "the user"
+        : m.kind === "system_reminder"
+          ? "the system"
+          : `"${m.from}"`;
     const kindLabel =
       m.kind === "delegate"
         ? "task from the team leader"
@@ -143,7 +154,9 @@ export function frameMailbox(
           ? "report from a team member"
           : m.kind === "user"
             ? "message from the user"
-            : "message";
+            : m.kind === "system_reminder"
+              ? "system reminder"
+              : "message";
     parts.push(`--- Message ${i + 1} — from ${senderLabel} (${kindLabel}) ---`, m.message, "");
   });
 
