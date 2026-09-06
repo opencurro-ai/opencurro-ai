@@ -5,6 +5,7 @@ import { StreamBatcher } from "@/lib/streamBatcher";
 import { dispatchStreamEvent } from "@/lib/streamDispatch";
 import { attachLatestMemoryAgentRun } from "@/lib/memoryAgent";
 import { CUSTOM_PROVIDER_PREFIX, toCustomProviderConfig } from "@/lib/providers";
+import { activeTeam } from "@/lib/defaultTeams";
 import { useStore, type ActiveRun } from "@/store/useStore";
 import { uid } from "@/utils/id";
 import type {
@@ -69,6 +70,25 @@ function buildStartRequest(convId: string, text: string): StreamRequest {
   const memory: MemoryFile[] = store.memory;
   const knowledge: KnowledgeFile[] = store.knowledge;
 
+  // Multi-agent team mode: when enabled and a team is active, route the turn through the team head.
+  const teamsEnabled = settings.enableAgentTeams === "yes";
+  const team = teamsEnabled ? activeTeam(store.agentTeams) : null;
+  const backendTeam = team
+    ? {
+        id: team.id,
+        name: team.name,
+        leader_name: team.leaderName,
+        leader_system_prompt: team.leaderSystemPrompt,
+        members: team.members
+          .filter((m) => m.name.trim().length > 0)
+          .map((m) => ({
+            name: m.name.trim(),
+            description: m.description,
+            system_prompt: m.systemPrompt,
+          })),
+      }
+    : undefined;
+
   return {
     chat_id: convId,
     user_message: text,
@@ -94,6 +114,9 @@ function buildStartRequest(convId: string, text: string): StreamRequest {
     memory,
     knowledge,
     enable_reuse_sub_agent_session: settings.enableReuseSubAgentSession === "yes" ? "yes" : "no",
+    multi_agent: Boolean(backendTeam),
+    agent_team: backendTeam,
+    enable_send_message_to_team: settings.enableSendMessageToTeam === "yes" ? "yes" : "no",
   };
 }
 

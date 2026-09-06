@@ -26,6 +26,7 @@ import { createMemoryRuntime } from "./memory.js";
 import { createKnowledgeRuntime } from "./knowledge.js";
 import type { KnowledgeFile, MemoryFile, MemoryRuntime, TodoItem } from "./tools/types.js";
 import type { MemoryAgentService } from "./memoryagent/index.js";
+import { TEAM_TOOL_NAMES } from "./tools/teamTools.js";
 
 export interface RunAgentRequest {
   chatId: string;
@@ -76,6 +77,13 @@ const SESSION_REUSE_TOOLS: readonly string[] = [
   "list_sub_agent_sessions",
   "reuse_same_sub_agent_session",
 ];
+
+/**
+ * The five multi-agent collaboration tools are ONLY for agents inside an active team (see the
+ * multiagent runtime). The normal single agent never sees them nor their guidance — it has no
+ * `team` runtime, so they would be unusable anyway; hiding them keeps the single-agent surface clean.
+ */
+const TEAM_TOOLS: readonly string[] = TEAM_TOOL_NAMES;
 
 export class AgentRunner {
   constructor(
@@ -155,9 +163,9 @@ export class AgentRunner {
       });
       // Expose the sub-agent session tools to the model only when the setting is on. Everything else
       // in the registry is always available; the two session tools are filtered out otherwise.
-      const toolSchemas = reuseSessionsEnabled
-        ? this.tools.schemas
-        : this.tools.schemas.filter((s) => !SESSION_REUSE_TOOLS.includes(s.function.name));
+      const hiddenTools = new Set<string>(TEAM_TOOLS);
+      if (!reuseSessionsEnabled) for (const name of SESSION_REUSE_TOOLS) hiddenTools.add(name);
+      const toolSchemas = this.tools.schemas.filter((s) => !hiddenTools.has(s.function.name));
       const maxIterations = clampIterations(request.maxIterations, this.config.maxIterations);
       const visionCapable = isVisionCapableModel(request.model, this.config);
       const web: WebToolsConfig = {

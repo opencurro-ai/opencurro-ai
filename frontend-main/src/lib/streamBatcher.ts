@@ -14,6 +14,7 @@ export class StreamBatcher {
   private reasoning = "";
   private cursor: number | null = null;
   private readonly sub = new Map<string, { output: string; reasoning: string }>();
+  private readonly team = new Map<string, { output: string; reasoning: string }>();
   private frame: number | null = null;
   private disposed = false;
 
@@ -47,6 +48,18 @@ export class StreamBatcher {
     this.schedule();
   }
 
+  /** Coalesce a team agent's streamed answer tokens, keyed by its agent id. */
+  teamToken(agentId: string, delta: string): void {
+    this.teamBucket(agentId).output += delta;
+    this.schedule();
+  }
+
+  /** Coalesce a team agent's streamed reasoning, keyed by its agent id. */
+  teamReasoning(agentId: string, delta: string): void {
+    this.teamBucket(agentId).reasoning += delta;
+    this.schedule();
+  }
+
   /** Flush immediately (used before any non-delta event so ordering stays correct). */
   flush(): void {
     if (this.frame !== null) {
@@ -66,6 +79,15 @@ export class StreamBatcher {
     if (!b) {
       b = { output: "", reasoning: "" };
       this.sub.set(toolId, b);
+    }
+    return b;
+  }
+
+  private teamBucket(agentId: string) {
+    let b = this.team.get(agentId);
+    if (!b) {
+      b = { output: "", reasoning: "" };
+      this.team.set(agentId, b);
     }
     return b;
   }
@@ -108,6 +130,18 @@ export class StreamBatcher {
         }
       }
       this.sub.clear();
+    }
+
+    if (this.team.size > 0) {
+      for (const [agentId, b] of this.team) {
+        if (b.output || b.reasoning) {
+          store.applyTeamAgentDelta(this.convId, this.msgId, agentId, {
+            outputDelta: b.output || undefined,
+            reasoningDelta: b.reasoning || undefined,
+          });
+        }
+      }
+      this.team.clear();
     }
   }
 }

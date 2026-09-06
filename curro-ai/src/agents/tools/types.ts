@@ -274,6 +274,84 @@ export interface KnowledgeRuntime {
   remove(path: string, ctx: ToolContext): ToolResult;
 }
 
+/**
+ * Role of an agent inside a multi-agent collaboration team. The single "leader" (head) delegates
+ * tasks and reviews work; every other agent is a "member" specialist.
+ */
+export type TeamAgentRole = "leader" | "member";
+
+/**
+ * Lifecycle status of one team agent, surfaced by get_team_members_status. "idle" = free and
+ * waiting, "working" = currently running its own agentic loop, "queued" = free but has pending
+ * messages waiting to be delivered, "completed"/"failed" = finished its most recent run.
+ */
+export type TeamAgentStatus = "idle" | "working" | "queued" | "completed" | "failed";
+
+/** A single team member as surfaced by list_agent_team_members (name + description only). */
+export interface TeamMemberInfo {
+  /** The agent's unique id (its name is the id). */
+  agent_id: string;
+  /** Human-readable role: "leader" for the head, "member" otherwise. */
+  role: TeamAgentRole;
+  /** Short description of the member's specialization. */
+  description: string;
+}
+
+/** Status record for one team agent returned by get_team_members_status. */
+export interface TeamMemberStatus extends TeamMemberInfo {
+  status: TeamAgentStatus;
+  /** How many messages are waiting in this agent's mailbox to be delivered when it is free. */
+  queued_messages: number;
+}
+
+/** Result of delivering messages to one or more team agents. */
+export interface TeamDeliveryResult {
+  ok: boolean;
+  /** Agent ids the message was successfully queued/delivered to. */
+  delivered: string[];
+  /** Requested agent ids that do not exist in the team (skipped). */
+  unknown: string[];
+  /** Human/model-facing message describing the outcome. */
+  message: string;
+  /** Structured error (e.g. collaboration budget exceeded) when ok is false. */
+  error?: { code: string; message: string };
+}
+
+/**
+ * Runtime bridge injected into the ToolContext for a team agent's tool calls so the five
+ * multi-agent collaboration tools (delegate_task_or_send_message, get_team_members_status,
+ * send_message_to_team, list_agent_team_members, message_team_leader) can enumerate the team,
+ * inspect member status, and deliver messages. It is bound to the CALLING agent: `selfId` is the
+ * agent running the tool, so message_team_leader knows who is speaking and the leader-only tools
+ * can be gated. Delivering a message never spawns a new session — it appends to the target agent's
+ * EXISTING conversation (via its mailbox), preserving every agent's full context.
+ */
+export interface TeamRuntime {
+  /** Id (name) of the agent whose tool call is executing. */
+  readonly selfId: string;
+  /** Whether the calling agent is the team head/leader. */
+  readonly isLeader: boolean;
+  /** Id (name) of the team's head/leader. */
+  readonly leaderId: string;
+  /** Whether the sensitive send_message_to_team tool is enabled for this team (user setting). */
+  readonly sendMessageToTeamEnabled: boolean;
+  /** All members (leader + specialists) with their name/role/description. */
+  listMembers(): TeamMemberInfo[];
+  /** Current status of the requested agents (unknown ids are omitted). */
+  status(agentIds: string[]): TeamMemberStatus[];
+  /**
+   * Deliver one message to each requested agent. Each message is pushed onto the target agent's
+   * mailbox and its processing is kicked; a busy agent receives everything queued while it was
+   * busy in one batch when it next becomes free. `kind` shapes the framing prompt the recipient
+   * sees ("delegate" = a task from the leader, "message" = peer-to-peer, "to_leader" = a member
+   * reporting up). Returns which agents were reached and which ids were unknown.
+   */
+  deliver(
+    messages: Array<{ agent_id: string; message: string }>,
+    kind: "delegate" | "message" | "to_leader",
+  ): TeamDeliveryResult;
+}
+
 /** Status a todo can be in. */
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
@@ -394,6 +472,10 @@ export interface ToolContext {
   /** Knowledge runtime — present for main-agent tool calls and forwarded to sub-agent tool calls so
    * a sub-agent granted the knowledge_* tools can read/maintain the shared knowledge base. */
   knowledge?: KnowledgeRuntime;
+  /** Multi-agent team runtime — present ONLY when the tool call belongs to a team agent (head or
+   * member) running inside an active agent team. Absent for the normal single agent and sub-agents,
+   * which is why the five team collaboration tools are unavailable outside a team. */
+  team?: TeamRuntime;
   /** Id of the tool call currently executing; used to correlate nested sub-agent events in the UI. */
   toolCallId?: string;
   /**
