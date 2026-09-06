@@ -45,14 +45,32 @@ const VISION_INDICATORS: readonly string[] = [
   "aria",
 ];
 
-/** Model-id substrings that indicate a text-only model (no image inputs). */
+/**
+ * Model-id substrings that indicate a text-only model (no image inputs).
+ *
+ * These are evaluated BEFORE the vision indicators, so a more specific text-only
+ * entry here overrides a broader vision match. This is what lets us correctly
+ * classify the reasoning "mini/preview" variants (e.g. `o1-mini`, `o3-mini`),
+ * which the broad `o1`/`o3` vision indicators would otherwise mark as capable
+ * even though they do NOT accept image inputs.
+ */
 const TEXT_ONLY_INDICATORS: readonly string[] = [
   "gpt-3.5",
   "gpt-4-0613",
   "gpt-4-1106-preview",
   "gpt-4-0125-preview",
+  // Reasoning models without vision — must precede the broad "o1"/"o3" vision indicators.
+  "o1-mini",
+  "o1-preview",
+  "o3-mini",
   "deepseek-chat",
   "deepseek-reasoner",
+  // Code-specialised models are text-only.
+  "deepseek-coder",
+  "codestral",
+  "codellama",
+  "code-llama",
+  "starcoder",
   "llama-3.1",
   "llama-3.3",
   "llama-3.2-1b",
