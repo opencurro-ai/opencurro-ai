@@ -329,6 +329,39 @@ export function SettingsModal() {
             </p>
           </section>
 
+          {/* Multi-agent teams */}
+          <section className="space-y-3 border-t border-[var(--border)] pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Agent teams (multi-agent)</h3>
+            <Field label="Enable agent teams">
+              <Select
+                value={settings.enableAgentTeams ?? "no"}
+                onChange={(e) => setSettings({ enableAgentTeams: e.target.value === "yes" ? "yes" : "no" })}
+              >
+                <option value="no">No — single agent (default)</option>
+                <option value="yes">Yes — use the active agent team</option>
+              </Select>
+            </Field>
+            <p className="text-xs text-[var(--muted)]">
+              When enabled, your chat goes to the active team's head/leader, who delegates to the
+              members and coordinates them. Create and activate teams from the “Agent teams” page in
+              the sidebar. When disabled, chat uses the normal single agent.
+            </p>
+            <Field label="Agent-to-agent messaging (send_message_to_team)">
+              <Select
+                value={settings.enableSendMessageToTeam ?? "no"}
+                onChange={(e) => setSettings({ enableSendMessageToTeam: e.target.value === "yes" ? "yes" : "no" })}
+              >
+                <option value="no">No — disabled (default)</option>
+                <option value="yes">Yes — members can message each other</option>
+              </Select>
+            </Field>
+            <p className="text-xs text-[var(--muted)]">
+              This sensitive tool lets any team member message any other member directly for
+              peer-to-peer coordination. When disabled, members only report up to the leader
+              (message_team_leader) and the tool is hidden entirely.
+            </p>
+          </section>
+
           {/* Custom providers */}
           <section className="space-y-3 border-t border-[var(--border)] pt-5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">Custom providers</h3>

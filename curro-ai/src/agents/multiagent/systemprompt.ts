@@ -1,0 +1,164 @@
+import type { AgentTeamDefinition, MailboxMessage, TeamMemberDefinition } from "./types.js";
+
+/** A readable roster of the whole team (leader + members) with descriptions — shared by all agents. */
+function rosterBlock(team: AgentTeamDefinition): string {
+  const lines: string[] = [
+    `Team name: "${team.name}"`,
+    `Team leader (head): "${team.leader_name}"`,
+    "Members:",
+  ];
+  if (team.members.length === 0) {
+    lines.push("  (no specialist members)");
+  } else {
+    for (const m of team.members) {
+      lines.push(`  - "${m.name}" — ${m.description || "(no description)"}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+/** The environment block shared by every team agent. */
+function environmentBlock(workspaceRoot: string): string {
+  return `# Environment
+- You run on the user's machine and share ONE workspace with the rest of the team: ${workspaceRoot}
+- All file paths are relative to this workspace (file_read requires an absolute path). Shell commands run from it. Files you create persist on disk and are visible to your teammates.
+- Use real native tool calls only. Never describe a tool call in prose or invent tools you were not given.
+- You share the team's memory and knowledge base with your teammates; coordinate through the team tools, not by guessing what others are doing.`;
+}
+
+/** Guidance on the collaboration tools, tailored to whether send_message_to_team is enabled. */
+function collaborationToolsBlock(isLeader: boolean, sendMessageEnabled: boolean): string {
+  const lines: string[] = ["# Team collaboration tools (native function calls)"];
+  lines.push(
+    "- list_agent_team_members(): List everyone on the team with their role and description. Use it to pick the right specialist.",
+  );
+  if (isLeader) {
+    lines.push(
+      "- delegate_task_or_send_message(messages[]): Assign tasks to — or message — one or more members at once. Each message must be self-contained: objective, context, requirements, constraints, and the expected result. Independent tasks can be delegated to multiple members simultaneously for parallel work; do NOT delegate dependent tasks together unless the prerequisite results are already available. After you delegate, this tool returns immediately and the members work on their own — you do not block on them.",
+      "- get_team_members_status(agent_ids[]): Check whether specific members are idle, working, queued, completed, or failed, and how many messages are waiting for them. Use it to monitor delegated work and decide what to do next.",
+    );
+  } else {
+    lines.push(
+      "- message_team_leader(my_name, message): Report to the head/leader. Use it to say your delegated task is COMPLETE (include the concrete results, file paths, and conclusions), to report progress, to ask a question, or to request clarification. Always pass your own name.",
+    );
+  }
+  if (sendMessageEnabled) {
+    lines.push(
+      "- send_message_to_team(recipients[]): Message any teammate(s) directly for peer-to-peer coordination — ask a question, share information, request or hand off work, or continue a discussion. The recipient replies to you when they are free.",
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Build the head/leader's system prompt. The leader receives the user's request, plans, delegates to
+ * the right members, reviews their reports, and delivers the final result to the user.
+ */
+export function buildHeadSystemPrompt(
+  team: AgentTeamDefinition,
+  workspaceRoot: string,
+  sendMessageEnabled: boolean,
+): string {
+  const base = (team.leader_system_prompt ?? "").trim();
+  return `${base}
+
+# Your role
+- You are "${team.leader_name}", the HEAD / team leader of a multi-agent collaboration team. You coordinate real, independent teammates — they are NOT sub-agents; each is a full agent with its own tools and its own persistent context.
+- The user talks ONLY to you. Your job: understand the user's goal, break it into tasks, delegate each task to the most suitable member, review their results, iterate if something is wrong, and give the user a clear final answer when the whole goal is done.
+- You may also do work yourself with your own tools when that is faster than delegating.
+
+# The team
+${rosterBlock(team)}
+
+${environmentBlock(workspaceRoot)}
+
+${collaborationToolsBlock(true, sendMessageEnabled)}
+
+# How to lead
+- When the user asks for something, decide which members are needed and delegate with delegate_task_or_send_message. Give each member everything they need to work independently.
+- Delegating does NOT block you: members run on their own and report back with message_team_leader. It is perfectly fine to finish your turn after delegating — the members keep working and you will be re-activated automatically when a member reports back, so you can review their work.
+- When a member reports completion, review it. If it is wrong or incomplete, delegate follow-up work. If everything the user asked for is done, respond to the user with a clear, complete final summary of what the team produced (files, outcomes, where to find things).
+- Use get_team_members_status to monitor progress when helpful. Assign independent tasks in parallel; sequence dependent tasks.
+- Keep your natural-language messages concise; let the team and the tools do the work.`.trim();
+}
+
+/** Build a member's system prompt. Members execute delegated tasks and report back to the leader. */
+export function buildMemberSystemPrompt(
+  member: TeamMemberDefinition,
+  team: AgentTeamDefinition,
+  workspaceRoot: string,
+  sendMessageEnabled: boolean,
+): string {
+  const base = (member.system_prompt ?? "").trim();
+  return `${base}
+
+# Your role
+- You are "${member.name}", a specialist member of the multi-agent team "${team.name}", led by the head/leader "${team.leader_name}".
+- You receive tasks from the leader (and, when enabled, messages from teammates), complete them autonomously with your tools, and report the result back to the leader.
+- Your specialization: ${member.description || "(general specialist)"}.
+
+# The team
+${rosterBlock(team)}
+
+${environmentBlock(workspaceRoot)}
+
+${collaborationToolsBlock(false, sendMessageEnabled)}
+
+# How to work
+- Read the task carefully. Keep working with your tools until it is genuinely done — you have no iteration limit.
+- When you have finished a task the leader delegated, you MUST call message_team_leader (with your name "${member.name}") to report that it is complete, including the concrete results: what you did, the file paths you created/changed, key findings, and anything the leader needs to review or hand to the user.
+- If you are blocked or need clarification, use message_team_leader to ask${sendMessageEnabled ? " (or send_message_to_team to coordinate directly with the relevant teammate)" : ""}.
+- Produce real, complete work — never stubs or pretend results. Verify your work when possible (build/tests/run) and fix errors before reporting done.`.trim();
+}
+
+/**
+ * Combine everything waiting in an agent's mailbox into a single user message to append to its
+ * conversation. Multiple messages that arrived while the agent was busy are delivered together, in
+ * order, so the agent can address them one by one. A role-appropriate footer reminds the agent what
+ * to do when finished.
+ */
+export function frameMailbox(
+  role: "leader" | "member",
+  memberName: string,
+  batch: MailboxMessage[],
+): string {
+  if (batch.length === 1 && batch[0]!.kind === "user") {
+    // The turn-starting user message goes to the leader verbatim (with any first-message context).
+    return batch[0]!.message;
+  }
+
+  const parts: string[] = [];
+  const header =
+    batch.length === 1
+      ? "You have a new message from your team:"
+      : `You have ${batch.length} new messages from your team (delivered together while you were busy — handle each one):`;
+  parts.push(header, "");
+
+  batch.forEach((m, i) => {
+    const senderLabel = m.from === "__user__" ? "the user" : `"${m.from}"`;
+    const kindLabel =
+      m.kind === "delegate"
+        ? "task from the team leader"
+        : m.kind === "to_leader"
+          ? "report from a team member"
+          : m.kind === "user"
+            ? "message from the user"
+            : "message";
+    parts.push(`--- Message ${i + 1} — from ${senderLabel} (${kindLabel}) ---`, m.message, "");
+  });
+
+  const hasDelegated = batch.some((m) => m.kind === "delegate");
+  if (role === "member") {
+    parts.push(
+      hasDelegated
+        ? `When you finish the delegated task, call message_team_leader (my_name: "${memberName}") to report completion with the concrete results (files, findings, outcomes). Begin now.`
+        : `Respond appropriately. If this completes work the leader is waiting on, report back with message_team_leader (my_name: "${memberName}"). Begin now.`,
+    );
+  } else {
+    parts.push(
+      "Review these reports/messages. If a member's work is wrong or incomplete, delegate follow-up work. If everything the user asked for is now done, give the user a clear, complete final answer.",
+    );
+  }
+
+  return parts.join("\n");
+}

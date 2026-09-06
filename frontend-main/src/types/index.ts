@@ -198,6 +198,100 @@ export interface BackendSkill {
   enabled: boolean;
 }
 
+/** Role of an agent inside a multi-agent team: the single head/leader, or a specialist member. */
+export type TeamAgentRole = "leader" | "member";
+
+/** One specialist member of a user-defined agent team. `name` doubles as the agent id. */
+export interface TeamMember {
+  /** Local id (React key / editing handle). */
+  id: string;
+  /** Agent id / name used for delegation and messaging (e.g. "Niko"). */
+  name: string;
+  description: string;
+  systemPrompt: string;
+}
+
+/**
+ * A user-defined multi-agent team: one head/leader plus N specialist members. Stored in the backend
+ * SQLite database (app_state `agentTeams`) and sent with each turn when the team is active. Only one
+ * team may be active (enabled) at a time.
+ */
+export interface AgentTeam {
+  id: string;
+  name: string;
+  leaderName: string;
+  leaderSystemPrompt: string;
+  members: TeamMember[];
+  /** Whether this team is the active one used for chat turns (only one team is active at a time). */
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Agent-team definition in the backend/wire format sent with each turn. */
+export interface BackendTeam {
+  id: string;
+  name: string;
+  leader_name: string;
+  leader_system_prompt: string;
+  members: Array<{ name: string; description: string; system_prompt: string }>;
+}
+
+/** How a team message was produced — shapes how the monitor labels it. */
+export type TeamMessageKind = "user" | "delegate" | "message" | "to_leader";
+
+/** Lifecycle status of a team agent block in the live view. */
+export type TeamAgentStatus = "idle" | "working" | "queued" | "completed" | "failed";
+
+/** One streamed run/segment produced by a team agent (each activation appends a new segment). */
+export interface TeamAgentSegment {
+  id: string;
+  trigger?: string;
+  reasoning: string;
+  output: string;
+  tools: ToolActivity[];
+}
+
+/** Live state of one team agent (head or member) within a multi-agent chat turn. */
+export interface TeamAgentBlock {
+  id: string;
+  name: string;
+  role: TeamAgentRole;
+  description?: string;
+  status: TeamAgentStatus;
+  /** How many messages are queued in this agent's mailbox (from team_status events). */
+  queued: number;
+  /** Each activation of the agent is its own segment, rendered in order. */
+  segments: TeamAgentSegment[];
+}
+
+/** One entry in the team monitoring log (a delivered message or a status change). */
+export interface TeamMonitorEntry {
+  id: string;
+  at: number;
+  kind: "message" | "status";
+  from?: string;
+  to?: string;
+  messageKind?: TeamMessageKind;
+  text?: string;
+  agentId?: string;
+  status?: TeamAgentStatus;
+  queued?: number;
+}
+
+/** The full live state of a multi-agent team turn, attached to the assistant container message. */
+export interface TeamRunState {
+  teamName: string;
+  leaderId: string;
+  sendMessageEnabled: boolean;
+  /** Agent id -> ordered agent block. */
+  agents: Record<string, TeamAgentBlock>;
+  /** Render order of agent ids (leader first, then members in roster order). */
+  order: string[];
+  /** Monitoring log (messages + status changes), most recent last. */
+  monitor: TeamMonitorEntry[];
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -206,6 +300,8 @@ export interface ChatMessage {
   tools?: ToolActivity[];
   streaming?: boolean;
   createdAt: number;
+  /** Present when this assistant message is the container for a multi-agent team turn. */
+  team?: TeamRunState;
 }
 
 export interface Conversation {
@@ -489,6 +585,17 @@ export interface Settings {
    * that don't support custom temperatures ignore or clamp the value.
    */
   temperature: number;
+  /**
+   * Whether multi-agent teams are enabled. "no" (default) means chat turns use the normal single
+   * agent and the team collaboration tools are unavailable. "yes" routes turns through the active
+   * team's head/leader when a team is active.
+   */
+  enableAgentTeams: "no" | "yes";
+  /**
+   * Whether the sensitive send_message_to_team tool is available to team agents (peer-to-peer
+   * agent-to-agent messaging). "no" (default) hides it; "yes" enables direct teammate messaging.
+   */
+  enableSendMessageToTeam: "no" | "yes";
 }
 
 /** The four built-in reasoning-effort presets shown in Settings. */
@@ -529,6 +636,12 @@ export interface StreamRequest {
   knowledge?: KnowledgeFile[];
   /** Mirrors settings.enableReuseSubAgentSession; gates the sub-agent session tools this turn. */
   enable_reuse_sub_agent_session?: "no" | "yes";
+  /** When true, run this turn as a multi-agent team (with agent_team) instead of a single agent. */
+  multi_agent?: boolean;
+  /** The active agent team definition sent when multi_agent is true. */
+  agent_team?: BackendTeam;
+  /** Mirrors settings.enableSendMessageToTeam; gates the send_message_to_team tool this turn. */
+  enable_send_message_to_team?: "no" | "yes";
 }
 
 /** SSE event payloads emitted by the curro-ai agent. */
@@ -608,6 +721,30 @@ export interface SSEEventData {
   queued_remaining?: number;
   /** True when a replayed run was interrupted (e.g. backend restart) before finishing. */
   interrupted?: boolean;
+
+  // ---- Multi-agent team fields ----
+  /** team_start: the team name. */
+  team_name?: string;
+  /** team_start: the head/leader agent id. */
+  leader_id?: string;
+  /** team_start: whether send_message_to_team is enabled for this team. */
+  send_message_enabled?: boolean;
+  /** team_start: the full roster (each with agent_id, role, description). */
+  members?: Array<{ agent_id?: string; role?: TeamAgentRole; description?: string }>;
+  /** team_agent_* / team_message / team_status: the agent this event belongs to / involves. */
+  agent_id?: string;
+  /** team_agent_* / team_status: the agent's role. */
+  role?: TeamAgentRole;
+  /** team_agent_start: why the agent woke up. */
+  trigger?: string;
+  /** team_agent_done / team_status: the agent's status. */
+  status?: TeamAgentStatus;
+  /** team_status: mailbox depth. */
+  queued?: number;
+  /** team_message: the sender / recipient agent ids and the kind + text. */
+  from?: string;
+  to?: string;
+  kind?: TeamMessageKind;
 }
 
 /** Lifecycle states of a background memory-agent run. */

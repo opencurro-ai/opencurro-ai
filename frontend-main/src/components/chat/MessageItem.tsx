@@ -6,6 +6,7 @@ import { ToolChip } from "./ToolChip";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { SubmitPlanBlock } from "./SubmitPlanBlock";
 import { AskQuestionBlock } from "./AskQuestionBlock";
+import { TeamRunView } from "./TeamRunView";
 
 function MessageItemImpl({ message }: { message: ChatMessage }) {
   const [showReasoning, setShowReasoning] = useState(false);
@@ -30,7 +31,8 @@ function MessageItemImpl({ message }: { message: ChatMessage }) {
   );
 
   const hasContent = message.content.trim().length > 0;
-  const showThinking = message.streaming && !hasContent && tools.length === 0;
+  const isTeam = Boolean(message.team);
+  const showThinking = message.streaming && !hasContent && tools.length === 0 && !isTeam;
 
   return (
     <div className="flex gap-3 fade-in">
@@ -44,6 +46,8 @@ function MessageItemImpl({ message }: { message: ChatMessage }) {
       </div>
 
       <div className="min-w-0 flex-1 space-y-2.5">
+        {isTeam && message.team && <TeamRunView team={message.team} />}
+
         {message.reasoning && message.reasoning.trim().length > 0 && (
           <div className="overflow-hidden rounded-[var(--radius-md)] bg-[var(--chip)]">
             <button

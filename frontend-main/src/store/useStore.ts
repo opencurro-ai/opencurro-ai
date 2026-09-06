@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AgentTeam,
   AskQuestionInfo,
   AskQuestionStatus,
   AttachedFile,
@@ -22,6 +23,12 @@ import type {
   Skill,
   SubAgent,
   SubAgentRun,
+  TeamAgentBlock,
+  TeamAgentRole,
+  TeamAgentSegment,
+  TeamAgentStatus,
+  TeamMessageKind,
+  TeamRunState,
   TodoItem,
   ToolActivity,
 } from "@/types";
@@ -37,9 +44,10 @@ import {
   mergeMemoryWithDefaults,
 } from "@/lib/defaultMemory";
 import { hasUnsafeSegment, normalizeKnowledgePath, sanitizeKnowledge } from "@/lib/defaultKnowledge";
+import { enforceSingleActive, mergeTeamsWithDefaults } from "@/lib/defaultTeams";
 
-/** The five workspace sections the rail switches between. */
-export type Section = "chat" | "memory" | "knowledge" | "agents" | "skills";
+/** The workspace sections the rail switches between. */
+export type Section = "chat" | "memory" | "knowledge" | "agents" | "skills" | "teams";
 
 /** Connection state surfaced to the user. Slow ≠ offline; only a lost connection is "offline". */
 export type Connection = "online" | "reconnecting" | "offline";
@@ -75,6 +83,7 @@ interface AppState {
   knowledge: KnowledgeFile[];
   knowledgeSources: Record<string, KnowledgeSource>;
   customProviders: CustomProvider[];
+  agentTeams: AgentTeam[];
   activeRun: ActiveRun | null;
 
   // Ephemeral UI
@@ -87,6 +96,7 @@ interface AppState {
   settingsOpen: boolean;
   todosOpen: boolean;
   filesOpen: boolean;
+  teamMonitorOpen: boolean;
   streaming: boolean;
   connection: Connection;
   filesVersion: number;
@@ -213,6 +223,44 @@ interface AppState {
   deleteSubAgent: (id: string) => void;
   toggleSubAgent: (id: string) => void;
 
+  // Agent team management
+  addTeam: (team: AgentTeam) => void;
+  updateTeam: (id: string, patch: Partial<Omit<AgentTeam, "id" | "createdAt">>) => void;
+  deleteTeam: (id: string) => void;
+  /** Activate a team (turns off any other active team — only one team is active at a time). */
+  setActiveTeam: (id: string, enabled: boolean) => void;
+
+  // Multi-agent team live run (rendered inline in the assistant container message)
+  startTeamRun: (
+    convId: string,
+    msgId: string,
+    info: { teamName: string; leaderId: string; sendMessageEnabled: boolean; roster: TeamAgentBlock[] },
+  ) => void;
+  startTeamAgentSegment: (
+    convId: string,
+    msgId: string,
+    agentId: string,
+    info: { name?: string; role?: TeamAgentRole; trigger?: string },
+  ) => void;
+  applyTeamAgentDelta: (
+    convId: string,
+    msgId: string,
+    agentId: string,
+    delta: { outputDelta?: string; reasoningDelta?: string },
+  ) => void;
+  upsertTeamAgentTool: (convId: string, msgId: string, agentId: string, tool: ToolActivity) => void;
+  setTeamAgentStatus: (
+    convId: string,
+    msgId: string,
+    agentId: string,
+    patch: { status?: TeamAgentStatus; queued?: number },
+  ) => void;
+  addTeamMonitorMessage: (
+    convId: string,
+    msgId: string,
+    entry: { from?: string; to?: string; kind?: TeamMessageKind; text?: string },
+  ) => void;
+
   // Skill management
   addSkill: (input: Omit<Skill, "id" | "createdAt" | "updatedAt">) => void;
   updateSkill: (id: string, patch: Partial<Omit<Skill, "id" | "createdAt">>) => void;
@@ -253,6 +301,7 @@ interface AppState {
   setSection: (section: Section) => void;
   setSettingsOpen: (v: boolean) => void;
   setTodosOpen: (v: boolean) => void;
+  setTeamMonitorOpen: (v: boolean) => void;
   setStreaming: (v: boolean) => void;
   setConnection: (c: Connection) => void;
   bumpFiles: () => void;
@@ -289,6 +338,8 @@ const defaultSettings: Settings = {
   enableReuseSubAgentSession: "no",
   effort: "high",
   temperature: 0.6,
+  enableAgentTeams: "no",
+  enableSendMessageToTeam: "no",
 };
 
 function touch(conv: Conversation): Conversation {
@@ -368,6 +419,32 @@ function patchMultiRun(
   });
 }
 
+/** Update the TeamRunState on a specific assistant container message (no-op if absent). */
+function patchTeamRun(
+  conversations: Conversation[],
+  convId: string,
+  msgId: string,
+  updater: (team: TeamRunState) => TeamRunState,
+): Conversation[] {
+  return conversations.map((c) =>
+    c.id === convId
+      ? {
+          ...c,
+          messages: c.messages.map((m) =>
+            m.id === msgId && m.team ? { ...m, team: updater(m.team) } : m,
+          ),
+        }
+      : c,
+  );
+}
+
+/** The last (current) segment of an agent block, creating one if none exists. */
+function currentSegment(block: TeamAgentBlock): TeamAgentSegment {
+  const last = block.segments[block.segments.length - 1];
+  if (last) return last;
+  return { id: `${block.id}-seg-0`, reasoning: "", output: "", tools: [] };
+}
+
 /**
  * Runtime store. NOTHING here touches browser storage (no localStorage, no
  * sessionStorage, no IndexedDB, no cookies): all durable data lives in the backend
@@ -388,6 +465,7 @@ export const useStore = create<AppState>()(
       knowledge: [],
       knowledgeSources: {},
       customProviders: [],
+      agentTeams: mergeTeamsWithDefaults([]),
       activeRun: null,
 
       hydrated: false,
@@ -398,6 +476,7 @@ export const useStore = create<AppState>()(
       settingsOpen: false,
       todosOpen: false,
       filesOpen: false,
+      teamMonitorOpen: false,
       streaming: false,
       connection: "online",
       filesVersion: 0,
@@ -449,6 +528,11 @@ export const useStore = create<AppState>()(
               ? (p.knowledgeSources as Record<string, KnowledgeSource>)
               : s.knowledgeSources,
           customProviders: Array.isArray(p.customProviders) ? p.customProviders : s.customProviders,
+          agentTeams: mergeTeamsWithDefaults(
+            Array.isArray((p as { agentTeams?: unknown }).agentTeams)
+              ? ((p as { agentTeams?: AgentTeam[] }).agentTeams as AgentTeam[])
+              : s.agentTeams,
+          ),
         }));
       },
 
@@ -519,7 +603,7 @@ export const useStore = create<AppState>()(
                   ...c,
                   messages: c.messages.map((m) =>
                     m.id === msgId
-                      ? { ...m, content: "", reasoning: "", tools: [], streaming: true }
+                      ? { ...m, content: "", reasoning: "", tools: [], team: undefined, streaming: true }
                       : m,
                   ),
                 }
@@ -884,6 +968,182 @@ export const useStore = create<AppState>()(
           ),
         })),
 
+      // ---- Agent team management -------------------------------------------------
+      addTeam: (team) =>
+        set((s) => ({
+          agentTeams: enforceSingleActive([{ ...team, updatedAt: Date.now() }, ...s.agentTeams]),
+        })),
+
+      updateTeam: (id, patch) =>
+        set((s) => ({
+          agentTeams: enforceSingleActive(
+            s.agentTeams.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t)),
+          ),
+        })),
+
+      deleteTeam: (id) => set((s) => ({ agentTeams: s.agentTeams.filter((t) => t.id !== id) })),
+
+      setActiveTeam: (id, enabled) =>
+        set((s) => ({
+          agentTeams: s.agentTeams.map((t) =>
+            t.id === id
+              ? { ...t, enabled, updatedAt: Date.now() }
+              : enabled
+                ? { ...t, enabled: false } // only one team active at a time
+                : t,
+          ),
+        })),
+
+      // ---- Multi-agent team live run ---------------------------------------------
+      startTeamRun: (convId, msgId, info) =>
+        set((s) => {
+          const agents: Record<string, TeamAgentBlock> = {};
+          const order: string[] = [];
+          for (const block of info.roster) {
+            agents[block.id] = block;
+            order.push(block.id);
+          }
+          const team: TeamRunState = {
+            teamName: info.teamName,
+            leaderId: info.leaderId,
+            sendMessageEnabled: info.sendMessageEnabled,
+            agents,
+            order,
+            monitor: [],
+          };
+          return {
+            conversations: s.conversations.map((c) =>
+              c.id === convId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) => (m.id === msgId ? { ...m, team } : m)),
+                  }
+                : c,
+            ),
+          };
+        }),
+
+      startTeamAgentSegment: (convId, msgId, agentId, info) =>
+        set((s) => ({
+          conversations: patchTeamRun(s.conversations, convId, msgId, (team) => {
+            const existing = team.agents[agentId];
+            const block: TeamAgentBlock = existing ?? {
+              id: agentId,
+              name: info.name ?? agentId,
+              role: info.role ?? "member",
+              status: "working",
+              queued: 0,
+              segments: [],
+            };
+            const segment: TeamAgentSegment = {
+              id: `${agentId}-seg-${block.segments.length}`,
+              trigger: info.trigger,
+              reasoning: "",
+              output: "",
+              tools: [],
+            };
+            const updated: TeamAgentBlock = {
+              ...block,
+              name: info.name ?? block.name,
+              role: info.role ?? block.role,
+              status: "working",
+              segments: [...block.segments, segment],
+            };
+            const order = team.order.includes(agentId) ? team.order : [...team.order, agentId];
+            return { ...team, agents: { ...team.agents, [agentId]: updated }, order };
+          }),
+        })),
+
+      applyTeamAgentDelta: (convId, msgId, agentId, delta) =>
+        set((s) => {
+          if (!delta.outputDelta && !delta.reasoningDelta) return {};
+          return {
+            conversations: patchTeamRun(s.conversations, convId, msgId, (team) => {
+              const block = team.agents[agentId];
+              if (!block) return team;
+              const segments = block.segments.length > 0 ? [...block.segments] : [currentSegment(block)];
+              const idx = segments.length - 1;
+              const seg = segments[idx]!;
+              segments[idx] = {
+                ...seg,
+                output: delta.outputDelta ? seg.output + delta.outputDelta : seg.output,
+                reasoning: delta.reasoningDelta ? seg.reasoning + delta.reasoningDelta : seg.reasoning,
+              };
+              return { ...team, agents: { ...team.agents, [agentId]: { ...block, segments } } };
+            }),
+          };
+        }),
+
+      upsertTeamAgentTool: (convId, msgId, agentId, tool) =>
+        set((s) => ({
+          conversations: patchTeamRun(s.conversations, convId, msgId, (team) => {
+            const block = team.agents[agentId];
+            if (!block) return team;
+            const segments = block.segments.length > 0 ? [...block.segments] : [currentSegment(block)];
+            const idx = segments.length - 1;
+            const seg = segments[idx]!;
+            const tools = [...seg.tools];
+            const ti = tools.findIndex((t) => t.id === tool.id);
+            if (ti === -1) tools.push(tool);
+            else tools[ti] = { ...tools[ti], ...tool };
+            segments[idx] = { ...seg, tools };
+            return { ...team, agents: { ...team.agents, [agentId]: { ...block, segments } } };
+          }),
+        })),
+
+      setTeamAgentStatus: (convId, msgId, agentId, patch) =>
+        set((s) => ({
+          conversations: patchTeamRun(s.conversations, convId, msgId, (team) => {
+            const block = team.agents[agentId];
+            const updatedBlock: TeamAgentBlock = block
+              ? {
+                  ...block,
+                  status: patch.status ?? block.status,
+                  queued: patch.queued ?? block.queued,
+                }
+              : {
+                  id: agentId,
+                  name: agentId,
+                  role: "member",
+                  status: patch.status ?? "idle",
+                  queued: patch.queued ?? 0,
+                  segments: [],
+                };
+            const order = team.order.includes(agentId) ? team.order : [...team.order, agentId];
+            const monitor = [
+              ...team.monitor,
+              {
+                id: uid("mon"),
+                at: Date.now(),
+                kind: "status" as const,
+                agentId,
+                status: patch.status,
+                queued: patch.queued,
+              },
+            ].slice(-200);
+            return { ...team, agents: { ...team.agents, [agentId]: updatedBlock }, order, monitor };
+          }),
+        })),
+
+      addTeamMonitorMessage: (convId, msgId, entry) =>
+        set((s) => ({
+          conversations: patchTeamRun(s.conversations, convId, msgId, (team) => ({
+            ...team,
+            monitor: [
+              ...team.monitor,
+              {
+                id: uid("mon"),
+                at: Date.now(),
+                kind: "message" as const,
+                from: entry.from,
+                to: entry.to,
+                messageKind: entry.kind,
+                text: entry.text,
+              },
+            ].slice(-200),
+          })),
+        })),
+
       addSkill: (input) =>
         set((s) => {
           const now = Date.now();
@@ -1117,6 +1377,7 @@ export const useStore = create<AppState>()(
       setSection: (section) => set({ section }),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
       setTodosOpen: (todosOpen) => set({ todosOpen }),
+      setTeamMonitorOpen: (teamMonitorOpen) => set({ teamMonitorOpen }),
       setStreaming: (streaming) => set({ streaming }),
       setConnection: (connection) => set({ connection }),
       setPreview: (url) => set((s) => ({ preview: { url, open: s.preview.url !== url || s.preview.open } })),

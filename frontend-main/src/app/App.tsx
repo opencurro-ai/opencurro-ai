@@ -8,12 +8,14 @@ import { MemoryPanel } from "@/components/panels/MemoryPanel";
 import { KnowledgePanel } from "@/components/panels/KnowledgePanel";
 import { AgentsPanel } from "@/components/panels/AgentsPanel";
 import { SkillsPanel } from "@/components/panels/SkillsPanel";
+import { TeamsPanel } from "@/components/panels/TeamsPanel";
 import { SettingsModal } from "@/components/editors/SettingsModal";
 import { TodoPanel } from "@/components/overlays/TodoPanel";
 import { FilesPanel } from "@/components/overlays/FilesPanel";
 import { PreviewPanel } from "@/components/overlays/PreviewPanel";
 import { MemoryAgentPanel } from "@/components/overlays/MemoryAgentPanel";
 import { MemoryAgentSessionsPanel } from "@/components/overlays/MemoryAgentSessionsPanel";
+import { TeamMonitorPanel } from "@/components/overlays/TeamMonitorPanel";
 import { useStore } from "@/store/useStore";
 import { useChatStream, useConnectionWatch } from "@/hooks/useChatStream";
 import { fetchProviders } from "@/lib/api";
@@ -91,6 +93,7 @@ export function App() {
               {section === "knowledge" && <KnowledgePanel />}
               {section === "agents" && <AgentsPanel />}
               {section === "skills" && <SkillsPanel />}
+              {section === "teams" && <TeamsPanel />}
             </div>
           )}
         </main>
@@ -105,6 +108,7 @@ export function App() {
       <PreviewPanel />
       <MemoryAgentPanel />
       <MemoryAgentSessionsPanel />
+      <TeamMonitorPanel />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * The single canonical list of tools that are RESTRICTED from the sub-agent system.
  *
- * These 14 tools are never available to a sub-agent — no matter how the sub-agent was created
+ * These tools are never available to a sub-agent — no matter how the sub-agent was created
  * (manually by the user in the UI, automatically by the LLM via create_sub_agent, or shipped as a
  * built-in default) and no matter how it is run. They fall into three groups:
  *
@@ -12,6 +12,9 @@
  *      ask_question_to_user, submit_plan, embed_url, attach_files
  *  - Skill deletion + the shared todo list (main-agent-only responsibilities):
  *      delete_skill, TodoWrite, read_todos
+ *  - Multi-agent team collaboration tools (only for team agents — head/members):
+ *      delegate_task_or_send_message, get_team_members_status, send_message_to_team,
+ *      list_agent_team_members, message_team_leader
  *
  * This list is the ONE source of truth. It is reused by:
  *  - subagents.ts (SUB_AGENT_EXCLUDED_TOOLS)         — runtime enforcement for every sub-agent run
@@ -36,6 +39,12 @@ export const SUB_AGENT_RESTRICTED_TOOLS: readonly string[] = [
   "attach_files",
   "TodoWrite",
   "read_todos",
+  // Multi-agent team collaboration tools — only for team agents (head/members), never sub-agents.
+  "delegate_task_or_send_message",
+  "get_team_members_status",
+  "send_message_to_team",
+  "list_agent_team_members",
+  "message_team_leader",
 ];
 
 /** Fast membership test for the restricted set. */

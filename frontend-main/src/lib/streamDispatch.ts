@@ -160,6 +160,12 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
     case "sub_agent_token":
       batcher.subToken(String(data.id ?? ""), String(data.value ?? ""));
       return;
+    case "team_agent_reasoning":
+      batcher.teamReasoning(String(data.agent_id ?? ""), String(data.value ?? ""));
+      return;
+    case "team_agent_token":
+      batcher.teamToken(String(data.agent_id ?? ""), String(data.value ?? ""));
+      return;
   }
 
   // Non-delta event → make sure buffered text lands first.
@@ -398,6 +404,87 @@ export function dispatchStreamEvent(event: string, data: SSEEventData, ctx: Disp
       else s.finishSubAgent(convId, msgId, String(data.id ?? ""), patch);
       break;
     }
+
+    // ---- Multi-agent team events ----
+    case "team_start": {
+      const roster = (Array.isArray(data.members) ? data.members : []).map((m) => ({
+        id: String(m?.agent_id ?? ""),
+        name: String(m?.agent_id ?? ""),
+        role: (m?.role === "leader" ? "leader" : "member") as "leader" | "member",
+        description: m?.description != null ? String(m.description) : undefined,
+        status: "idle" as const,
+        queued: 0,
+        segments: [],
+      }));
+      s.startTeamRun(convId, msgId, {
+        teamName: String(data.team_name ?? "Agent team"),
+        leaderId: String(data.leader_id ?? ""),
+        sendMessageEnabled: data.send_message_enabled === true,
+        roster,
+      });
+      break;
+    }
+
+    case "team_agent_start":
+      s.startTeamAgentSegment(convId, msgId, String(data.agent_id ?? ""), {
+        role: data.role === "leader" ? "leader" : "member",
+        trigger: data.trigger != null ? String(data.trigger) : undefined,
+      });
+      break;
+
+    case "team_agent_tool_call":
+      s.upsertTeamAgentTool(convId, msgId, String(data.agent_id ?? ""), {
+        id: String(data.tool_id ?? uid("ttool")),
+        name: String(data.name ?? "tool"),
+        label: String(data.label ?? data.name ?? "tool"),
+        status: "running",
+        args: (data.args as Record<string, unknown> | undefined) ?? undefined,
+        filePath: (data.args as Record<string, unknown> | undefined)?.file_path as string | undefined,
+      });
+      break;
+
+    case "team_agent_tool_result":
+      s.upsertTeamAgentTool(convId, msgId, String(data.agent_id ?? ""), {
+        id: String(data.tool_id ?? uid("ttool")),
+        name: String(data.name ?? "tool"),
+        label: String(data.label ?? data.name ?? "tool"),
+        status: data.ok ? "ok" : "error",
+        result: data.result,
+      });
+      ctx.onFilesChanged?.();
+      break;
+
+    case "team_agent_segment":
+      // The agent finished a run; nothing extra to store (tokens already streamed).
+      break;
+
+    case "team_agent_done":
+      s.setTeamAgentStatus(convId, msgId, String(data.agent_id ?? ""), {
+        status: (data.status as "completed" | "failed" | undefined) ?? (data.ok ? "completed" : "failed"),
+      });
+      break;
+
+    case "team_status":
+      s.setTeamAgentStatus(convId, msgId, String(data.agent_id ?? ""), {
+        status: data.status as
+          | "idle"
+          | "working"
+          | "queued"
+          | "completed"
+          | "failed"
+          | undefined,
+        queued: typeof data.queued === "number" ? data.queued : undefined,
+      });
+      break;
+
+    case "team_message":
+      s.addTeamMonitorMessage(convId, msgId, {
+        from: data.from != null ? String(data.from) : undefined,
+        to: data.to != null ? String(data.to) : undefined,
+        kind: data.kind,
+        text: data.message != null ? String(data.message) : undefined,
+      });
+      break;
 
     case "error":
       s.applyAssistantDelta(convId, msgId, {
